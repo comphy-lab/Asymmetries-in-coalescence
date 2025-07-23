@@ -12,11 +12,13 @@
 #include "axi.h"
 #include "navier-stokes/centered.h"
 #define FILTERED 1
-#include "two-phase-tag.h"
+#include "two-phase.h"
 #include "navier-stokes/conserving.h"
 #include "tension.h"
+
+#if !MPI
 #include "distance.h"
-#include "tag.h"
+#endif
 
 int MAXlevel; // command line input
 
@@ -64,7 +66,6 @@ int main(int argc, char const *argv[]) {
   rho1 = RhoIn; mu1 = MuRin*OhOut;
   rho2 = 1e0; mu2 = OhOut;
   f.sigma = 1.0;
-  ftag.sigma = 0.0;
 
   char comm[80];
   sprintf (comm, "mkdir -p intermediate");
@@ -75,6 +76,11 @@ int main(int argc, char const *argv[]) {
 }
 
 event init(t = 0){
+#if _MPI
+  if (!restore(file = dumpFile)) {
+    fprintf(ferr, "Cannot restored from a dump file!\n");
+  }
+#else
   if (!restore (file = dumpFile)){
     char filename[60];
     sprintf(filename,"InitialConditionRr-%3.2f.dat", Rr);
@@ -104,11 +110,10 @@ event init(t = 0){
     /**
     We can now initialize the volume fraction of the domain. */
     fractions (phi, f);
-    fractions (phi, ftag);
     foreach(){
-    u.x[] = 0.0;
-    u.y[] = 0.0;
-    // p[] = 2*(1.-f[]);
+      u.x[] = 0.0;
+      u.y[] = 0.0;
+      // p[] = 2*(1.-f[]);
     }
     dump (file = dumpFile);
     static FILE * fp2;
@@ -117,6 +122,7 @@ event init(t = 0){
     fclose(fp2);
     // return 1;
   }
+#endif
 }
 
 event adapt(i++){
@@ -138,117 +144,33 @@ event end (t = end) {
 
 scalar posEq[], posPoles[];
 event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
-  foreach(){
-    ftag[] = f[];
-  }
-  scalar d[];
-  // tag all liquid parts starts
-  double threshold = 1e-4;
-  foreach(){
-    d[] = (ftag[] > threshold);
-  }
-
-  int n = tag (d), size[n];
-  for (int i = 0; i < n; i++){
-    size[i] = 0;
-  }
-
-  foreach_leaf(){
-    if (d[] > 0){
-      size[((int) d[]) - 1]++;
-    }
-  }
-
-  #if _MPI
-  MPI_Allreduce (MPI_IN_PLACE, size, n, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  #endif
-
-  int MaxSize = 0;
-  int MainPhase = 0;
-  for (int i = 0; i < n; i++){
-    // fprintf(ferr, "%d %d\n",i, size[i]);
-    if (size[i] > MaxSize){
-      MaxSize = size[i];
-      MainPhase = i+1;
-    }
-  }
-  
-  foreach(){
-    if(d[] != MainPhase){
-      ftag[] = 0.0;
-    }
-  }
-  // tag all liquid parts ends
-
 
   double ke = 0., wt = 0., xCOM = 0., Vcm = 0.;
 
   foreach (reduction(+:ke) reduction(+:wt) reduction(+:xCOM) reduction(+:Vcm)){
-    ke += 2*pi*y*(0.5*clamp(ftag[], 0., 1.)*(sq(u.x[]) + sq(u.y[])))*sq(Delta);
-    xCOM += 2*pi*y*x*clamp(ftag[], 0.0, 1.0)*sq(Delta);
-    Vcm += 2*pi*y*u.x[]*clamp(ftag[], 0.0, 1.0)*sq(Delta);
-    wt += 2*pi*y*clamp(ftag[], 0.0, 1.0)*sq(Delta);
+    ke += 2*pi*y*(0.5*clamp(f[], 0., 1.)*(sq(u.x[]) + sq(u.y[])))*sq(Delta);
+    xCOM += 2*pi*y*x*clamp(f[], 0.0, 1.0)*sq(Delta);
+    Vcm += 2*pi*y*u.x[]*clamp(f[], 0.0, 1.0)*sq(Delta);
+    wt += 2*pi*y*clamp(f[], 0.0, 1.0)*sq(Delta);
   }
   xCOM /= wt;
-
-  int nEq = 0;
-  double Req = 0.0;
-  position (ftag, posEq, {0,1});
-  foreach(reduction(+:Req) reduction(+:nEq)){
-    if (x < xCOM+TOL && x > xCOM-TOL && posEq[] != nodata){
-      Req += posEq[];
-      nEq++;
-    }
-  }
-
-  if (nEq != 0){
-    Req /= nEq;
-  } else {
-    Req = 0.0;
-  }
-
-  double zNP = 0.0, zSP = 0.0;
-  int nNP = 0, nSP = 0;
-  position (ftag, posPoles, {1,0});
-  foreach(reduction(+:zNP) reduction(+:nNP) reduction(+:zSP) reduction(+:nSP)){
-    if (y < TOL && posPoles[] != nodata){
-      if (posPoles[] > 0){
-        zNP += posPoles[];
-        nNP++;
-      } else {
-        zSP += posPoles[];
-        nSP++;
-      }
-    }
-  }
-
-  if (nNP != 0){
-    zNP /= nNP;
-  } else {
-    zNP = 0.0;
-  }
-  if (nSP != 0){
-    zSP /= nSP;
-  } else {
-    zSP = 0.0;
-  }
   
   static FILE * fp;
 
   if (pid() == 0) {
     if (i == 0) {
-      fprintf (ferr, "i dt t ke Xc Vcm Re ZNp ZSp\n");
+      fprintf (ferr, "i dt t ke Xc Vcm Re\n");
       fp = fopen ("log", "w");
       fprintf(fp, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
-      fprintf (fp, "i dt t ke Xc Vcm Re ZNp ZSp\n");
-      fprintf (fp, "%d %g %g %g %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt, Req, zNP, zSP);
+      fprintf (fp, "i dt t ke Xc Vcm Re\n");
+      fprintf (fp, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
       fclose(fp);
     } else {
       fp = fopen ("log", "a");
-      fprintf (fp, "%d %g %g %g %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt, Req, zNP, zSP);
+      fprintf (fp, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
       fclose(fp);
     }
-    fprintf (ferr, "%d %g %g %g %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt, Req, zNP, zSP);
+    fprintf (ferr, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
   }
 
   assert(ke > -1e-10);
