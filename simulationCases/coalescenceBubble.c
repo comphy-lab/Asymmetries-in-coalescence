@@ -11,7 +11,7 @@
 // 1 is bubble
 #include "axi.h"
 #include "navier-stokes/centered.h"
-#define FILTERED
+#define FILTERED 1
 #include "two-phase-tag.h"
 #include "navier-stokes/conserving.h"
 #include "tension.h"
@@ -153,7 +153,7 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
     size[i] = 0;
   }
 
-  foreach_leaf(serial){
+  foreach_leaf(){
     if (d[] > 0){
       size[((int) d[]) - 1]++;
     }
@@ -183,7 +183,7 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
 
   double ke = 0., wt = 0., xCOM = 0., Vcm = 0.;
 
-  foreach (reduction(+:ke), reduction(+:wt), reduction(+:xCOM), reduction(+:Vcm)){
+  foreach (reduction(+:ke) reduction(+:wt) reduction(+:xCOM) reduction(+:Vcm)){
     ke += 2*pi*y*(0.5*clamp(ftag[], 0., 1.)*(sq(u.x[]) + sq(u.y[])))*sq(Delta);
     xCOM += 2*pi*y*x*clamp(ftag[], 0.0, 1.0)*sq(Delta);
     Vcm += 2*pi*y*u.x[]*clamp(ftag[], 0.0, 1.0)*sq(Delta);
@@ -194,7 +194,7 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
   int nEq = 0;
   double Req = 0.0;
   position (ftag, posEq, {0,1});
-  foreach(reduction(+:Req), reduction(+:nEq)){
+  foreach(reduction(+:Req) reduction(+:nEq)){
     if (x < xCOM+TOL && x > xCOM-TOL && posEq[] != nodata){
       Req += posEq[];
       nEq++;
@@ -210,7 +210,7 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
   double zNP = 0.0, zSP = 0.0;
   int nNP = 0, nSP = 0;
   position (ftag, posPoles, {1,0});
-  foreach(reduction(+:zNP), reduction(+:nNP), reduction(+:zSP), reduction(+:nSP)){
+  foreach(reduction(+:zNP) reduction(+:nNP) reduction(+:zSP) reduction(+:nSP)){
     if (y < TOL && posPoles[] != nodata){
       if (posPoles[] > 0){
         zNP += posPoles[];
