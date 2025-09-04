@@ -87,3 +87,33 @@ Use `runCode.sh` for SLURM job submission. The script runs parameter sweeps with
 
 - Python scripts in `postProcess/` for facet and center-of-mass analysis
 - Video generation: `ffmpeg -r 30 -f image2 -s 1920x1080 -i %*.jpeg -c:v h264 -crf 1 -pix_fmt yuv420p video.mp4`
+
+## Development Workflow
+
+### Running Single Simulation
+```bash
+cd simulationCases
+./runCode.sh coalescenceBubble
+```
+
+### Visualization
+The simulation outputs:
+- `dump` file: Current state for restart
+- `intermediate/snapshot-*.` files: Time series data for post-processing
+- `log` file: Time evolution of kinetic energy, center of mass, and velocity
+
+### Error Tolerances
+- VOF error: `fErr = 1e-3`
+- Velocity error: `VelErr = 1e-2`
+- Position tolerance: `TOL = 1e-2`
+
+## Simulation Physics
+
+The code simulates coalescence of two bubbles with:
+- Axisymmetric geometry (`axi.h`)
+- Two-phase flow with surface tension
+- Adaptive mesh refinement (AMR) with levels from `MAXlevel-6` to `MAXlevel`
+- Domain size automatically calculated as `Ldomain = zWall + 2 + 2*Rr + 4.0`
+- Origin shifted to `(-2.0-zWall, 0.0)`
+
+Initial conditions are loaded from pre-computed data files based on the radius ratio `Rr`.

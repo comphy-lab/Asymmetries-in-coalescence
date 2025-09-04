@@ -1,21 +1,38 @@
 #!/bin/bash
 
+# Check if .project_config exists
+if [ ! -f ../.project_config ]; then
+    echo "Error: .project_config not found!"
+    echo "Please run the installation script first:"
+    echo "  cd .. && ./reset_install_requirements.sh"
+    exit 1
+fi
+
 source ../.project_config
 echo "BASILISK: $BASILISK"
 
-OhOut="1e-2"
-RhoIn="1e-3"
-Rr="1e0"
-LEVEL="12"
-tmax="40.0"
-zWall="0.01"
+# Check if qcc is available
+if ! command -v qcc &> /dev/null; then
+    echo "Error: qcc command not found!"
+    echo "Please run the installation script first:"
+    echo "  cd .. && ./reset_install_requirements.sh"
+    exit 1
+fi
 
-FILE_NAME=$1 # pass from command line
+# Default parameters for droplet under shear simulation
+MAXlevel="8"
+L="10"
+Re="1.0"
+Bi="0.0"
+Ca="0.3"
+lambda="1.0"
+tend="2.0"
+
+FILE_NAME=${1:-droplet_shear} # pass from command line, default to droplet_shear
 
 mkdir -p $FILE_NAME
 
 qcc -O2 -Wall -disable-dimensions -I$PWD/src-local -I$PWD/../src-local $FILE_NAME.c -o $FILE_NAME/$FILE_NAME -lm
-cp -r DataFiles $FILE_NAME/
 cd $FILE_NAME
-./$FILE_NAME $OhOut $RhoIn $Rr $LEVEL $tmax $zWall # pass from command line
+./$FILE_NAME $MAXlevel $L $Re $Bi $Ca $lambda $tend
 cd ..

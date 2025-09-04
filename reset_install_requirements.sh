@@ -23,6 +23,7 @@ install_basilisk() {
     fi
     make -k
     make
+    make
 }
 
 # Remove project config always
