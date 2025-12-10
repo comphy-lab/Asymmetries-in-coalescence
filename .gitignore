@@ -1,9 +1,9 @@
 # basililsk specific files
 **/*.DS_Store
-**/*.html
 **/intermediate*
 **/log*.dat
 **/restart*
+**/dump*
 **/*.tags*
 **/*.deps
 **/*.tests
@@ -12,22 +12,12 @@
 **/*.mp4
 **/*.json
 **/*.bv
-**/*.png
 
 # Custom executables (add your specific executable names here)
-filamentsVE
-filamentsNewt
-filament_initialCondition
-filament_initialCondition_3D
-getFacet
-getData-elastic-scalar
-pinchOff
-getview3D
-
-# never exclude these files
-!*.c
-!*.h
-!*.sbatch
+getFacet*
+getData*
+getview*
+coalescenceBubble*
 
 # Object files
 *.o
@@ -150,3 +140,10 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# never exclude these files
+!*.c
+!*.h
+!*.sbatch
+!*.sh
+
