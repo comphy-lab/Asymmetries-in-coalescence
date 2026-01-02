@@ -84,7 +84,9 @@ Note that only the documented test cases appear in the list below
 * [Computation of volume fractions from a levelset function](fractions.c)
 * [Computation of volume fractions on a variable-resolution grid](fractions1.c)
 * [Fractions in marginal cases](fractions2.c)
+* [Convergence of the face fraction field](facefraction.c)
 * [Computation of a levelset field from a contour](basilisk.c)
+* [Rotation of a circular interface](rotate.c)
 * [Time-reversed VOF advection in a vortex](reversed.c)
 * [Preventing coalescence of VOF tracers](no-coalescence.c)
 
@@ -228,6 +230,7 @@ See also the [GPU Benchmarks](/src/grid/gpu/Benchmarks.md).
 
 ## Basic operations
 
+* [Periodic boundary conditions on face fields](boundary_face.c)
 * [Automatic stencils / boundary conditions](stencils.c)
 * [Interpolation on halos](interp.c)
 * [Tangential interpolation on face vector fields](interpu.c)

@@ -1,2 +1,2 @@
-export BASILISK=/Users/vatsal/Library/CloudStorage/Dropbox/1-Areas/WorkInProgress/Asymmetries-in-coalescence/basilisk/src
+export BASILISK=/Users/vatsal/Library/CloudStorage/Dropbox/0-Projects/Coalescence_DropsBubbles/Asymmetries-in-coalescence/basilisk/src
 export PATH=$PATH:$BASILISK

@@ -17,7 +17,18 @@ check: halo.vtst interpolate.vtst events.vtst faces.vtst coarsen.vtst \
 basilisk.tst: basilisk.gnu
 basilisk.tst: CFLAGS += -DDEBUG=1
 
+bleck.tst: bleck.ctst
+
 boundaries3.tst: boundaries3.ctst
+
+boundary_face.tst: boundary_face.ctst boundary_face_cartesian.tst
+
+boundary_face_cartesian.c: boundary_face.c boundary_face_cartesian.ref
+	cp boundary_face.c boundary_face_cartesian.c
+boundary_face_cartesian.ref: boundary_face.ref
+	cp boundary_face.ref boundary_face_cartesian.ref
+boundary_face_cartesian.s: CFLAGS += -grid=cartesian
+boundary_face_cartesian.tst: CFLAGS += -grid=cartesian
 
 bubble-spherical.c: bubble.c
 	ln -sf bubble.c bubble-spherical.c 
@@ -239,6 +250,11 @@ view.3D.tst: CC = mpicc -D_MPI=4
 
 coarsen.vtst: CFLAGS = -DMTRACE=3 -progress
 
+facefraction3D.tst: CFLAGS += -grid=multigrid3D
+facefraction3D.c: facefraction.c
+	ln -sf facefraction.c facefraction3D.c
+facefraction.tst: facefraction3D.tst
+
 # Axisymmetric tests
 
 axi-tests: axiadvection.tst axi.tst poiseuille-axi.tst \
@@ -365,6 +381,8 @@ nonlinear-ml.c: nonlinear.c
 	ln -sf nonlinear.c nonlinear-ml.c 
 nonlinear-ml.s: CFLAGS += -DML=1
 nonlinear-ml.tst: CFLAGS += -DML=1
+
+reductions.tst: CC=mpicc -D_MPI=4
 
 shockwave.tst: CFLAGS += -grid=bitree
 shockwave.ctst: CFLAGS += -grid=multigrid1D
