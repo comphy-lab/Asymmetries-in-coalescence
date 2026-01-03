@@ -1,92 +1,8 @@
-# basililsk specific files
-**/*.DS_Store
-**/intermediate*
-**/log*.dat
-**/restart*
-**/dump*
-**/*.tags*
-**/*.deps
-**/*.tests
-**/*.s*
-**/Video
-**/*.mp4
-**/*.json
-**/*.bv
-
-# Custom executables (add your specific executable names here)
-getFacet*
-getData*
-getview*
-coalescenceBubble*
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# IDE/Editor folders
-.vscode/
-.idea/
-*.swp
-*~
-
-# Build directories
-build/
-bin/
-obj/
-
-# Dependency directories
-deps/
-
-# OS generated files
-**/*.DS_Store
-**/.DS_Store?
-**/._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
+# OS specific files
+**/.DS_Store
+**/Thumbs.db
+**/.Spotlight-V100
+**/.Trashes
 
 # Prerequisites
 *.d
@@ -141,9 +57,42 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# never exclude these files
+# debug information files
+*.dwo
+
+# No _darcs
+**/_darcs
+**/.project_config
+
+# Case folders (4-digit case numbers: 1000-9999)
+simulationCases/[0-9][0-9][0-9][0-9]/
+
+# bview file
+**/display.html
+
+# SLURM output files
+*.err
+slurm-*.out
+slurm-*.err
+
+# Temporary sweep directories
+.sweep_tmp_*
+
+# postProcessing specific
+**/getData*
+**/getFacet*
+**/getFootPrint
+**/Video
+
+# always add .c and .h
 !*.c
 !*.h
-!*.sbatch
 !*.sh
+!*.sbatch
 
+# Documentation generation artifacts
+**/__pycache__/
+**/*.pyc
+
+# Timestamped CSS backups
+**/custom_styles_backup_*.css
