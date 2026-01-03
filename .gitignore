@@ -84,6 +84,7 @@ slurm-*.err
 **/getCOM*
 **/getFootPrint
 **/Video
+**/display.html
 **/README-local.md 
 
 # always add .c and .h
