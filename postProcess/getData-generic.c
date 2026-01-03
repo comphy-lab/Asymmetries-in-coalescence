@@ -227,7 +227,7 @@ static void cleanup_output(FILE *fp, double **field_buffer)
 }
 
 /**
- * @brief Compute log10(f*D²) where D² is the second invariant of the strain
+ * @brief Compute log10(D²) where D² is the second invariant of the strain
  * rate tensor.
  *
  * Geometry-dependent formulation:
@@ -245,9 +245,8 @@ static void cleanup_output(FILE *fp, double **field_buffer)
  *   D13 = (∂u_y/∂x + ∂u_x/∂y)/2
  *   D² = D11² + D33² + 2*D13²  (no D22 term)
  *
- * Multiplying by f[] restricts the calculation to the drop phase.
- * Returns log10(f*D²) for positive values, -10 otherwise (floor for
- * visualization).
+ * Returns log10(D²) for positive values, -10 otherwise (floor for
+ * visualization). Shown throughout the entire domain.
  */
 static void compute_D2c_field(scalar target)
 {
@@ -264,7 +263,7 @@ static void compute_D2c_field(scalar target)
 #else
     double D2 = sq(D11) + sq(D33) + 2.*sq(D13);
 #endif
-    target[] = f[]*D2;
+    target[] = D2;
     if (target[] > 0.)
       target[] = log(target[])/log(10);
     else

@@ -205,7 +205,7 @@ def parse_arguments() -> RuntimeConfig:
         >>> config.cpus
         4
         >>> config.bounds
-        DomainBounds(rmin=-2.5, rmax=2.5, zmin=-2.05, zmax=2.95)
+        DomainBounds(rmin=-2.5, rmax=2.5, zmin=-2.0, zmax=3.0)
     """
     parser = argparse.ArgumentParser(description="Generate snapshot videos for coalescence.")
     parser.add_argument("--CPUs", type=int, default=4, help="Number of CPUs to use")
@@ -216,8 +216,8 @@ def parse_arguments() -> RuntimeConfig:
         "--GridsPerR", type=int, default=256, help="Number of grids per R"
     )
     parser.add_argument("--Rr", type=float, default=1.0, help="Radius ratio (affects domain bounds)")
-    parser.add_argument("--ZMIN", type=float, default=None, help="Minimum Z value (default: -2.05)")
-    parser.add_argument("--ZMAX", type=float, default=None, help="Maximum Z value (default: 5*Rr-2.05)")
+    parser.add_argument("--ZMIN", type=float, default=None, help="Minimum Z value (default: -2.0)")
+    parser.add_argument("--ZMAX", type=float, default=None, help="Maximum Z value (default: 5*Rr-2.0)")
     parser.add_argument("--RMAX", type=float, default=None, help="Maximum R value (default: 2.5*Rr)")
     parser.add_argument("--tsnap", type=float, default=0.01, help="Time snap")
     parser.add_argument(
@@ -245,8 +245,8 @@ def parse_arguments() -> RuntimeConfig:
 
     # Calculate domain bounds based on Rr if not explicitly provided
     rr = args.Rr
-    zmin = args.ZMIN if args.ZMIN is not None else -2.05
-    zmax = args.ZMAX if args.ZMAX is not None else 5.0 * rr - 2.05
+    zmin = args.ZMIN if args.ZMIN is not None else -2.0
+    zmax = args.ZMAX if args.ZMAX is not None else 5.0 * rr - 2.0
     rmax = args.RMAX if args.RMAX is not None else 2.5 * rr
 
     # Default output directory
