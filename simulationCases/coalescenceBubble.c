@@ -159,10 +159,10 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
 
   if (pid() == 0) {
     if (i == 0) {
-      fprintf (ferr, "i dt t ke Xc Vcm Re\n");
+      fprintf (ferr, "i dt t ke Xc Vcm\n");
       fp = fopen ("log", "w");
       fprintf(fp, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
-      fprintf (fp, "i dt t ke Xc Vcm Re\n");
+      fprintf (fp, "i dt t ke Xc Vcm\n");
       fprintf (fp, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
       fclose(fp);
     } else {
