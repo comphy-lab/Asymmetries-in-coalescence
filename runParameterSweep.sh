@@ -261,7 +261,7 @@ generate_combinations() {
             rm -f "${case_file}.bak"
         done
 
-        ((COMBINATION_COUNT++))
+        ((++COMBINATION_COUNT))
 
         # Print summary
         if [ $DRY_RUN -eq 1 ] || [ $VERBOSE -eq 1 ]; then

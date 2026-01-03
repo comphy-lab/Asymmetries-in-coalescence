@@ -338,6 +338,12 @@ for param_file in "${CASE_FILES[@]}"; do
     # Change to case directory
     cd "$CASE_DIR"
 
+    # Create symlink to DataFiles (required for initial condition loading)
+    if [ ! -e "DataFiles" ]; then
+        ln -s ../DataFiles DataFiles
+        echo "Created symlink to DataFiles"
+    fi
+
     # ============================================================
     # Stage 1: Generate Dump File with OpenMP
     # ============================================================

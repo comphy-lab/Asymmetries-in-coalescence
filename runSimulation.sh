@@ -256,6 +256,12 @@ fi
 cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
 echo "Copied source file to case directory"
 
+# Create symlink to DataFiles (required for initial condition loading)
+if [ ! -e "DataFiles" ]; then
+    ln -s ../DataFiles DataFiles
+    echo "Created symlink to DataFiles"
+fi
+
 # ============================================================
 # Stage 1: Generate Dump File with OpenMP
 # ============================================================
