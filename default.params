@@ -17,7 +17,7 @@ CaseNo=1001
 OhOut=1e-2
 
 # Density ratio: rho_inner/rho_outer (bubble in liquid ~ 1e-3)
-RhoIn=1e-3
+RhoIn=1e-2
 
 # Radius ratio: R_small/R_large
 # Available values (matching DataFiles): 1.00, 1.50, 2.00, 4.00, 8.00
@@ -30,7 +30,7 @@ Rr=1.00
 # ============================================================
 # Maximum refinement level (2^MAXlevel cells at finest resolution)
 # Level 10 -> 1024 cells, Level 12 -> 4096 cells
-MAXlevel=10
+MAXlevel=12
 
 # ============================================================
 # Time Control
@@ -43,7 +43,7 @@ tmax=40.0
 # ============================================================
 # Wall position (distance from origin to wall)
 # Domain size is computed as: Ldomain = zWall + 2 + 2*Rr + 4.0
-zWall=0.01
+zWall=0.05
 
 # ============================================================
 # Output Configuration
