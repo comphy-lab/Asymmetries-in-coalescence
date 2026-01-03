@@ -142,7 +142,6 @@ event end (t = end) {
   fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, Oh2 %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
 }
 
-scalar posEq[], posPoles[];
 event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
 
   double ke = 0., wt = 0., xCOM = 0., Vcm = 0.;
