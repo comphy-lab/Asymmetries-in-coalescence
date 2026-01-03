@@ -12,12 +12,12 @@ BASE_CONFIG=default.params
 # ============================================================
 # Starting case number (4-digit: 1000-9999)
 # Each parameter combination gets auto-incremented CaseNo
-CASE_START=1000
+CASE_START=2000
 
 # Ending case number (inclusive)
 # Number of combinations should equal CASE_END - CASE_START + 1
-# For this sweep: 2 Rr × 2 OhOut × 2 zWall = 8 combinations, so CASE_END = 1007
-CASE_END=1007
+# For this sweep: 2 Rr × 2 OhOut × 2 zWall = 8 combinations, so CASE_END = 2007
+CASE_END=2023
 
 # ============================================================
 # Sweep Variables
@@ -27,13 +27,13 @@ CASE_END=1007
 
 # Sweep radius ratio
 # Available values (matching DataFiles): 1.00, 1.50, 2.00, 4.00, 8.00
-SWEEP_Rr=1.00,2.00
+SWEEP_Rr=1.00,1.02,1.20,1.40,1.50,1.60,1.90,2.00,2.20,2.50,3.00,3.50,4.00,4.70,5.50,6.40,7.40,8.00,8.50,10.00,12.50,14.50,17.50,20.00
 
 # Sweep Ohnesorge number (outer fluid)
-SWEEP_OhOut=0.01,0.05
+SWEEP_OhOut=0.01
 
 # Sweep wall position
-SWEEP_zWall=0.05,4.0
+SWEEP_zWall=0.05
 
 # Optional: sweep other parameters (uncomment as needed)
 # SWEEP_MAXlevel=9,10,11
