@@ -1,0 +1,55 @@
+# Bubble Coalescence Simulation - Default Parameters
+# Format: key=value (one per line, # for comments)
+# This file provides a typical bubble coalescence configuration
+
+# ============================================================
+# Case Identification
+# ============================================================
+# Case number for folder naming (4-digit: 1000-9999)
+# Output will be created in simulationCases/<CaseNo>/
+CaseNo=1001
+
+# ============================================================
+# Physical Parameters (Dimensionless Numbers)
+# ============================================================
+# Ohnesorge number (outer fluid): Oh = mu/sqrt(rho*sigma*R)
+# Controls viscous vs surface tension effects
+OhOut=1e-2
+
+# Density ratio: rho_inner/rho_outer (bubble in liquid ~ 1e-3)
+RhoIn=1e-3
+
+# Radius ratio: R_small/R_large
+# Available values (matching DataFiles): 1.00, 1.50, 2.00, 4.00, 8.00
+Rr=1.00
+
+# Note: MuRin (viscosity ratio inner/outer) is hardcoded as 1e-2 in the source
+
+# ============================================================
+# Numerical Parameters (Mesh Adaptation)
+# ============================================================
+# Maximum refinement level (2^MAXlevel cells at finest resolution)
+# Level 10 -> 1024 cells, Level 12 -> 4096 cells
+MAXlevel=10
+
+# ============================================================
+# Time Control
+# ============================================================
+# Maximum simulation time (dimensionless, based on capillary time scale)
+tmax=40.0
+
+# ============================================================
+# Geometry Configuration
+# ============================================================
+# Wall position (distance from origin to wall)
+# Domain size is computed as: Ldomain = zWall + 2 + 2*Rr + 4.0
+zWall=0.01
+
+# ============================================================
+# Output Configuration
+# ============================================================
+# Output directory name (created inside case folder)
+output_dir=results
+
+# Snapshot interval (defined in source code as tsnap = 1e-2)
+# Log interval (defined in source code as tsnap2 = 1e-4)

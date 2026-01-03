@@ -1,0 +1,41 @@
+# Parameter Sweep Configuration
+# This file defines a parameter sweep for batch simulations
+
+# ============================================================
+# Base Configuration
+# ============================================================
+# Start from this parameter file and override sweep variables
+BASE_CONFIG=default.params
+
+# ============================================================
+# Case Number Range
+# ============================================================
+# Starting case number (4-digit: 1000-9999)
+# Each parameter combination gets auto-incremented CaseNo
+CASE_START=1000
+
+# Ending case number (inclusive)
+# Number of combinations should equal CASE_END - CASE_START + 1
+# For this sweep: 5 Rr values = 5 combinations, so CASE_END = 1004
+CASE_END=1004
+
+# ============================================================
+# Sweep Variables
+# ============================================================
+# Format: SWEEP_<variable>=value1,value2,value3,...
+# The sweep will generate all combinations (cartesian product)
+
+# Sweep radius ratio
+# Available values (matching DataFiles): 1.00, 1.50, 2.00, 4.00, 8.00
+SWEEP_Rr=1.00,1.50,2.00,4.00,8.00
+
+# Optional: sweep other parameters (uncomment as needed)
+# SWEEP_OhOut=1e-3,1e-2,1e-1
+# SWEEP_MAXlevel=9,10,11
+
+# ============================================================
+# Output Configuration
+# ============================================================
+# Output folders are created in simulationCases/<CaseNo>/
+# CaseNo auto-increments from CASE_START for each parameter combination
+# Cases run sequentially (one at a time)
