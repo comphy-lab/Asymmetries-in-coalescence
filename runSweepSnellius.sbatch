@@ -39,8 +39,8 @@ set -e  # Exit on error (but we'll handle case failures gracefully)
 SCRIPT_DIR="${SLURM_SUBMIT_DIR}"
 SWEEP_FILE="${SCRIPT_DIR}/sweep.params"
 
-# OpenMP threads for Stage 1 (dump generation)
-OMP_THREADS_STAGE1=4
+# OpenMP threads for Stage 1 (dump generation) - use all available cores
+OMP_THREADS_STAGE1=${SLURM_NTASKS}
 
 # ============================================================
 # Print Job Information
