@@ -30,7 +30,7 @@ Rr=1.00
 # ============================================================
 # Maximum refinement level (2^MAXlevel cells at finest resolution)
 # Level 10 -> 1024 cells, Level 12 -> 4096 cells
-MAXlevel=12
+MAXlevel=10
 
 # ============================================================
 # Time Control
