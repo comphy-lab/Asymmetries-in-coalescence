@@ -245,7 +245,7 @@ generate_combinations() {
 
     for val in "${value_array[@]}"; do
         val=$(echo "$val" | xargs)  # Trim whitespace
-        generate_combinations $((depth + 1)) "${current_values[@]}" "$val"
+        generate_combinations $((depth + 1)) ${current_values[@]+"${current_values[@]}"} "$val"
     done
 }
 
