@@ -81,6 +81,7 @@ slurm-*.err
 # postProcessing specific
 **/getData*
 **/getFacet*
+**/getCOM*
 **/getFootPrint
 **/Video
 **/README-local.md 
