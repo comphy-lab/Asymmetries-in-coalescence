@@ -17,7 +17,7 @@ CaseNo=1001
 OhOut=1e-2
 
 # Density ratio: rho_inner/rho_outer (bubble in liquid ~ 1e-3)
-RhoIn=1e-2
+RhoIn=1e-3
 
 # Radius ratio: R_small/R_large
 # Available values (matching DataFiles): 1.00, 1.50, 2.00, 4.00, 8.00
