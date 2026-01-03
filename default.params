@@ -7,7 +7,7 @@
 # ============================================================
 # Case number for folder naming (4-digit: 1000-9999)
 # Output will be created in simulationCases/<CaseNo>/
-CaseNo=1001
+CaseNo=3000
 
 # ============================================================
 # Physical Parameters (Dimensionless Numbers)
@@ -30,7 +30,7 @@ Rr=1.00
 # ============================================================
 # Maximum refinement level (2^MAXlevel cells at finest resolution)
 # Level 10 -> 1024 cells, Level 12 -> 4096 cells
-MAXlevel=10
+MAXlevel=12
 
 # ============================================================
 # Time Control
@@ -43,7 +43,7 @@ tmax=40.0
 # ============================================================
 # Wall position (distance from origin to wall)
 # Domain size is computed as: Ldomain = zWall + 2 + 2*Rr + 4.0
-zWall=0.05
+zWall=0.01
 
 # ============================================================
 # Output Configuration

@@ -166,6 +166,15 @@ if [ $MPI_ENABLED -eq 1 ]; then
     fi
 fi
 
+# Check if OpenMP is available (macOS often lacks OpenMP support)
+OPENMP_AVAILABLE=0
+if echo 'int main(){}' | cc -fopenmp -x c - -o /dev/null 2>/dev/null; then
+    OPENMP_AVAILABLE=1
+    [ $VERBOSE -eq 1 ] && echo "OpenMP: Available"
+else
+    [ $VERBOSE -eq 1 ] && echo "OpenMP: Not available (will run single-threaded)"
+fi
+
 # ============================================================
 # Determine Parameter File
 # ============================================================
@@ -218,7 +227,11 @@ echo ""
 if [ $MPI_ENABLED -eq 1 ]; then
     echo "Execution Mode: MPI Parallel ($MPI_CORES cores)"
 else
-    echo "Execution Mode: Serial"
+    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+        echo "Execution Mode: Serial (OpenMP: $OMP_THREADS threads)"
+    else
+        echo "Execution Mode: Serial (single-threaded, no OpenMP)"
+    fi
 fi
 echo ""
 
@@ -271,31 +284,51 @@ fi
 if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
     echo ""
     echo "========================================="
-    echo "Stage 1: Generate Initial Condition (OpenMP)"
+    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+        echo "Stage 1: Generate Initial Condition (OpenMP)"
+    else
+        echo "Stage 1: Generate Initial Condition (Serial)"
+    fi
     echo "========================================="
-    echo "Compiling with OpenMP..."
 
-    [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
-    [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-    [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
+    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+        echo "Compiling with OpenMP..."
+        [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
+        [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
 
-    qcc -I../../src-local \
-        -O2 -Wall -disable-dimensions -fopenmp \
-        $DEBUG_FLAGS $QCC_FLAGS \
-        "$SRC_FILE_LOCAL" -o "${EXECUTABLE}_omp" -lm
+        qcc -I../../src-local \
+            -O2 -Wall -disable-dimensions -fopenmp \
+            $DEBUG_FLAGS $QCC_FLAGS \
+            "$SRC_FILE_LOCAL" -o "${EXECUTABLE}_omp" -lm
+    else
+        echo "Compiling without OpenMP (macOS without OpenMP support)..."
+        [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
+        [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+
+        qcc -I../../src-local \
+            -O2 -Wall -disable-dimensions \
+            $DEBUG_FLAGS $QCC_FLAGS \
+            "$SRC_FILE_LOCAL" -o "${EXECUTABLE}_omp" -lm
+    fi
 
     if [ $? -ne 0 ]; then
-        echo "ERROR: OpenMP compilation failed" >&2
+        echo "ERROR: Stage 1 compilation failed" >&2
         exit 1
     fi
 
-    echo "OpenMP compilation successful"
+    echo "Compilation successful"
     echo ""
     echo "Running briefly to generate dump file..."
-    echo "  OMP_NUM_THREADS=$OMP_THREADS"
+    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+        echo "  OMP_NUM_THREADS=$OMP_THREADS"
+        export OMP_NUM_THREADS=$OMP_THREADS
+    else
+        echo "  Running single-threaded (no OpenMP)"
+    fi
     echo "  Command: ./${EXECUTABLE}_omp $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall"
 
-    export OMP_NUM_THREADS=$OMP_THREADS
     ./${EXECUTABLE}_omp $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall
 
     if [ ! -f "dump" ]; then
@@ -355,17 +388,28 @@ if [ $MPI_ENABLED -eq 1 ]; then
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi
 else
-    # Serial compilation with OpenMP
-    echo "Compiling for serial execution (with OpenMP)..."
+    # Serial compilation (with OpenMP if available)
+    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+        echo "Compiling for serial execution (with OpenMP)..."
+        [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
+        [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
 
-    [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
-    [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-    [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
+        qcc -I../../src-local \
+            -O2 -Wall -disable-dimensions -fopenmp \
+            $DEBUG_FLAGS $QCC_FLAGS \
+            "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
+    else
+        echo "Compiling for serial execution (no OpenMP)..."
+        [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
+        [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
 
-    qcc -I../../src-local \
-        -O2 -Wall -disable-dimensions -fopenmp \
-        $DEBUG_FLAGS $QCC_FLAGS \
-        "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
+        qcc -I../../src-local \
+            -O2 -Wall -disable-dimensions \
+            $DEBUG_FLAGS $QCC_FLAGS \
+            "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
+    fi
 fi
 
 if [ $? -ne 0 ]; then
@@ -388,7 +432,10 @@ if [ $MPI_ENABLED -eq 1 ]; then
     [ $VERBOSE -eq 1 ] && echo "Command: mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
     mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
 else
-    export OMP_NUM_THREADS=$OMP_THREADS
+    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+        export OMP_NUM_THREADS=$OMP_THREADS
+        [ $VERBOSE -eq 1 ] && echo "OMP_NUM_THREADS=$OMP_THREADS"
+    fi
     [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
     ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
 fi
