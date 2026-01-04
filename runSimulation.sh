@@ -44,7 +44,8 @@ This script uses TWO-STAGE EXECUTION:
   Stage 2: Full simulation from restart file
 
 Stage Selection (mutually exclusive):
-    --stage1            Run Stage 1 only (generate restart file) [DEFAULT]
+    (default)           Run both Stage 1 + Stage 2
+    --stage1            Run Stage 1 only (generate restart file)
     --stage2            Run Stage 2 only (full simulation from restart)
 
 Parallelization:
@@ -68,18 +69,16 @@ Environment variables:
     QCC_FLAGS     Additional qcc compiler flags
 
 Examples:
-    # Stage 1: Generate restart file (serial, default)
-    $0 default.params
-    $0 --stage1 default.params
+    # Run both stages (default)
+    $0 default.params                         # Serial, Stage 1 + 2
+    $0 --mpi 8 default.params                 # Stage 1 serial, Stage 2 MPI
 
-    # Stage 1 with OpenMP (Linux only)
-    $0 --stage1 --fopenmp default.params      # 8 threads (default)
-    $0 --stage1 --fopenmp 4 default.params    # 4 threads
+    # Stage 1 only: Generate restart file
+    $0 --stage1 default.params                # Serial
+    $0 --stage1 --fopenmp default.params      # OpenMP (Linux only)
 
-    # Stage 2: Full simulation
+    # Stage 2 only: Full simulation (requires existing restart)
     $0 --stage2 default.params                # Serial
-    $0 --stage2 --fopenmp default.params      # OpenMP, 8 threads (Linux)
-    $0 --stage2 --mpi default.params          # MPI, 2 cores
     $0 --stage2 --mpi 8 default.params        # MPI, 8 cores
 
     # Compile only (check for errors)
@@ -95,7 +94,7 @@ EOF
 COMPILE_ONLY=0
 DEBUG_FLAGS=""
 VERBOSE=0
-STAGE=1                # Default to stage 1
+STAGE=0                # Default to both stages (0 = both, 1 = stage1, 2 = stage2)
 FOPENMP_ENABLED=0
 FOPENMP_THREADS=8      # Default thread count
 MPI_ENABLED=0
@@ -177,10 +176,15 @@ OS_TYPE=$(uname -s)
 # Validation
 # ============================================================
 
-# Check --mpi only valid with stage2
+# Check --mpi only valid with stage2 (not stage1-only)
 if [ $MPI_ENABLED -eq 1 ] && [ $STAGE -eq 1 ]; then
     echo "ERROR: --mpi is only valid with --stage2 (Stage 1 cannot use MPI due to distance.h)" >&2
     exit 1
+fi
+
+# For both-stages mode with MPI, MPI only applies to Stage 2
+if [ $MPI_ENABLED -eq 1 ] && [ $STAGE -eq 0 ]; then
+    echo "Note: MPI will be used for Stage 2 only (Stage 1 runs serial)"
 fi
 
 # Check --mpi and --fopenmp are mutually exclusive
@@ -266,7 +270,13 @@ echo "Physical Parameters:"
 echo "  OhOut=$OhOut, RhoIn=$RhoIn, Rr=$Rr"
 echo "  MAXlevel=$MAXlevel, tmax=$tmax, zWall=$zWall"
 echo ""
-echo "Stage: $STAGE"
+if [ $STAGE -eq 0 ]; then
+    echo "Stage: Both (Stage 1 + Stage 2)"
+elif [ $STAGE -eq 1 ]; then
+    echo "Stage: 1 only (generate restart)"
+else
+    echo "Stage: 2 only (full simulation)"
+fi
 if [ $MPI_ENABLED -eq 1 ]; then
     echo "Parallelization: MPI ($MPI_CORES cores)"
 elif [ $FOPENMP_ENABLED -eq 1 ]; then
@@ -319,7 +329,7 @@ fi
 # ============================================================
 # Stage 1: Generate Restart File
 # ============================================================
-if [ $STAGE -eq 1 ]; then
+if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
     echo ""
     echo "========================================="
     echo "Stage 1: Generate Initial Condition"
@@ -385,17 +395,19 @@ if [ $STAGE -eq 1 ]; then
     echo "========================================="
     echo "Stage 1 complete: restart file created"
     echo "Restart file location: $CASE_DIR/restart"
-    echo ""
-    echo "To run Stage 2:"
-    echo "  $0 --stage2 $PARAM_FILE"
-    echo "  $0 --stage2 --mpi $PARAM_FILE"
+    if [ $STAGE -eq 1 ]; then
+        echo ""
+        echo "To run Stage 2:"
+        echo "  $0 --stage2 $PARAM_FILE"
+        echo "  $0 --stage2 --mpi $PARAM_FILE"
+    fi
     echo "========================================="
 fi
 
 # ============================================================
 # Stage 2: Full Simulation
 # ============================================================
-if [ $STAGE -eq 2 ]; then
+if [ $STAGE -eq 2 ] || [ $STAGE -eq 0 ]; then
     # Check restart file exists
     if [ ! -f "restart" ]; then
         echo "ERROR: restart file not found in $CASE_DIR" >&2
