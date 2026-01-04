@@ -85,7 +85,7 @@ qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
 ```shell
 CFLAGS=-DDISPLAY=-1 make coalescenceBubble.tst
 ```
-Check the localhost on coalescenceBubble/display.html. something like: [http://basilisk.fr/three.js/editor/index.html?ws://localhost:7100](http://basilisk.fr/three.js/editor/index.html?ws://localhost:7100) and run interactively.
+Check the localhost on coalescenceBubble/display.html. something like: [https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100](https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100) and run interactively.
 
 ### To run using openMP, please use the flag -fopenmp
 

@@ -75,7 +75,7 @@ int main(int argc, char const *argv[]) {
   tmax = atof(argv[5]);
   zWall = atof(argv[6]);
 
-  Ldomain = zWall+2.+2.*Rr+4.0;
+  Ldomain = fmin(zWall+2.+2.*Rr+4.0, 16.);
 
   fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
 
