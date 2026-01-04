@@ -15,17 +15,19 @@
 # ============================================================
 # Bubble Coalescence - HPC Parameter Sweep Runner (Hamilton)
 # ============================================================
-# This script runs parameter sweeps on Durham University's Hamilton HPC.
-# Each case uses TWO-STAGE EXECUTION:
-#   Stage 1: OpenMP to generate dump file (distance.h incompatible with MPI)
-#   Stage 2: Full MPI simulation from dump file
+# This script runs Stage 2 (MPI simulation) on Durham University's Hamilton HPC.
+#
+# PREREQUISITE: Restart files must already exist for each case.
+# Run Stage 1 locally before submitting:
+#   ./runParameterSweep.sh --stage1-only sweep.params
 #
 # BEFORE RUNNING:
-# 1. Clone repo to /nobackup/$USER/ (NOT home directory)
-# 2. Run reset_install_requirements-no-darcs.sh to install Basilisk
-# 3. Edit sweep.params to set parameter ranges and case numbers
-# 4. Update --mail-user above with your Durham email
-# 5. Submit with: sbatch runSweepHamilton.sbatch
+# 1. Run Stage 1 locally to generate restart files for all cases
+# 2. Clone repo to /nobackup/$USER/ (NOT home directory)
+# 3. Run reset_install_requirements-no-darcs.sh to install Basilisk
+# 4. Edit sweep.params to set parameter ranges and case numbers
+# 5. Update --mail-user above with your Durham email
+# 6. Submit with: sbatch runSweepHamilton.sbatch
 #
 # SBATCH Parameters (Hamilton-specific):
 #   -n 128: Number of MPI tasks (whole node = 128 cores)
@@ -43,11 +45,6 @@ set -e  # Exit on error (but we'll handle case failures gracefully)
 # Use SLURM_SUBMIT_DIR (directory where sbatch was called) as the project root
 SCRIPT_DIR="${SLURM_SUBMIT_DIR}"
 SWEEP_FILE="${SCRIPT_DIR}/sweep.params"
-
-# OpenMP threads for Stage 1 (dump generation)
-# Hamilton auto-sets OMP_NUM_THREADS based on -c, but we use -n for MPI
-# So we explicitly set it to use all cores for Stage 1
-OMP_THREADS_STAGE1=128
 
 # Number of MPI tasks for Stage 2
 MPI_TASKS=${SLURM_NTASKS:-128}
@@ -73,9 +70,11 @@ echo "Running on node: $(hostname)"
 echo "Working directory: $(pwd)"
 echo "Job ID: ${SLURM_JOB_ID}"
 echo "Number of MPI tasks: ${MPI_TASKS}"
-echo "OpenMP threads (Stage 1): ${OMP_THREADS_STAGE1}"
 echo "Partition: ${SLURM_JOB_PARTITION}"
 echo "Memory allocated: ${SLURM_MEM_PER_NODE}MB"
+echo ""
+echo "Mode: Stage 2 only (MPI simulation)"
+echo "      Restart files must exist for each case"
 echo ""
 
 # ============================================================
@@ -291,19 +290,19 @@ fi
 echo ""
 
 # ============================================================
-# Run Simulations
+# Run Simulations (Stage 2 Only - MPI)
 # ============================================================
 echo "============================================="
 echo "Running $COMBINATION_COUNT Simulations"
 echo "============================================="
-echo "Each case uses TWO-STAGE EXECUTION:"
-echo "  Stage 1: OpenMP (${OMP_THREADS_STAGE1} threads) for dump generation"
-echo "  Stage 2: MPI (${MPI_TASKS} tasks) for full simulation"
+echo "Stage 2 only: MPI simulation (${MPI_TASKS} tasks)"
+echo "Requires existing restart files in each case directory"
 echo ""
 
 # Counters for tracking
 SUCCESSFUL_CASES=0
 FAILED_CASES=0
+SKIPPED_CASES=0
 
 for param_file in "${CASE_FILES[@]}"; do
     # Parse parameter file to get values
@@ -330,81 +329,45 @@ for param_file in "${CASE_FILES[@]}"; do
     echo "Parameters: OhOut=$OhOut, RhoIn=$RhoIn, Rr=$Rr"
     echo "            MAXlevel=$MAXlevel, tmax=$tmax, zWall=$zWall"
 
-    # Create case directory
+    # Check if case directory exists
     if [ ! -d "$CASE_DIR" ]; then
-        echo "Creating case directory: $CASE_DIR"
-        mkdir -p "$CASE_DIR"
-    else
-        echo "Case directory exists"
-    fi
-
-    # Copy parameter file to case directory
-    cp "$param_file" "$CASE_DIR/case.params"
-    echo "Parameter file copied to case directory"
-
-    # Copy source file to case directory
-    SRC_FILE_ORIG="${SCRIPT_DIR}/simulationCases/coalescenceBubble.c"
-    SRC_FILE_LOCAL="$CASE_DIR/coalescenceBubble.c"
-    EXECUTABLE_OMP="$CASE_DIR/coalescenceBubble_omp"
-    EXECUTABLE_MPI="$CASE_DIR/coalescenceBubble"
-
-    if [ ! -f "$SRC_FILE_ORIG" ]; then
-        echo "ERROR: Source file $SRC_FILE_ORIG not found" >&2
-        ((FAILED_CASES++)) || true
+        echo "ERROR: Case directory not found: $CASE_DIR" >&2
+        echo "       Run Stage 1 locally first" >&2
+        ((SKIPPED_CASES++)) || true
         continue
     fi
-
-    cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
-    echo "Source file copied to case directory"
 
     # Change to case directory
     cd "$CASE_DIR"
 
-    # Create symlink to DataFiles (required for initial condition loading)
-    if [ ! -e "DataFiles" ]; then
-        ln -s ../DataFiles DataFiles
-        echo "Created symlink to DataFiles"
+    # Check for restart file (CRITICAL)
+    if [ ! -f "restart" ]; then
+        echo "ERROR: restart file not found for case $CASE_NO" >&2
+        echo "       Run Stage 1 locally first:" >&2
+        echo "       ./runSimulation.sh --stage1 <params_file>" >&2
+        ((SKIPPED_CASES++)) || true
+        cd "$SCRIPT_DIR"
+        continue
     fi
 
-    # ============================================================
-    # Stage 1: Generate Dump File with OpenMP
-    # ============================================================
-    if [ ! -f "dump" ]; then
-        echo ""
-        echo "Stage 1: Generating initial condition (OpenMP)..."
+    echo "Found restart file"
 
-        # Compile with OpenMP
-        if qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions -fopenmp \
-            coalescenceBubble.c -o coalescenceBubble_omp -lm 2>&1; then
-            echo "OpenMP compilation successful"
-        else
-            echo "ERROR: OpenMP compilation failed for case $CASE_NO" >&2
-            ((FAILED_CASES++)) || true
-            cd "$SCRIPT_DIR"
-            continue
-        fi
+    # Copy source file to case directory if needed
+    SRC_FILE_ORIG="${SCRIPT_DIR}/simulationCases/coalescenceBubble.c"
+    SRC_FILE_LOCAL="$CASE_DIR/coalescenceBubble.c"
 
-        # Run briefly to generate dump
-        echo "Running briefly to generate dump file..."
-        export OMP_NUM_THREADS=$OMP_THREADS_STAGE1
-        if ./coalescenceBubble_omp $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall; then
-            if [ -f "dump" ]; then
-                echo "Stage 1 complete: dump file created"
-            else
-                echo "ERROR: Stage 1 failed - dump file not created for case $CASE_NO" >&2
-                ((FAILED_CASES++)) || true
-                cd "$SCRIPT_DIR"
-                continue
-            fi
-        else
-            echo "ERROR: Stage 1 execution failed for case $CASE_NO" >&2
-            ((FAILED_CASES++)) || true
-            cd "$SCRIPT_DIR"
-            continue
-        fi
-    else
-        echo "Dump file already exists - skipping Stage 1"
+    if [ ! -f "$SRC_FILE_ORIG" ]; then
+        echo "ERROR: Source file $SRC_FILE_ORIG not found" >&2
+        ((FAILED_CASES++)) || true
+        cd "$SCRIPT_DIR"
+        continue
+    fi
+
+    cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
+
+    # Create symlink to DataFiles if needed
+    if [ ! -e "DataFiles" ]; then
+        ln -s ../DataFiles DataFiles
     fi
 
     # ============================================================
@@ -456,13 +419,15 @@ echo "Job completed at: $(date)"
 echo "Total cases: $COMBINATION_COUNT"
 echo "Successful: $SUCCESSFUL_CASES"
 echo "Failed: $FAILED_CASES"
+echo "Skipped (no restart file): $SKIPPED_CASES"
 echo "Output location: simulationCases/"
 echo "============================================="
 echo ""
 
-# Exit with error if any cases failed
-if [ $FAILED_CASES -gt 0 ]; then
-    echo "WARNING: $FAILED_CASES case(s) failed. Check logs for details." >&2
+# Exit with error if any cases failed or were skipped
+if [ $FAILED_CASES -gt 0 ] || [ $SKIPPED_CASES -gt 0 ]; then
+    echo "WARNING: $FAILED_CASES case(s) failed, $SKIPPED_CASES case(s) skipped." >&2
+    echo "         Check logs for details." >&2
     exit 1
 fi
 
