@@ -43,7 +43,7 @@ tmax=40.0
 # ============================================================
 # Wall position (distance from origin to wall)
 # Domain size is computed as: Ldomain = zWall + 2 + 2*Rr + 4.0
-zWall=0.01
+zWall=0.075
 
 # ============================================================
 # Output Configuration

@@ -12,6 +12,14 @@ set -euo pipefail  # Exit on error, unset variables, pipeline failures
 # ============================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Source parameter parsing library
+if [ -f "${SCRIPT_DIR}/src-local/parse_params.sh" ]; then
+    source "${SCRIPT_DIR}/src-local/parse_params.sh"
+else
+    echo "ERROR: src-local/parse_params.sh not found" >&2
+    exit 1
+fi
+
 # Post-processing script paths
 VIDEO_SCRIPT="${SCRIPT_DIR}/postProcess/Video-generic.py"
 
@@ -39,10 +47,12 @@ Options:
     --nGFS N            Number of snapshots to process (default: 4000)
     --tsnap F           Time interval between snapshots (default: 0.01)
     --GridsPerR N       Radial grid resolution for video (default: 256)
-    --Rr F              Radius ratio - affects domain bounds (default: 1.0)
-    --ZMIN F            Override minimum Z value (default: -2.05)
-    --ZMAX F            Override maximum Z value (default: 5*Rr-2.05)
-    --RMAX F            Override maximum R value (default: 2.5*Rr)
+    --ZMIN F            Override minimum Z (auto: max(-2-zWall, -3.0))
+    --ZMAX F            Override maximum Z (auto: 5*Rr-2.0)
+    --RMAX F            Override maximum R (auto: 2.5*Rr)
+
+    Note: Rr and zWall are auto-extracted from each case's case.params file.
+    Domain bounds are calculated per-case unless overridden above.
 
     --skip-video-encode Skip ffmpeg video encoding after frame generation
 
@@ -57,8 +67,8 @@ Examples:
     # Process multiple cases with default settings
     $0 3000 3001 3002
 
-    # Process with custom radius ratio and CPU count
-    $0 --CPUs 8 --Rr 2.0 3000 3001
+    # Process with 8 CPUs
+    $0 --CPUs 8 3000 3001
 
     # Process first 100 snapshots only (for testing)
     $0 --nGFS 100 3000
@@ -85,7 +95,6 @@ CPUS=4
 NGFS=4000
 TSNAP=0.01
 GRIDS_PER_R=256
-RR=1.0
 ZMIN=""
 ZMAX=""
 RMAX=""
@@ -124,10 +133,6 @@ while [[ $# -gt 0 ]]; do
                 echo "ERROR: --GridsPerR requires a positive integer, got: $GRIDS_PER_R" >&2
                 exit 1
             fi
-            shift 2
-            ;;
-        --Rr)
-            RR="$2"
             shift 2
             ;;
         --ZMIN)
@@ -230,7 +235,7 @@ echo "  CPUs:       $CPUS"
 echo "  nGFS:       $NGFS"
 echo "  tsnap:      $TSNAP"
 echo "  GridsPerR:  $GRIDS_PER_R"
-echo "  Rr:         $RR"
+echo "  Domain bounds: auto-calculated from case.params (Rr, zWall)"
 if [ -n "$ZMIN" ]; then echo "  ZMIN:       $ZMIN (override)"; fi
 if [ -n "$ZMAX" ]; then echo "  ZMAX:       $ZMAX (override)"; fi
 if [ -n "$RMAX" ]; then echo "  RMAX:       $RMAX (override)"; fi
@@ -250,7 +255,40 @@ run_video() {
     local case_dir="${CASES_DIR}/${case_no}"
     local video_dir="${case_dir}/Video"
 
-    # Build command with optional overrides
+    # Read Rr and zWall from case.params
+    local case_params="${case_dir}/case.params"
+    local case_rr="1.0"
+    local case_zwall="4.0"  # default from default.params
+
+    if [ -f "$case_params" ]; then
+        parse_param_file "$case_params"
+        case_rr=$(get_param "Rr" "1.0")
+        case_zwall=$(get_param "zWall" "4.0")
+    else
+        echo "  WARNING: case.params not found, using defaults (Rr=1.0, zWall=4.0)"
+    fi
+
+    # Calculate domain bounds
+    local calc_zmin=$(echo "-2 - $case_zwall" | bc -l)
+    local calc_zmax=$(echo "5 * $case_rr - 2.0" | bc -l)
+    local calc_rmax=$(echo "2.5 * $case_rr" | bc -l)
+
+    # Apply ZMIN clamp: max(-2-zWall, -3.0)
+    if (( $(echo "$calc_zmin < -3.0" | bc -l) )); then
+        calc_zmin="-3.0"
+    fi
+
+    # Use command-line overrides if provided, otherwise use calculated values
+    local use_zmin="${ZMIN:-$calc_zmin}"
+    local use_zmax="${ZMAX:-$calc_zmax}"
+    local use_rmax="${RMAX:-$calc_rmax}"
+
+    if [ $VERBOSE -eq 1 ]; then
+        echo "  Extracted: Rr=$case_rr, zWall=$case_zwall"
+        echo "  Calculated: ZMIN=$use_zmin, ZMAX=$use_zmax, RMAX=$use_rmax"
+    fi
+
+    # Build command with calculated/override values
     local cmd_args=(
         "--caseToProcess" "${case_dir}"
         "--folderToSave" "${video_dir}"
@@ -258,13 +296,11 @@ run_video() {
         "--nGFS" "${NGFS}"
         "--tsnap" "${TSNAP}"
         "--GridsPerR" "${GRIDS_PER_R}"
-        "--Rr" "${RR}"
+        "--Rr" "${case_rr}"
+        "--ZMIN" "${use_zmin}"
+        "--ZMAX" "${use_zmax}"
+        "--RMAX" "${use_rmax}"
     )
-
-    # Add optional overrides
-    [ -n "$ZMIN" ] && cmd_args+=("--ZMIN" "$ZMIN")
-    [ -n "$ZMAX" ] && cmd_args+=("--ZMAX" "$ZMAX")
-    [ -n "$RMAX" ] && cmd_args+=("--RMAX" "$RMAX")
 
     # Add skip flag if needed
     [ $SKIP_VIDEO_ENCODE -eq 1 ] && cmd_args+=("--skip-video-encode")

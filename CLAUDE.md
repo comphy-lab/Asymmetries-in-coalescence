@@ -18,7 +18,7 @@ qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
 ```bash
 cd simulationCases
 CFLAGS=-DDISPLAY=-1 make coalescenceBubble.tst
-# Open http://basilisk.fr/three.js/editor/index.html?ws://localhost:7100
+# Open https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100
 ```
 
 ### OpenMP Parallel Build

@@ -3,8 +3,8 @@
 # Creates case folder in simulationCases/<CaseNo>/ and runs simulation there
 #
 # IMPORTANT: This script uses TWO-STAGE EXECUTION because distance.h is
-# incompatible with MPI. Stage 1 generates the initial condition dump file
-# using OpenMP, then Stage 2 runs the full simulation with MPI.
+# incompatible with MPI. Run Stage 1 first to generate the restart file,
+# then run Stage 2 for the full simulation.
 
 set -euo pipefail  # Exit on error, unset variables, pipeline failures
 
@@ -40,19 +40,24 @@ Run single bubble coalescence simulation from root directory.
 Creates case folder in simulationCases/<CaseNo>/ based on parameter file.
 
 This script uses TWO-STAGE EXECUTION:
-  Stage 1: OpenMP compilation and brief run to generate dump file
-           (Required because distance.h is incompatible with MPI)
-  Stage 2: MPI compilation and full simulation from dump file
+  Stage 1: Generate restart file (distance.h incompatible with MPI)
+  Stage 2: Full simulation from restart file
 
-Options:
-    -c, --compile-only    Compile but don't run simulation
-    -d, --debug           Compile with debug flags (-g -DTRASH=1)
-    -m, --mpi             Enable MPI parallel execution (default: serial)
-    --cores N             Number of MPI cores (default: 4, requires --mpi)
-    --omp-threads N       Number of OpenMP threads for Stage 1 (default: 4)
-    --skip-stage1         Skip Stage 1 (assume dump file exists)
-    -v, --verbose         Verbose output
-    -h, --help           Show this help message
+Stage Selection (mutually exclusive):
+    --stage1            Run Stage 1 only (generate restart file) [DEFAULT]
+    --stage2            Run Stage 2 only (full simulation from restart)
+
+Parallelization:
+    --fopenmp [N]       Enable OpenMP with N threads (default: 8)
+                        Stage 1: Linux only (macOS always serial)
+                        Stage 2: Linux only (macOS runs serial with warning)
+    --mpi [N]           Enable MPI with N cores (default: 2, Stage 2 only)
+
+Other Options:
+    -c, --compile-only  Compile but don't run simulation
+    -d, --debug         Compile with debug flags (-g -DTRASH=1)
+    -v, --verbose       Verbose output
+    -h, --help          Show this help message
 
 Parameter file mode (default):
     $0 default.params
@@ -63,20 +68,22 @@ Environment variables:
     QCC_FLAGS     Additional qcc compiler flags
 
 Examples:
-    # Run with default parameters (serial, both stages)
-    $0
+    # Stage 1: Generate restart file (serial, default)
+    $0 default.params
+    $0 --stage1 default.params
 
-    # Run with MPI parallel execution (4 cores)
-    $0 --mpi
+    # Stage 1 with OpenMP (Linux only)
+    $0 --stage1 --fopenmp default.params      # 8 threads (default)
+    $0 --stage1 --fopenmp 4 default.params    # 4 threads
 
-    # Run with MPI using 8 cores
-    $0 --mpi --cores 8 default.params
-
-    # Skip Stage 1 if dump already exists
-    $0 --mpi --skip-stage1
+    # Stage 2: Full simulation
+    $0 --stage2 default.params                # Serial
+    $0 --stage2 --fopenmp default.params      # OpenMP, 8 threads (Linux)
+    $0 --stage2 --mpi default.params          # MPI, 2 cores
+    $0 --stage2 --mpi 8 default.params        # MPI, 8 cores
 
     # Compile only (check for errors)
-    $0 --compile-only
+    $0 --compile-only default.params
 
 For more information, see README.md
 EOF
@@ -88,10 +95,12 @@ EOF
 COMPILE_ONLY=0
 DEBUG_FLAGS=""
 VERBOSE=0
+STAGE=1                # Default to stage 1
+FOPENMP_ENABLED=0
+FOPENMP_THREADS=8      # Default thread count
 MPI_ENABLED=0
-MPI_CORES=4
-OMP_THREADS=4
-SKIP_STAGE1=0
+MPI_CORES=2            # Default core count
+STAGE_EXPLICITLY_SET=0
 QCC_FLAGS="${QCC_FLAGS:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -104,28 +113,40 @@ while [[ $# -gt 0 ]]; do
             DEBUG_FLAGS="-g -DTRASH=1"
             shift
             ;;
-        -m|--mpi)
-            MPI_ENABLED=1
+        --stage1)
+            if [ $STAGE_EXPLICITLY_SET -eq 1 ] && [ $STAGE -eq 2 ]; then
+                echo "ERROR: Cannot use both --stage1 and --stage2" >&2
+                exit 1
+            fi
+            STAGE=1
+            STAGE_EXPLICITLY_SET=1
             shift
             ;;
-        --cores)
-            MPI_CORES="$2"
-            if ! [[ "$MPI_CORES" =~ ^[0-9]+$ ]] || [ "$MPI_CORES" -lt 1 ]; then
-                echo "ERROR: --cores requires a positive integer, got: $MPI_CORES" >&2
+        --stage2)
+            if [ $STAGE_EXPLICITLY_SET -eq 1 ] && [ $STAGE -eq 1 ]; then
+                echo "ERROR: Cannot use both --stage1 and --stage2" >&2
                 exit 1
             fi
-            shift 2
+            STAGE=2
+            STAGE_EXPLICITLY_SET=1
+            shift
             ;;
-        --omp-threads)
-            OMP_THREADS="$2"
-            if ! [[ "$OMP_THREADS" =~ ^[0-9]+$ ]] || [ "$OMP_THREADS" -lt 1 ]; then
-                echo "ERROR: --omp-threads requires a positive integer, got: $OMP_THREADS" >&2
-                exit 1
+        --fopenmp)
+            FOPENMP_ENABLED=1
+            # Check if next arg is a number (optional thread count)
+            if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+                FOPENMP_THREADS="$2"
+                shift
             fi
-            shift 2
+            shift
             ;;
-        --skip-stage1)
-            SKIP_STAGE1=1
+        --mpi)
+            MPI_ENABLED=1
+            # Check if next arg is a number (optional core count)
+            if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+                MPI_CORES="$2"
+                shift
+            fi
             shift
             ;;
         -v|--verbose)
@@ -148,9 +169,36 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ============================================================
-# Detect OS and Verify MPI
+# Detect OS
 # ============================================================
 OS_TYPE=$(uname -s)
+
+# ============================================================
+# Validation
+# ============================================================
+
+# Check --mpi only valid with stage2
+if [ $MPI_ENABLED -eq 1 ] && [ $STAGE -eq 1 ]; then
+    echo "ERROR: --mpi is only valid with --stage2 (Stage 1 cannot use MPI due to distance.h)" >&2
+    exit 1
+fi
+
+# Check --mpi and --fopenmp are mutually exclusive
+if [ $MPI_ENABLED -eq 1 ] && [ $FOPENMP_ENABLED -eq 1 ]; then
+    echo "ERROR: --mpi and --fopenmp are mutually exclusive" >&2
+    exit 1
+fi
+
+# Check --fopenmp on macOS
+if [ "$OS_TYPE" = "Darwin" ] && [ $FOPENMP_ENABLED -eq 1 ]; then
+    if [ $STAGE -eq 1 ]; then
+        echo "ERROR: --fopenmp not supported on macOS for Stage 1 (always runs serial)" >&2
+        exit 1
+    else
+        echo "WARNING: OpenMP not available on macOS, Stage 2 will run serial" >&2
+        FOPENMP_ENABLED=0
+    fi
+fi
 
 # Verify MPI tools if MPI is enabled
 if [ $MPI_ENABLED -eq 1 ]; then
@@ -164,15 +212,6 @@ if [ $MPI_ENABLED -eq 1 ]; then
         echo "       Install MPI tools or run without --mpi flag for serial execution." >&2
         exit 1
     fi
-fi
-
-# Check if OpenMP is available (macOS often lacks OpenMP support)
-OPENMP_AVAILABLE=0
-if echo 'int main(){}' | cc -fopenmp -x c - -o /dev/null 2>/dev/null; then
-    OPENMP_AVAILABLE=1
-    [ $VERBOSE -eq 1 ] && echo "OpenMP: Available"
-else
-    [ $VERBOSE -eq 1 ] && echo "OpenMP: Not available (will run single-threaded)"
 fi
 
 # ============================================================
@@ -213,6 +252,9 @@ fi
 
 CASE_DIR="simulationCases/${CASE_NO}"
 
+# ============================================================
+# Display Configuration
+# ============================================================
 echo "========================================="
 echo "Bubble Coalescence Simulation"
 echo "========================================="
@@ -224,14 +266,13 @@ echo "Physical Parameters:"
 echo "  OhOut=$OhOut, RhoIn=$RhoIn, Rr=$Rr"
 echo "  MAXlevel=$MAXlevel, tmax=$tmax, zWall=$zWall"
 echo ""
+echo "Stage: $STAGE"
 if [ $MPI_ENABLED -eq 1 ]; then
-    echo "Execution Mode: MPI Parallel ($MPI_CORES cores)"
+    echo "Parallelization: MPI ($MPI_CORES cores)"
+elif [ $FOPENMP_ENABLED -eq 1 ]; then
+    echo "Parallelization: OpenMP ($FOPENMP_THREADS threads)"
 else
-    if [ $OPENMP_AVAILABLE -eq 1 ]; then
-        echo "Execution Mode: Serial (OpenMP: $OMP_THREADS threads)"
-    else
-        echo "Execution Mode: Serial (single-threaded, no OpenMP)"
-    fi
+    echo "Parallelization: Serial"
 fi
 echo ""
 
@@ -276,22 +317,16 @@ if [ ! -e "DataFiles" ]; then
 fi
 
 # ============================================================
-# Stage 1: Generate Dump File with OpenMP
+# Stage 1: Generate Restart File
 # ============================================================
-# This stage is required because distance.h (used for initial conditions)
-# is incompatible with MPI but works with OpenMP.
-
-if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
+if [ $STAGE -eq 1 ]; then
     echo ""
     echo "========================================="
-    if [ $OPENMP_AVAILABLE -eq 1 ]; then
-        echo "Stage 1: Generate Initial Condition (OpenMP)"
-    else
-        echo "Stage 1: Generate Initial Condition (Serial)"
-    fi
+    echo "Stage 1: Generate Initial Condition"
     echo "========================================="
 
-    if [ $OPENMP_AVAILABLE -eq 1 ]; then
+    # Compilation
+    if [ $FOPENMP_ENABLED -eq 1 ]; then
         echo "Compiling with OpenMP..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
@@ -300,9 +335,9 @@ if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
         qcc -I../../src-local \
             -O2 -Wall -disable-dimensions -fopenmp \
             $DEBUG_FLAGS $QCC_FLAGS \
-            "$SRC_FILE_LOCAL" -o "${EXECUTABLE}_omp" -lm
+            "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     else
-        echo "Compiling without OpenMP (macOS without OpenMP support)..."
+        echo "Compiling for serial execution..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
         [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
@@ -310,7 +345,7 @@ if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
         qcc -I../../src-local \
             -O2 -Wall -disable-dimensions \
             $DEBUG_FLAGS $QCC_FLAGS \
-            "$SRC_FILE_LOCAL" -o "${EXECUTABLE}_omp" -lm
+            "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi
 
     if [ $? -ne 0 ]; then
@@ -318,79 +353,88 @@ if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
         exit 1
     fi
 
-    echo "Compilation successful"
-    echo ""
-    echo "Running briefly to generate dump file..."
-    if [ $OPENMP_AVAILABLE -eq 1 ]; then
-        echo "  OMP_NUM_THREADS=$OMP_THREADS"
-        export OMP_NUM_THREADS=$OMP_THREADS
-    else
-        echo "  Running single-threaded (no OpenMP)"
+    echo "Compilation successful: $EXECUTABLE"
+
+    # Exit if compile-only mode
+    if [ $COMPILE_ONLY -eq 1 ]; then
+        echo ""
+        echo "Compile-only mode: Stopping here"
+        cd ../..
+        exit 0
     fi
-    echo "  Command: ./${EXECUTABLE}_omp $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall"
 
-    ./${EXECUTABLE}_omp $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall
+    # Execution
+    echo ""
+    echo "Running briefly to generate restart file..."
+    if [ $FOPENMP_ENABLED -eq 1 ]; then
+        echo "  OMP_NUM_THREADS=$FOPENMP_THREADS"
+        export OMP_NUM_THREADS=$FOPENMP_THREADS
+    else
+        echo "  Running single-threaded"
+    fi
+    echo "  Command: ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall"
 
-    if [ ! -f "dump" ]; then
-        echo "ERROR: Stage 1 failed - dump file was not created" >&2
+    ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall
+
+    if [ ! -f "restart" ]; then
+        echo "ERROR: Stage 1 failed - restart file was not created" >&2
         exit 1
     fi
 
-    echo "Stage 1 complete: dump file created"
-elif [ -f "dump" ]; then
-    echo "Dump file already exists - skipping Stage 1"
-elif [ $SKIP_STAGE1 -eq 1 ]; then
-    echo "Stage 1 skipped by user (--skip-stage1)"
-    if [ ! -f "dump" ]; then
-        echo "WARNING: dump file does not exist - Stage 2 may fail" >&2
-    fi
-fi
-
-# Exit if compile-only mode
-if [ $COMPILE_ONLY -eq 1 ]; then
     echo ""
-    echo "Compile-only mode: Stopping here"
-    cd ../..
-    exit 0
+    echo "========================================="
+    echo "Stage 1 complete: restart file created"
+    echo "Restart file location: $CASE_DIR/restart"
+    echo ""
+    echo "To run Stage 2:"
+    echo "  $0 --stage2 $PARAM_FILE"
+    echo "  $0 --stage2 --mpi $PARAM_FILE"
+    echo "========================================="
 fi
 
 # ============================================================
 # Stage 2: Full Simulation
 # ============================================================
-echo ""
-echo "========================================="
-echo "Stage 2: Full Simulation"
-echo "========================================="
-
-if [ $MPI_ENABLED -eq 1 ]; then
-    # MPI parallel compilation
-    echo "Compiling with MPI..."
-
-    if [ "$OS_TYPE" = "Darwin" ]; then
-        # macOS
-        [ $VERBOSE -eq 1 ] && echo "Compiler: CC99='mpicc -std=c99' qcc"
-        [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -D_MPI=1 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
-
-        CC99='mpicc -std=c99' qcc -I../../src-local \
-            -Wall -O2 -D_MPI=1 -disable-dimensions \
-            $DEBUG_FLAGS $QCC_FLAGS \
-            "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
-    else
-        # Linux
-        [ $VERBOSE -eq 1 ] && echo "Compiler: CC99='mpicc -std=c99 -D_GNU_SOURCE=1' qcc"
-        [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -D_MPI=1 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
-
-        CC99='mpicc -std=c99 -D_GNU_SOURCE=1' qcc -I../../src-local \
-            -Wall -O2 -D_MPI=1 -disable-dimensions \
-            $DEBUG_FLAGS $QCC_FLAGS \
-            "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
+if [ $STAGE -eq 2 ]; then
+    # Check restart file exists
+    if [ ! -f "restart" ]; then
+        echo "ERROR: restart file not found in $CASE_DIR" >&2
+        echo "       Run Stage 1 first: $0 --stage1 $PARAM_FILE" >&2
+        exit 1
     fi
-else
-    # Serial compilation (with OpenMP if available)
-    if [ $OPENMP_AVAILABLE -eq 1 ]; then
-        echo "Compiling for serial execution (with OpenMP)..."
+
+    echo ""
+    echo "========================================="
+    echo "Stage 2: Full Simulation"
+    echo "========================================="
+
+    # Compilation
+    if [ $MPI_ENABLED -eq 1 ]; then
+        echo "Compiling with MPI..."
+
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            # macOS
+            [ $VERBOSE -eq 1 ] && echo "Compiler: CC99='mpicc -std=c99' qcc"
+            [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
+            [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -D_MPI=1 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+
+            CC99='mpicc -std=c99' qcc -I../../src-local \
+                -Wall -O2 -D_MPI=1 -disable-dimensions \
+                $DEBUG_FLAGS $QCC_FLAGS \
+                "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
+        else
+            # Linux
+            [ $VERBOSE -eq 1 ] && echo "Compiler: CC99='mpicc -std=c99 -D_GNU_SOURCE=1' qcc"
+            [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
+            [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -D_MPI=1 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+
+            CC99='mpicc -std=c99 -D_GNU_SOURCE=1' qcc -I../../src-local \
+                -Wall -O2 -D_MPI=1 -disable-dimensions \
+                $DEBUG_FLAGS $QCC_FLAGS \
+                "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
+        fi
+    elif [ $FOPENMP_ENABLED -eq 1 ]; then
+        echo "Compiling with OpenMP..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
         [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
@@ -400,7 +444,7 @@ else
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     else
-        echo "Compiling for serial execution (no OpenMP)..."
+        echo "Compiling for serial execution..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
         [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
@@ -410,48 +454,57 @@ else
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi
-fi
 
-if [ $? -ne 0 ]; then
-    echo "ERROR: Compilation failed" >&2
-    exit 1
-fi
-
-echo "Compilation successful: $EXECUTABLE"
-
-# ============================================================
-# Execution
-# ============================================================
-echo ""
-echo "Starting full simulation..."
-echo "  Command args: $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
-echo "========================================="
-
-# Run simulation
-if [ $MPI_ENABLED -eq 1 ]; then
-    [ $VERBOSE -eq 1 ] && echo "Command: mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
-    mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
-else
-    if [ $OPENMP_AVAILABLE -eq 1 ]; then
-        export OMP_NUM_THREADS=$OMP_THREADS
-        [ $VERBOSE -eq 1 ] && echo "OMP_NUM_THREADS=$OMP_THREADS"
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Stage 2 compilation failed" >&2
+        exit 1
     fi
-    [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
-    ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
-fi
 
-EXIT_CODE=$?
+    echo "Compilation successful: $EXECUTABLE"
 
-echo "========================================="
-if [ $EXIT_CODE -eq 0 ]; then
-    echo "Simulation completed successfully"
-    echo "Output location: $CASE_DIR"
-else
-    echo "Simulation failed with exit code $EXIT_CODE"
+    # Exit if compile-only mode
+    if [ $COMPILE_ONLY -eq 1 ]; then
+        echo ""
+        echo "Compile-only mode: Stopping here"
+        cd ../..
+        exit 0
+    fi
+
+    # Execution
+    echo ""
+    echo "Starting full simulation..."
+    echo "  Command args: $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
+    echo "========================================="
+
+    if [ $MPI_ENABLED -eq 1 ]; then
+        [ $VERBOSE -eq 1 ] && echo "Command: mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
+        mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
+    elif [ $FOPENMP_ENABLED -eq 1 ]; then
+        export OMP_NUM_THREADS=$FOPENMP_THREADS
+        [ $VERBOSE -eq 1 ] && echo "OMP_NUM_THREADS=$FOPENMP_THREADS"
+        [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
+        ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
+    else
+        [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
+        ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
+    fi
+
+    EXIT_CODE=$?
+
+    echo "========================================="
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo "Simulation completed successfully"
+        echo "Output location: $CASE_DIR"
+    else
+        echo "Simulation failed with exit code $EXIT_CODE"
+    fi
+    echo "========================================="
+
+    # Return to root directory
+    cd ../..
+    exit $EXIT_CODE
 fi
-echo "========================================="
 
 # Return to root directory
 cd ../..
-
-exit $EXIT_CODE
+exit 0

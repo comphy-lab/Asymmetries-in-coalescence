@@ -1,11 +1,33 @@
-/* Title: Coalescence of bubbles
+/* Title: Coalescence of bubbles (Extended version with interface tagging)
 
-# Version 1.0
-# Last modified: Oct 15, 2024
+# Version 1.1
+# Last modified: Jan 4, 2026
 
 # Author: Vatsal Sanjay
 # vatsalsanjay@gmail.com
 # Physics of Fluids
+
+# Description:
+# This is an OPTIONAL extended version of coalescenceBubble.c that provides
+# additional interface tracking using Basilisk's tag.h functionality.
+#
+# Key differences from coalescenceBubble.c:
+# - Uses two-phase-tag.h instead of two-phase.h
+# - Uses tag.h to identify and track only the largest connected bubble region
+#   (filters out satellite droplets)
+# - Outputs additional geometric measurements:
+#   - Re: Equatorial radius at center of mass
+#   - ZNp: North pole position (positive x on axis)
+#   - ZSp: South pole position (negative x on axis)
+#
+# Log output columns: i dt t ke Xc Vcm Re ZNp ZSp
+# (vs coalescenceBubble.c: i dt t ke Xc Vcm)
+#
+# NOTE: All production runs in this project use coalescenceBubble.c, not this file.
+# This file is provided as an alternative for cases requiring detailed shape tracking.
+#
+# IMPORTANT: This file has the same MPI limitation as coalescenceBubble.c due to
+# distance.h incompatibility. Use the two-stage execution (OpenMP then MPI).
 */
 
 // 1 is bubble
@@ -53,7 +75,7 @@ int main(int argc, char const *argv[]) {
   tmax = atof(argv[5]);
   zWall = atof(argv[6]);
 
-  Ldomain = zWall+2.+2.*Rr+4.0;
+  Ldomain = fmin(zWall+2.+2.*Rr+4.0, 16.);
 
   fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
 
@@ -69,7 +91,7 @@ int main(int argc, char const *argv[]) {
   char comm[80];
   sprintf (comm, "mkdir -p intermediate");
   system(comm);
-  sprintf (dumpFile, "dump");
+  sprintf (dumpFile, "restart");
 
   run();
 }

@@ -28,14 +28,22 @@ Run parameter sweep with auto-incrementing CaseNo.
 Creates case folders in simulationCases/<CaseNo>/ for each parameter combination.
 Cases run sequentially (one at a time).
 
-Options:
+By default, runs Stage 1 (generate restart) then Stage 2 (full simulation) for each case.
+
+Stage Selection:
+    --stage1-only        Run Stage 1 only for all cases (generate restart files)
+    --stage2-only        Run Stage 2 only for all cases (requires existing restart files)
+    (default)            Run Stage 1 then Stage 2 for each case
+
+Parallelization (for Stage 2, or Stage 1 on Linux):
+    --fopenmp [N]        Enable OpenMP with N threads (default: 8, Linux only)
+    --mpi [N]            Enable MPI with N cores (default: 2, Stage 2 only)
+
+Other Options:
     -n, --dry-run        Show parameter combinations without running
     -v, --verbose        Verbose output
     -c, --compile-only   Compile only, don't run simulations
-    -m, --mpi            Enable MPI parallel execution for all cases
-    --cores N            Number of MPI cores (default: 4, requires --mpi)
-    --omp-threads N      Number of OpenMP threads for Stage 1 (default: 4)
-    -h, --help          Show this help message
+    -h, --help           Show this help message
 
 Parameter sweep file (default):
     $0 sweep.params
@@ -51,17 +59,20 @@ Sweep file format:
 CaseNo auto-increments from CASE_START for each parameter combination.
 
 Examples:
-    # Run sweep with default file (serial)
+    # Run sweep (Stage 1 + Stage 2 per case, serial)
     $0
 
     # Dry run to see parameter combinations
     $0 --dry-run
 
-    # Run sweep with MPI parallel execution (4 cores per case)
-    $0 --mpi
+    # Run only Stage 1 for all cases (generate restart files)
+    $0 --stage1-only
 
-    # Run sweep with 8 cores per case
-    $0 --mpi --cores 8
+    # Run only Stage 2 with MPI (assumes restart files exist)
+    $0 --stage2-only --mpi 8
+
+    # Run full sweep with OpenMP (Linux)
+    $0 --fopenmp 4
 
     # Run custom sweep file
     $0 custom_sweep.params
@@ -76,9 +87,12 @@ EOF
 DRY_RUN=0
 VERBOSE=0
 COMPILE_ONLY=0
+STAGE1_ONLY=0
+STAGE2_ONLY=0
+FOPENMP_ENABLED=0
+FOPENMP_THREADS=8
 MPI_ENABLED=0
-MPI_CORES=4
-OMP_THREADS=4
+MPI_CORES=2
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -94,25 +108,31 @@ while [[ $# -gt 0 ]]; do
             COMPILE_ONLY=1
             shift
             ;;
-        -m|--mpi)
-            MPI_ENABLED=1
+        --stage1-only)
+            STAGE1_ONLY=1
             shift
             ;;
-        --cores)
-            MPI_CORES="$2"
-            if ! [[ "$MPI_CORES" =~ ^[0-9]+$ ]] || [ "$MPI_CORES" -lt 1 ]; then
-                echo "ERROR: --cores requires a positive integer, got: $MPI_CORES" >&2
-                exit 1
-            fi
-            shift 2
+        --stage2-only)
+            STAGE2_ONLY=1
+            shift
             ;;
-        --omp-threads)
-            OMP_THREADS="$2"
-            if ! [[ "$OMP_THREADS" =~ ^[0-9]+$ ]] || [ "$OMP_THREADS" -lt 1 ]; then
-                echo "ERROR: --omp-threads requires a positive integer, got: $OMP_THREADS" >&2
-                exit 1
+        --fopenmp)
+            FOPENMP_ENABLED=1
+            # Check if next arg is a number (optional thread count)
+            if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+                FOPENMP_THREADS="$2"
+                shift
             fi
-            shift 2
+            shift
+            ;;
+        --mpi)
+            MPI_ENABLED=1
+            # Check if next arg is a number (optional core count)
+            if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+                MPI_CORES="$2"
+                shift
+            fi
+            shift
             ;;
         -h|--help)
             usage
@@ -130,6 +150,28 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ============================================================
+# Validation
+# ============================================================
+
+# Check mutually exclusive stage flags
+if [ $STAGE1_ONLY -eq 1 ] && [ $STAGE2_ONLY -eq 1 ]; then
+    echo "ERROR: Cannot use both --stage1-only and --stage2-only" >&2
+    exit 1
+fi
+
+# Check --mpi only with stage2
+if [ $MPI_ENABLED -eq 1 ] && [ $STAGE1_ONLY -eq 1 ]; then
+    echo "ERROR: --mpi is only valid for Stage 2 (use --stage2-only or default both-stages mode)" >&2
+    exit 1
+fi
+
+# Check --mpi and --fopenmp are mutually exclusive
+if [ $MPI_ENABLED -eq 1 ] && [ $FOPENMP_ENABLED -eq 1 ]; then
+    echo "ERROR: --mpi and --fopenmp are mutually exclusive" >&2
+    exit 1
+fi
+
+# ============================================================
 # Determine Sweep File
 # ============================================================
 SWEEP_FILE="${1:-sweep.params}"
@@ -144,6 +186,20 @@ echo "Bubble Coalescence - Parameter Sweep"
 echo "========================================="
 echo "Sweep file: $SWEEP_FILE"
 [ $DRY_RUN -eq 1 ] && echo "Mode: Dry run (no execution)"
+if [ $STAGE1_ONLY -eq 1 ]; then
+    echo "Stages: Stage 1 only (generate restart files)"
+elif [ $STAGE2_ONLY -eq 1 ]; then
+    echo "Stages: Stage 2 only (full simulation)"
+else
+    echo "Stages: Stage 1 + Stage 2 per case"
+fi
+if [ $MPI_ENABLED -eq 1 ]; then
+    echo "Parallelization: MPI ($MPI_CORES cores)"
+elif [ $FOPENMP_ENABLED -eq 1 ]; then
+    echo "Parallelization: OpenMP ($FOPENMP_THREADS threads)"
+else
+    echo "Parallelization: Serial"
+fi
 echo ""
 
 # ============================================================
@@ -324,28 +380,54 @@ for case_file in "$TEMP_DIR"/case_*.params; do
     PARAM_FILES+=("$case_file")
 done
 
-# Build flags to pass to runSimulation.sh
-RUN_FLAGS=""
+# Build common flags
+COMMON_FLAGS=""
 if [ $COMPILE_ONLY -eq 1 ]; then
-    RUN_FLAGS="$RUN_FLAGS --compile-only"
+    COMMON_FLAGS="$COMMON_FLAGS --compile-only"
 fi
-if [ $MPI_ENABLED -eq 1 ]; then
-    RUN_FLAGS="$RUN_FLAGS --mpi --cores $MPI_CORES"
+if [ $VERBOSE -eq 1 ]; then
+    COMMON_FLAGS="$COMMON_FLAGS --verbose"
 fi
-RUN_FLAGS="$RUN_FLAGS --omp-threads $OMP_THREADS"
 
-# Run simulations sequentially (one at a time)
-echo "Running $COMBINATION_COUNT simulations sequentially"
+# Build parallelization flags
+PARALLEL_FLAGS=""
 if [ $MPI_ENABLED -eq 1 ]; then
-    echo "Each case will use MPI with $MPI_CORES cores"
+    PARALLEL_FLAGS="--mpi $MPI_CORES"
+elif [ $FOPENMP_ENABLED -eq 1 ]; then
+    PARALLEL_FLAGS="--fopenmp $FOPENMP_THREADS"
 fi
+
+# Run simulations
+echo "Running $COMBINATION_COUNT simulations sequentially"
 echo ""
 
 for param_file in "${PARAM_FILES[@]}"; do
-    ./runSimulation.sh $RUN_FLAGS "$param_file"
+    case_no=$(grep "^CaseNo=" "$param_file" | cut -d'=' -f2)
+    echo "-----------------------------------------"
+    echo "Processing Case $case_no"
+    echo "-----------------------------------------"
+
+    if [ $STAGE1_ONLY -eq 1 ]; then
+        # Stage 1 only
+        echo "Running Stage 1..."
+        ./runSimulation.sh --stage1 $COMMON_FLAGS $PARALLEL_FLAGS "$param_file"
+    elif [ $STAGE2_ONLY -eq 1 ]; then
+        # Stage 2 only
+        echo "Running Stage 2..."
+        ./runSimulation.sh --stage2 $COMMON_FLAGS $PARALLEL_FLAGS "$param_file"
+    else
+        # Both stages: Stage 1 then Stage 2
+        echo "Running Stage 1..."
+        ./runSimulation.sh --stage1 $COMMON_FLAGS "$param_file"
+
+        echo ""
+        echo "Running Stage 2..."
+        ./runSimulation.sh --stage2 $COMMON_FLAGS $PARALLEL_FLAGS "$param_file"
+    fi
+
+    echo ""
 done
 
-echo ""
 echo "========================================="
 echo "Parameter Sweep Complete"
 echo "========================================="
