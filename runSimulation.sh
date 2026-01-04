@@ -3,7 +3,7 @@
 # Creates case folder in simulationCases/<CaseNo>/ and runs simulation there
 #
 # IMPORTANT: This script uses TWO-STAGE EXECUTION because distance.h is
-# incompatible with MPI. Stage 1 generates the initial condition dump file
+# incompatible with MPI. Stage 1 generates the initial condition restart file
 # using OpenMP, then Stage 2 runs the full simulation with MPI.
 
 set -euo pipefail  # Exit on error, unset variables, pipeline failures
@@ -40,9 +40,9 @@ Run single bubble coalescence simulation from root directory.
 Creates case folder in simulationCases/<CaseNo>/ based on parameter file.
 
 This script uses TWO-STAGE EXECUTION:
-  Stage 1: OpenMP compilation and brief run to generate dump file
+  Stage 1: OpenMP compilation and brief run to generate restart file
            (Required because distance.h is incompatible with MPI)
-  Stage 2: MPI compilation and full simulation from dump file
+  Stage 2: MPI compilation and full simulation from restart file
 
 Options:
     -c, --compile-only    Compile but don't run simulation
@@ -50,7 +50,8 @@ Options:
     -m, --mpi             Enable MPI parallel execution (default: serial)
     --cores N             Number of MPI cores (default: 4, requires --mpi)
     --omp-threads N       Number of OpenMP threads for Stage 1 (default: 4)
-    --skip-stage1         Skip Stage 1 (assume dump file exists)
+    --skip-stage1         Skip Stage 1 (assume restart file exists)
+    --skip-stage2         Run only Stage 1 (generate restart file and exit)
     -v, --verbose         Verbose output
     -h, --help           Show this help message
 
@@ -72,8 +73,11 @@ Examples:
     # Run with MPI using 8 cores
     $0 --mpi --cores 8 default.params
 
-    # Skip Stage 1 if dump already exists
+    # Skip Stage 1 if restart file already exists
     $0 --mpi --skip-stage1
+
+    # Generate restart file only (no full simulation)
+    $0 --skip-stage2
 
     # Compile only (check for errors)
     $0 --compile-only
@@ -92,6 +96,7 @@ MPI_ENABLED=0
 MPI_CORES=4
 OMP_THREADS=4
 SKIP_STAGE1=0
+SKIP_STAGE2=0
 QCC_FLAGS="${QCC_FLAGS:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -128,6 +133,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_STAGE1=1
             shift
             ;;
+        --skip-stage2)
+            SKIP_STAGE2=1
+            shift
+            ;;
         -v|--verbose)
             VERBOSE=1
             shift
@@ -146,6 +155,12 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Check for conflicting flags
+if [ $SKIP_STAGE1 -eq 1 ] && [ $SKIP_STAGE2 -eq 1 ]; then
+    echo "ERROR: Cannot use both --skip-stage1 and --skip-stage2" >&2
+    exit 1
+fi
 
 # ============================================================
 # Detect OS and Verify MPI
@@ -281,7 +296,7 @@ fi
 # This stage is required because distance.h (used for initial conditions)
 # is incompatible with MPI but works with OpenMP.
 
-if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
+if [ ! -f "restart" ] && [ $SKIP_STAGE1 -eq 0 ]; then
     echo ""
     echo "========================================="
     if [ $OPENMP_AVAILABLE -eq 1 ]; then
@@ -320,7 +335,7 @@ if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
 
     echo "Compilation successful"
     echo ""
-    echo "Running briefly to generate dump file..."
+    echo "Running briefly to generate restart file..."
     if [ $OPENMP_AVAILABLE -eq 1 ]; then
         echo "  OMP_NUM_THREADS=$OMP_THREADS"
         export OMP_NUM_THREADS=$OMP_THREADS
@@ -331,18 +346,18 @@ if [ ! -f "dump" ] && [ $SKIP_STAGE1 -eq 0 ]; then
 
     ./${EXECUTABLE}_omp $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall
 
-    if [ ! -f "dump" ]; then
-        echo "ERROR: Stage 1 failed - dump file was not created" >&2
+    if [ ! -f "restart" ]; then
+        echo "ERROR: Stage 1 failed - restart file was not created" >&2
         exit 1
     fi
 
-    echo "Stage 1 complete: dump file created"
-elif [ -f "dump" ]; then
-    echo "Dump file already exists - skipping Stage 1"
+    echo "Stage 1 complete: restart file created"
+elif [ -f "restart" ]; then
+    echo "Restart file already exists - skipping Stage 1"
 elif [ $SKIP_STAGE1 -eq 1 ]; then
     echo "Stage 1 skipped by user (--skip-stage1)"
-    if [ ! -f "dump" ]; then
-        echo "WARNING: dump file does not exist - Stage 2 may fail" >&2
+    if [ ! -f "restart" ]; then
+        echo "WARNING: restart file does not exist - Stage 2 may fail" >&2
     fi
 fi
 
@@ -350,6 +365,15 @@ fi
 if [ $COMPILE_ONLY -eq 1 ]; then
     echo ""
     echo "Compile-only mode: Stopping here"
+    cd ../..
+    exit 0
+fi
+
+# Exit if skip-stage2 mode
+if [ $SKIP_STAGE2 -eq 1 ]; then
+    echo ""
+    echo "Stage 2 skipped by user (--skip-stage2)"
+    echo "Restart file location: $CASE_DIR/restart"
     cd ../..
     exit 0
 fi

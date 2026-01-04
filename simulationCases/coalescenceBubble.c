@@ -70,7 +70,7 @@ int main(int argc, char const *argv[]) {
   char comm[80];
   sprintf (comm, "mkdir -p intermediate");
   system(comm);
-  sprintf (dumpFile, "dump");
+  sprintf (dumpFile, "restart");
 
   run();
 }

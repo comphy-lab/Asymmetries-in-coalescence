@@ -1,21 +1,38 @@
 # Asymmetries-in-coalescence
 Asymmetries in coalescence: size asymmetry. Still axially symmetric.
 
-## Why coalescenceBubble.c (not coalescenceBubble-COM.c)
+## Simulation Files
 
-The running scripts use `coalescenceBubble.c` instead of `coalescenceBubble-COM.c` because:
+This project contains two simulation files:
+
+### coalescenceBubble.c (Primary)
+The main simulation file used for all production runs. Outputs:
+- `i dt t ke Xc Vcm` (6 columns)
+
+### coalescenceBubble-tag.c (Optional)
+An extended version with interface tagging for detailed shape tracking. Uses `tag.h` to identify and track only the largest connected bubble region (filters out satellite droplets). Outputs additional geometric measurements:
+- `i dt t ke Xc Vcm Re ZNp ZSp` (9 columns)
+- `Re`: Equatorial radius at center of mass
+- `ZNp`: North pole position (positive x on axis)
+- `ZSp`: South pole position (negative x on axis)
+
+**Note:** All cases in this project are run with `coalescenceBubble.c`. The `-tag.c` variant is provided as an optional alternative for cases requiring detailed shape tracking.
+
+## Why coalescenceBubble.c (not coalescenceBubble-tag.c)
+
+The running scripts use `coalescenceBubble.c` because:
 
 1. **`distance.h` is incompatible with MPI** - The `distance.h` header (used for computing initial conditions from shape files) cannot be compiled with `-D_MPI=1`
 2. **OpenMP is compatible** - `distance.h` works fine with OpenMP (`-fopenmp`)
-3. **Two-stage execution** - We first run briefly with OpenMP to generate the dump file with initial conditions, then run the full simulation with MPI (which restores from the dump file, bypassing `distance.h`)
+3. **Two-stage execution** - We first run briefly with OpenMP to generate the restart file with initial conditions, then run the full simulation with MPI (which restores from the restart file, bypassing `distance.h`)
 
-The `coalescenceBubble-COM.c` file additionally uses `tag.h` for tracking north/south poles, which adds complexity not needed for basic coalescence studies.
+The `coalescenceBubble-tag.c` file additionally uses `tag.h` for tracking shape metrics, which adds complexity not needed for basic coalescence studies.
 
 ## Running with Scripts (Recommended)
 
 ### Single Case
 ```shell
-# Serial execution (both stages: OpenMP for dump, then serial)
+# Serial execution (both stages: OpenMP for restart, then serial)
 ./runSimulation.sh default.params
 
 # MPI execution (Stage 1: OpenMP, Stage 2: MPI)
@@ -87,9 +104,9 @@ export OMP_NUM_THREADS=8
 ./coalescenceBubble
 ```
 
-This will generate a "dump" file
+This will generate a "restart" file
 
-2. Do not delete the dump file. Now you can use mpirun, like:
+2. Do not delete the restart file. Now you can use mpirun, like:
 
 ```shell
 CC99='mpicc -std=c99' qcc -Wall -O2 -D_MPI=1 -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
