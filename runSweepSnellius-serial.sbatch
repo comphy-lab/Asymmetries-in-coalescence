@@ -41,7 +41,7 @@ SWEEP_FILE="${SCRIPT_DIR}/sweep.params"
 MAX_CONCURRENT=${SLURM_NTASKS:-48}
 
 # Stage 1 tmax - short run to generate restart file
-STAGE1_TMAX="1e-2"
+STAGE1_TMAX="0.1"
 
 # ============================================================
 # Print Job Information
@@ -67,14 +67,16 @@ echo ""
 echo "Loading modules..."
 module purge
 module load 2024
-module load GCC/13.3.0
-echo "Modules loaded (serial mode - GCC only, no MPI)"
+module load OpenMPI/5.0.3-GCC-13.3.0
+echo "Modules loaded successfully"
 echo ""
 
 # ============================================================
 # Setup Basilisk Environment
 # ============================================================
 echo "Setting up Basilisk environment..."
+echo "Rebuilding Basilisk (hard)..."
+bash "${SCRIPT_DIR}/reset_install_requirements-no-darcs-no-git.sh" --hard
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
     echo "Basilisk environment loaded from .project_config"
