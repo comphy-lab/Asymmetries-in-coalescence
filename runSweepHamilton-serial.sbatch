@@ -295,6 +295,9 @@ run_stage1_case() {
     local CASE_DIR="${script_dir}/simulationCases/${CASE_NO}"
     local LOG_FILE="${CASE_DIR}/stage1.log"
 
+    # Create case directory BEFORE redirecting to log file
+    mkdir -p "$CASE_DIR"
+
     {
         echo "========================================="
         echo "Case $CASE_NO - Stage 1 ($(date))"
@@ -302,8 +305,6 @@ run_stage1_case() {
         echo "Parameters: OhOut=$OhOut, RhoIn=$RhoIn, Rr=$Rr"
         echo "            MAXlevel=$MAXlevel, tmax=$stage1_tmax, zWall=$zWall"
 
-        # Create case directory
-        mkdir -p "$CASE_DIR"
         cd "$CASE_DIR"
 
         # Copy source file
