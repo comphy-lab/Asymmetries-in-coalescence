@@ -21,7 +21,6 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 ├── simulationCases/                 Main simulation code
 │   ├── coalescenceBubble.c         Primary simulation (production runs)
 │   ├── coalescenceBubble-tag.c     Extended version with shape tracking
-│   └── DataFiles/                  Initial condition files (Rr=1.0-8.0)
 ├── src-local/                       Custom Basilisk headers
 │   ├── two-phase-tag.h             Two-phase flow with interface tagging
 │   └── parse_params.sh             Parameter file parsing library

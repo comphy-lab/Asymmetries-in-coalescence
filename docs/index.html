@@ -442,6 +442,70 @@ window.baseDomain = "https://test.comphy-lab.org";
                 href="https://github.com/comphy-lab/basilisk-C/releases">latest
                 release tag</a>.</p>
                 </blockquote>
+                <h2 id="repository-structure">Repository Structure</h2>
+                <div class="repository-structure">
+                <ul>
+                <li><strong><a
+                href="simulationCases">simulationCases/</a></strong> -
+                Main simulation code
+                <ul>
+                <li><strong><a
+                href="simulationCases/coalescenceBubble.c.html">coalescenceBubble.c</a></strong>
+                - Primary simulation (production runs)</li>
+                <li><strong><a
+                href="simulationCases/coalescenceBubble-tag.c.html">coalescenceBubble-tag.c</a></strong>
+                - Extended version with shape tracking</li>
+                </ul></li>
+                <li><strong><a href="src-local">src-local/</a></strong>
+                - Custom Basilisk headers
+                <ul>
+                <li><strong><a
+                href="src-local/two-phase-tag.h.html">two-phase-tag.h</a></strong>
+                - Two-phase flow with interface tagging</li>
+                <li><strong><a
+                href="src-local/parse_params.sh.html">parse_params.sh</a></strong>
+                - Parameter file parsing library</li>
+                </ul></li>
+                <li><strong><a
+                href="postProcess">postProcess/</a></strong> -
+                Post-processing tools
+                <ul>
+                <li><strong><a
+                href="postProcess/getData-generic.c.html">getData-generic.c</a></strong>
+                - Field extraction on structured grids</li>
+                <li><strong><a
+                href="postProcess/getFacet.c.html">getFacet.c</a></strong>
+                - Interface geometry extraction</li>
+                <li><strong><a
+                href="postProcess/getCOM.c.html">getCOM.c</a></strong> -
+                Center of mass extraction</li>
+                <li><strong><a
+                href="postProcess/Video-generic.py.html">Video-generic.py</a></strong>
+                - Frame-by-frame visualization pipeline</li>
+                </ul></li>
+                <li><strong><a
+                href="runSimulation.sh.html">runSimulation.sh</a></strong>
+                - Single case runner (OpenMP/MPI)</li>
+                <li><strong><a
+                href="runParameterSweep.sh.html">runParameterSweep.sh</a></strong>
+                - Parameter sweep runner</li>
+                <li><strong><a
+                href="runPostProcess-Ncases.sh.html">runPostProcess-Ncases.sh</a></strong>
+                - Batch post-processing runner</li>
+                <li><strong><a
+                href="default.params.html">default.params</a></strong> -
+                Single-case configuration</li>
+                <li><strong><a
+                href="sweep.params.html">sweep.params</a></strong> -
+                Sweep configuration template</li>
+                <li><strong><a
+                href="runSweepSnellius.sbatch.html">runSweepSnellius.sbatch</a></strong>
+                - SLURM script for Snellius HPC</li>
+                <li><strong><a
+                href="runSweepHamilton.sbatch.html">runSweepHamilton.sbatch</a></strong>
+                - SLURM script for Hamilton HPC</li>
+                </ul>
+                </div>
                 <h2 id="simulation-files">Simulation Files</h2>
                 <p>This project contains two simulation files:</p>
                 <h3 id="coalescencebubble.c-primary">coalescenceBubble.c
