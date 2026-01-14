@@ -93,6 +93,9 @@ slurm-*.err
 !*.sh
 !*.sbatch
 
+# Python virtual environment
+.venv/
+
 # Documentation generation artifacts
 **/__pycache__/
 **/*.pyc

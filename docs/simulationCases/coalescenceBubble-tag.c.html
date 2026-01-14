@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <!-- 
+    IMPORTANT: DO NOT place empty anchor tags <a></a> in this template!
+    They cause JavaScript syntax errors when they appear inside script blocks.
+  -->
+  <!-- Eliminate FOUC (Flash of Unstyled Content) and FOUT (Flash of Incorrect Theme) -->
+  <script>
+    (function() {
+  try {
+    // Apply the theme as quickly as possible to avoid flash
+    let saved;
+    try {
+      saved = localStorage.getItem('theme');
+    } catch (storageError) {
+      // Handle localStorage access errors (private browsing, cookies disabled)
+      console.warn('Unable to access localStorage:', storageError);
+    }
+
+    let prefersDark = false;
+    try {
+      prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch (mediaError) {
+      // Handle matchMedia access errors (unsupported browsers)
+      console.warn('Unable to check media query:', mediaError);
+    }
+
+    const theme = saved ? saved : (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+    // Add theme class for CSS targeting
+    document.documentElement.classList.add(theme + '-theme');
+    // Mark when theme is set for CSS transitions
+    document.documentElement.classList.add('theme-set');
+  } catch (error) {
+    // Fallback for any other unexpected errors
+    console.warn('Theme initialization failed:', error);
+    // Apply default theme as fallback
+    try {
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.documentElement.classList.add('light-theme');
+      document.documentElement.classList.add('theme-set');
+    } catch (fallbackError) {
+      // Silent catch for extreme cases
+      console.error('Critical theme fallback failed:', fallbackError);
+    }
+  }
+})();
+  </script>
+
+
+  <!-- No-JS fallback for theme and critical theming styles -->
+  <style>
+    /* Default light theme variables */
+    :root {
+      /* Base colors */
+      --color-background: #fff;
+      --color-text: #333;
+      --color-primary: #0066cc;
+      --color-secondary: #036;
+      --color-accent: #0099ff;
+
+      /* UI elements */
+      --color-header-bg: #f5f5f5;
+      --color-footer-bg: #2d2e33;
+      --color-border: #e0e0e0;
+      --color-input-bg: #f9f9f9;
+
+      /* Component colors */
+      --color-preloader-bg: #ffffff;
+      --color-loader: #0066cc;
+      --color-card-bg: #ffffff;
+      --color-code-bg: #f5f5f5;
+    }
+
+    /* Dark theme variables applied via media query when JS is disabled */
+    @media (prefers-color-scheme: dark) {
+      :root:not(.theme-set) {
+        /* Base colors - dark mode */
+        --color-background: #1a1a1a;
+        --color-text: #f5f5f5;
+        --color-primary: #4d9fff;
+        --color-secondary: #88ccff;
+        --color-accent: #00bfff;
+
+        /* UI elements - dark mode */
+        --color-header-bg: #121212;
+        --color-footer-bg: #121212;
+        --color-border: #333;
+        --color-input-bg: #2d2d2d;
+
+        /* Component colors - dark mode */
+        --color-preloader-bg: #1a1a1a;
+        --color-loader: #4d9fff;
+        --color-card-bg: #222;
+        --color-code-bg: #2d2d2d;
+      }
+    }
+
+    /* When JS sets the theme explicitly via data attribute */
+    [data-theme="dark"] {
+      /* Base colors - dark mode */
+      --color-background: #1a1a1a;
+      --color-text: #f5f5f5;
+      --color-primary: #4d9fff;
+      --color-secondary: #88ccff;
+      --color-accent: #00bfff;
+
+      /* UI elements - dark mode */
+      --color-header-bg: #121212;
+      --color-footer-bg: #121212;
+      --color-border: #333;
+      --color-input-bg: #2d2d2d;
+
+      /* Component colors - dark mode */
+      --color-preloader-bg: #1a1a1a;
+      --color-loader: #4d9fff;
+      --color-card-bg: #222;
+      --color-code-bg: #2d2d2d;
+    }
+
+    /* Prevent transition flashes during initial load */
+    html:not(.transitions-enabled) * {
+      transition: none !important;
+    }
+
+    /* Apply theme to preloader and early elements */
+    #preloader {
+      background-color: var(--color-preloader-bg);
+      color: var(--color-text);
+    }
+
+    #loader {
+      border-color: var(--color-loader);
+      border-top-color: transparent;
+    }
+
+    /* Noscript warning */
+    .noscript-warning {
+      background-color: var(--color-primary);
+      color: white;
+      text-align: center;
+      padding: 10px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+
+    /* Theme indicator for no-JS */
+    .theme-indicator {
+      padding: 5px 10px;
+      border-radius: 4px;
+      background-color: var(--color-input-bg);
+      color: var(--color-text);
+      text-align: center;
+    }
+
+    /* Hide JS-only elements when no JS */
+    .no-js .js-only {
+      display: none !important;
+    }
+
+    /* Show no-JS alternatives */
+    .js .no-js-only {
+      display: none !important;
+    }
+  </style>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="base-url" content="..">
+  <title>simulationCases/coalescenceBubble-tag.c | Asymmetries-in-coalescence</title>
+
+  <!-- Critical CSS for fastest paint -->
+  <style>
+      .s-intro__title {
+          visibility: visible;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .s-header {
+          visibility: visible;
+      }
+
+      /* Ensure theme toggle properly styled immediately */
+      .theme-toggle {
+          background-color: var(--color-background);
+          color: var(--color-text);
+      }
+
+      /* Control SVG visibility based on theme */
+      [data-theme="dark"] .theme-toggle-icon.sun,
+      :root:not([data-theme="dark"]) .theme-toggle-icon.moon {
+          display: block;
+      }
+
+      [data-theme="dark"] .theme-toggle-icon.moon,
+      :root:not([data-theme="dark"]) .theme-toggle-icon.sun {
+          display: none;
+      }
+  </style>
+
+  <!-- Critical Meta Tags -->
+  <meta name="description" content="int MAXlevel; // command line input">
+  <meta name="author" content="CoMPhy Lab">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="axi.h, coalescencebubble, distance.h, navier-stokes/centered.h, navier-stokes/conserving.h, tag.h, tension.h, two-phase-tag.h">
+  <meta name="msapplication-TileColor" content="#da532c">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-title" content="CoMPhy Lab">
+
+  <!-- Preload critical resources -->
+  <link rel="preload" href="../assets/js/main.js" as="script">
+  <link rel="preload" href="../assets/css/fontello/css/fontello.css" as="style">
+  <link rel="preload" href="../assets/css/academicons-1.7.0/css/academicons.min.css" as="style">
+
+  <!-- Base stylesheets -->
+  <link rel="stylesheet" href="../assets/css/styles.css">
+  <link rel="stylesheet" href="../assets/css/custom_styles.css">
+  <link rel="stylesheet" href="../assets/css/command-palette.css">
+  <link rel="stylesheet" href="../assets/css/fontello/css/fontello.css">
+  <link rel="stylesheet" href="../assets/css/academicons-1.7.0/css/academicons.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+  <!-- Font optimization -->
+  <style>
+      @font-face {
+          font-display: swap;
+          font-family: 'System Font';
+          src: local('system-ui');
+      }
+  </style>
+
+  <!-- Favicon -->
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="../assets/favicon/favicon-96x96.png">
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon/favicon.svg">
+  <link rel="shortcut icon" href="../assets/favicon/favicon.ico">
+  <link rel="manifest" href="../assets/favicon/site.webmanifest">
+
+  <!-- Scripts with proper loading attributes -->
+  <script src="../assets/js/jquery.min.js"></script>
+  <script src="../assets/js/jquery-ui.packed.js"></script>
+  <script src="../assets/js/plots.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2/dist/fuse.min.js"></script>
+  <!-- Config script must load before other scripts -->
+  <script src="../assets/js/config.js"></script>
+  <script defer src="../assets/js/html-sanitizer.js"></script>
+  <script defer src="../assets/js/search-helper.js"></script>
+  <script defer src="../assets/js/command-palette.js"></script>
+  <script defer src="../assets/js/command-data.js"></script>
+  <script defer src="../assets/js/main.js"></script>
+  <script defer src="../assets/js/theme-toggle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script"></script>
+
+  <!-- Optimize page load performance -->
+  <script>
+    // Preconnect to critical domains
+    const preconnectDomains = [
+      'https://cdnjs.cloudflare.com',
+      'https://cdn.jsdelivr.net'
+    ];
+
+    preconnectDomains.forEach(domain => {
+      const link = document.createElement('link');
+      link.rel = 'preconnect';
+      link.href = domain;
+      link.crossOrigin = 'anonymous';
+      document.head.appendChild(link);
+
+      // Also add DNS prefetch as fallback
+      const dnsLink = document.createElement('link');
+      dnsLink.rel = 'dns-prefetch';
+      dnsLink.href = domain;
+      document.head.appendChild(dnsLink);
+    });
+
+    // Detect when document is fully loaded to remove preloader
+    window.addEventListener('load', function() {
+      const preloader = document.getElementById('preloader');
+      if (preloader) {
+        preloader.style.opacity = '0';
+        setTimeout(() => {
+          preloader.style.display = 'none';
+        }, 300); // Match transition duration
+      }
+    });
+  </script>
+
+  <script>
+      // Load Font Awesome with proper environment detection and fallbacks
+      function loadStylesheet(href) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.crossOrigin = 'anonymous';
+        link.onerror = (e) => {
+          console.error(`Failed to load stylesheet: `, e);
+          console.log('Trying alternative Font Awesome source...');
+        };
+        document.head.appendChild(link);
+        return link;
+      }
+
+      // Check if we're on localhost
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Use hardcoded version numbers for reliable loading
+
+        // Load Font Awesome using multiple CDNs to maximize reliability for local development
+        loadStylesheet('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css');
+        // Backup CDN if the first one fails
+        loadStylesheet('https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css');
+        // Final local fallback - ensures it will work on any localhost environment
+        loadStylesheet('https://use.fontawesome.com/releases/v6.7.2/css/all.css');
+      } else {
+        // Use Kit for production with defer
+        var script = document.createElement('script');
+        script.src = 'https://kit.fontawesome.com/b1cfd9ca75.js';
+        script.crossOrigin = 'anonymous';
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+    </script>
+
+  <script>
+      // Mark page as JS-enabled and manage transitions
+      document.documentElement.classList.remove('no-js');
+      document.documentElement.classList.add('js');
+
+      // Allow CSS transitions after initial load to prevent transition flashes
+      window.addEventListener('DOMContentLoaded', () => {
+          setTimeout(() => {
+              document.documentElement.classList.add('transitions-enabled');
+          }, 100); // Short delay to ensure DOM is ready
+      });
+  </script>
+</head>
+<body id="top">
+<script>
+window.repoName = "Asymmetries-in-coalescence";
+window.githubOrg = "comphy-lab";
+window.baseDomain = "https://test.comphy-lab.org";
+</script>
+
+
+    <!-- Preloader with theme variables applied -->
+    <div id="preloader">
+        <div id="loader"></div>
+    </div>
+
+    <noscript>
+        <div class="noscript-warning">
+            <p>This site works best with JavaScript enabled. Some features may be limited.</p>
+        </div>
+    </noscript>
+
+    <div id="page" class="s-pagewrap">
+        <header class="s-header">
+            <div class="s-header__logo">
+                <a class="logo" href="/">
+                    <img src="../assets/logos/CoMPhy-Lab-no-name.png" alt="CoMPhy Lab">
+                </a>
+                <a class="documentation-button" href="/Asymmetries-in-coalescence">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Asymmetries-in-coalescence</span>
+                </a>
+            </div>
+            <a class="s-header__menu-toggle" href="#0">
+                <span class="s-header__menu-text">Menu</span>
+                <span class="s-header__menu-icon"></span>
+            </a>
+            <nav class="s-header__nav">
+                <a href="#0" class="s-header__nav-close-btn"><span>Close</span></a>
+                <ul class="s-header__nav-list">
+                    <li style="background: none;">
+                        <!-- JS theme toggle -->
+                        <div class="theme-toggle js-only" id="theme-toggle" aria-label="Toggle dark/light theme">
+                            <svg class="theme-toggle-icon moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                            </svg>
+                            <svg class="theme-toggle-icon sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="5"></circle>
+                                <line x1="12" y1="1" x2="12" y2="3"></line>
+                                <line x1="12" y1="21" x2="12" y2="23"></line>
+                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                                <line x1="1" y1="12" x2="3" y2="12"></line>
+                                <line x1="21" y1="12" x2="23" y2="12"></line>
+                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                            </svg>
+                        </div>
+                    </li>
+                    <!-- NOTE: The following links are organization-specific. Customize for your organization. -->
+                    <li style="background: none;"><a href="https://scholar.google.com/citations?user=tHb_qZoAAAAJ&hl=en" style="background: none; padding: 0;" aria-label="Google Scholar Profile"><i class="ai ai-google-scholar" style="font-size: 1.75em;"></i></a></li>
+                    <li style="background: none;"><a href="https://github.com/comphy-lab" style="background: none; padding: 0;" aria-label="GitHub Organization"><i class="fa-brands fa-github" style="font-size: 1.75em"></i></a></li>
+                    <li><a href="https://comphy-lab.org/#about" class="smoothscroll">About</a></li>
+                    <li><a href="https://comphy-lab.org/team/">Team</a></li>
+                    <li><a href="https://comphy-lab.org/research">Research</a></li>
+                    <li><a href="https://comphy-lab.org/teaching">Teaching</a></li>
+                    <li><a href="https://comphy-lab.org/join">Join Us</a></li>
+                    <li><a href="https://blogs.comphy-lab.org/">Blog</a></li>
+                    <li style="background: none;"><a href="https://bsky.app/profile/comphy-lab.org" style="background: none; padding: 0;" aria-label="Bluesky Profile"><i class="fa-brands fa-bluesky" style="font-size: 1.75em; color: #0085ff;"></i></a></li>
+                    <!-- Command Palette Button (Styled like search) -->
+                    <li class="command-palette-button">
+                        <div class="command-wrapper">
+                            <button class="command-k-style-btn" id="command-palette-btn" aria-label="Open command palette">
+                                <span class="default-theme-text">ctrl K</span>
+                                <span class="mac-theme-text">⌘ K</span>
+                                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </nav>
+        </header>
+
+        <!-- Main content -->
+        <main class="content">
+
+            <div class="page-content">
+
+                                <h1 class="page-title">simulationCases/coalescenceBubble-tag.c</h1>
+
+
+                                <div class="raw-file-button-container">
+                    <a href="https://github.com/comphy-lab/Asymmetries-in-coalescence/raw/main/simulationCases/coalescenceBubble-tag.c" class="raw-file-button" target="_blank" rel="noopener noreferrer">
+                        <i class="fa-brands fa-github"></i> See raw file
+                    </a>
+                </div>
+
+                <p>/* Title: Coalescence of bubbles (Extended version
+                with interface tagging)</p>
+                <h1 id="version-1.1">Version 1.1</h1>
+                <h1 id="last-modified-jan-4-2026">Last modified: Jan 4,
+                2026</h1>
+                <h1 id="author-vatsal-sanjay">Author: Vatsal Sanjay</h1>
+                <h1
+                id="vatsalsanjaygmail.com">vatsalsanjay@gmail.com</h1>
+                <h1 id="physics-of-fluids">Physics of Fluids</h1>
+                <h1 id="description">Description:</h1>
+                <h1
+                id="this-is-an-optional-extended-version-of-coalescencebubble.c-that-provides">This
+                is an OPTIONAL extended version of coalescenceBubble.c
+                that provides</h1>
+                <h1
+                id="additional-interface-tracking-using-basilisks-tag.h-functionality.">additional
+                interface tracking using Basilisk’s tag.h
+                functionality.</h1>
+                <h1 id="section"></h1>
+                <h1 id="key-differences-from-coalescencebubble.c">Key
+                differences from coalescenceBubble.c:</h1>
+                <h1 id="uses-two-phase-tag.h-instead-of-two-phase.h">-
+                Uses two-phase-tag.h instead of two-phase.h</h1>
+                <h1
+                id="uses-tag.h-to-identify-and-track-only-the-largest-connected-bubble-region">-
+                Uses tag.h to identify and track only the largest
+                connected bubble region</h1>
+                <h1 id="filters-out-satellite-droplets">(filters out
+                satellite droplets)</h1>
+                <h1 id="outputs-additional-geometric-measurements">-
+                Outputs additional geometric measurements:</h1>
+                <h1 id="re-equatorial-radius-at-center-of-mass">- Re:
+                Equatorial radius at center of mass</h1>
+                <h1 id="znp-north-pole-position-positive-x-on-axis">-
+                ZNp: North pole position (positive x on axis)</h1>
+                <h1 id="zsp-south-pole-position-negative-x-on-axis">-
+                ZSp: South pole position (negative x on axis)</h1>
+                <h1 id="section-1"></h1>
+                <h1
+                id="log-output-columns-i-dt-t-ke-xc-vcm-re-znp-zsp">Log
+                output columns: i dt t ke Xc Vcm Re ZNp ZSp</h1>
+                <h1 id="vs-coalescencebubble.c-i-dt-t-ke-xc-vcm">(vs
+                coalescenceBubble.c: i dt t ke Xc Vcm)</h1>
+                <h1 id="section-2"></h1>
+                <h1
+                id="note-all-production-runs-in-this-project-use-coalescencebubble.c-not-this-file.">NOTE:
+                All production runs in this project use
+                coalescenceBubble.c, not this file.</h1>
+                <h1
+                id="this-file-is-provided-as-an-alternative-for-cases-requiring-detailed-shape-tracking.">This
+                file is provided as an alternative for cases requiring
+                detailed shape tracking.</h1>
+                <h1 id="section-3"></h1>
+                <h1
+                id="important-this-file-has-the-same-mpi-limitation-as-coalescencebubble.c-due-to">IMPORTANT:
+                This file has the same MPI limitation as
+                coalescenceBubble.c due to</h1>
+                <h1
+                id="distance.h-incompatibility.-use-the-two-stage-execution-openmp-then-mpi.">distance.h
+                incompatibility. Use the two-stage execution (OpenMP
+                then MPI).</h1>
+                <p>// 1 is bubble #include “axi.h” #include
+                “navier-stokes/centered.h” #define FILTERED 1 #include
+                “two-phase-tag.h” #include “navier-stokes/conserving.h”
+                #include “tension.h” #include “distance.h” #include
+                “tag.h” int MAXlevel; // command line input #define
+                tsnap (1e-2) #define tsnap2 (1e-4) // Error tolerances
+                #define fErr (1e-3) // error tolerance in VOF #define
+                VelErr (1e-2) // error tolerances in velocity #define
+                TOL (1e-2) // error tolerance in position // boundary
+                conditions f[left] = dirichlet(0.0); u.t[left] =
+                dirichlet(0.0); // Other command - line inputs. double
+                tmax, MuRin, OhOut, RhoIn; double Rr, zWall; double
+                Ldomain; // Dimension of the bugger drop and the domain
+                char nameOut[80], dumpFile[80]; int main(int argc, char
+                const <em>argv[]) { if (argc &lt; 7){ fprintf(ferr,
+                “Lack of command line arguments. Check! Need %d more
+                arguments”, 7-argc); return 1; } // Values taken from
+                the terminal MuRin = 1e-2; OhOut = atof(argv[1]); RhoIn
+                = atof(argv[2]); Rr = atof(argv[3]); MAXlevel =
+                atoi(argv[4]); tmax = atof(argv[5]); zWall =
+                atof(argv[6]); Ldomain = fmin(zWall+2.+2.</em>Rr+4.0,
+                16.); fprintf(ferr, “Level %d, Ldomain %g, tmax %3.2f,
+                MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f”, MAXlevel,
+                Ldomain, tmax, MuRin, OhOut, RhoIn, Rr); L0=Ldomain;
+                origin(-2.0-zWall, 0.0); init_grid (1 &lt;&lt; (6));
+                rho1 = RhoIn; mu1 = MuRin<em>OhOut; rho2 = 1e0; mu2 =
+                OhOut; f.sigma = 1.0; ftag.sigma = 0.0; char comm[80];
+                sprintf (comm, “mkdir -p intermediate”); system(comm);
+                sprintf (dumpFile, “restart”); run(); } event init(t =
+                0){ if (!restore (file = dumpFile)){ char filename[60];
+                sprintf(filename,“InitialConditionRr-%3.2f.dat”, Rr);
+                char comm[160]; sprintf (comm, “scp -r DataFiles/%s .”,
+                filename); system(comm); FILE </em> fp =
+                fopen(filename,“rb”); if (fp == NULL){ fprintf(ferr,
+                “There is no file named %s”, filename); return 1; }
+                coord* InitialShape; InitialShape = input_xy(fp); fclose
+                (fp); scalar d[]; distance (d, InitialShape); while
+                (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8,
+                1e-8}, MAXlevel).nf);</p>
+                <p>The distance function is defined at the center of
+                each cell, we have to calculate the value of this
+                function at each vertex.</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>    vertex scalar phi<span class="op">[];</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    foreach_vertex<span class="op">(){</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>      phi<span class="op">[]</span> <span class="op">=</span> <span class="op">(</span>d<span class="op">[]</span> <span class="op">+</span> d<span class="op">[-</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> d<span class="op">[</span><span class="dv">0</span><span class="op">,-</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> d<span class="op">[-</span><span class="dv">1</span><span class="op">,-</span><span class="dv">1</span><span class="op">])/</span><span class="fl">4.</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span></code></pre></div></div>
+                <p>We can now initialize the volume fraction of the
+                domain.</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>    fractions <span class="op">(</span>phi<span class="op">,</span> f<span class="op">);</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    fractions <span class="op">(</span>phi<span class="op">,</span> ftag<span class="op">);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    foreach<span class="op">(){</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    u<span class="op">.</span>x<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    u<span class="op">.</span>y<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">// p[] = 2*(1.-f[]);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    dump <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">FILE</span> <span class="op">*</span> fp2<span class="op">;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    fp2 <span class="op">=</span> fopen<span class="op">(</span><span class="st">&quot;InitialConditionStatus.dat&quot;</span><span class="op">,</span><span class="st">&quot;w&quot;</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>fp2<span class="op">,</span> <span class="st">&quot;Initial condition is written to %s</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> dumpFile<span class="op">);</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    fclose<span class="op">(</span>fp2<span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// return 1;</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>event adapt<span class="op">(</span>i<span class="op">++){</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  adapt_wavelet <span class="op">((</span>scalar <span class="op">*){</span>f<span class="op">,</span> u<span class="op">.</span>x<span class="op">,</span> u<span class="op">.</span>y<span class="op">},</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>     <span class="op">(</span><span class="dt">double</span><span class="op">[]){</span>fErr<span class="op">,</span> VelErr<span class="op">,</span> VelErr<span class="op">},</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>      MAXlevel<span class="op">,</span> MAXlevel<span class="op">-</span><span class="dv">6</span><span class="op">);</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="co">// Outputs</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>event writingFiles <span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> t <span class="op">+=</span> tsnap<span class="op">;</span> t <span class="op">&lt;=</span> tmax<span class="op">+</span>tsnap<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>  dump <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">);</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>  sprintf <span class="op">(</span>nameOut<span class="op">,</span> <span class="st">&quot;intermediate/snapshot-%5.4f&quot;</span><span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>  dump<span class="op">(</span>file<span class="op">=</span>nameOut<span class="op">);</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>event end <span class="op">(</span>t <span class="op">=</span> end<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>  fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, Oh2 %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>scalar posEq<span class="op">[],</span> posPoles<span class="op">[];</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>event logWriting <span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> t <span class="op">+=</span> tsnap2<span class="op">;</span> t <span class="op">&lt;=</span> tmax<span class="op">+</span>tsnap<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>  foreach<span class="op">(){</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    ftag<span class="op">[]</span> <span class="op">=</span> f<span class="op">[];</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>  scalar d<span class="op">[];</span></span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>  <span class="co">// tag all liquid parts starts</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>  <span class="dt">double</span> threshold <span class="op">=</span> <span class="fl">1e-4</span><span class="op">;</span></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>  foreach<span class="op">(){</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    d<span class="op">[]</span> <span class="op">=</span> <span class="op">(</span>ftag<span class="op">[]</span> <span class="op">&gt;</span> threshold<span class="op">);</span></span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>  <span class="dt">int</span> n <span class="op">=</span> tag <span class="op">(</span>d<span class="op">),</span> size<span class="op">[</span>n<span class="op">];</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++){</span></span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    size<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>  foreach_leaf<span class="op">(){</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>d<span class="op">[]</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>      size<span class="op">[((</span><span class="dt">int</span><span class="op">)</span> d<span class="op">[])</span> <span class="op">-</span> <span class="dv">1</span><span class="op">]++;</span></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>  <span class="pp">#if _MPI</span></span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a>  MPI_Allreduce <span class="op">(</span>MPI_IN_PLACE<span class="op">,</span> size<span class="op">,</span> n<span class="op">,</span> MPI_INT<span class="op">,</span> MPI_SUM<span class="op">,</span> MPI_COMM_WORLD<span class="op">);</span></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a>  <span class="pp">#endif</span></span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>  <span class="dt">int</span> MaxSize <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>  <span class="dt">int</span> MainPhase <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++){</span></span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>    <span class="co">// fprintf(ferr, &quot;%d %d\n&quot;,i, size[i]);</span></span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>size<span class="op">[</span>i<span class="op">]</span> <span class="op">&gt;</span> MaxSize<span class="op">){</span></span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a>      MaxSize <span class="op">=</span> size<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>      MainPhase <span class="op">=</span> i<span class="op">+</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a>  foreach<span class="op">(){</span></span>
+<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span><span class="op">(</span>d<span class="op">[]</span> <span class="op">!=</span> MainPhase<span class="op">){</span></span>
+<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>      ftag<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a>  <span class="co">// tag all liquid parts ends</span></span>
+<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a>  <span class="dt">double</span> ke <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> wt <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> xCOM <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> Vcm <span class="op">=</span> <span class="fl">0.</span><span class="op">;</span></span>
+<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>  foreach <span class="op">(</span>reduction<span class="op">(+:</span>ke<span class="op">)</span> reduction<span class="op">(+:</span>wt<span class="op">)</span> reduction<span class="op">(+:</span>xCOM<span class="op">)</span> reduction<span class="op">(+:</span>Vcm<span class="op">)){</span></span>
+<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a>    ke <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*(</span><span class="fl">0.5</span><span class="op">*</span>clamp<span class="op">(</span>ftag<span class="op">[],</span> <span class="fl">0.</span><span class="op">,</span> <span class="fl">1.</span><span class="op">)*(</span>sq<span class="op">(</span>u<span class="op">.</span>x<span class="op">[])</span> <span class="op">+</span> sq<span class="op">(</span>u<span class="op">.</span>y<span class="op">[])))*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a>    xCOM <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>x<span class="op">*</span>clamp<span class="op">(</span>ftag<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a>    Vcm <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>u<span class="op">.</span>x<span class="op">[]*</span>clamp<span class="op">(</span>ftag<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a>    wt <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>clamp<span class="op">(</span>ftag<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>  xCOM <span class="op">/=</span> wt<span class="op">;</span></span>
+<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>  <span class="dt">int</span> nEq <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a>  <span class="dt">double</span> Req <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-91"><a href="#cb2-91" aria-hidden="true" tabindex="-1"></a>  position <span class="op">(</span>ftag<span class="op">,</span> posEq<span class="op">,</span> <span class="op">{</span><span class="dv">0</span><span class="op">,</span><span class="dv">1</span><span class="op">});</span></span>
+<span id="cb2-92"><a href="#cb2-92" aria-hidden="true" tabindex="-1"></a>  foreach<span class="op">(</span>reduction<span class="op">(+:</span>Req<span class="op">)</span> reduction<span class="op">(+:</span>nEq<span class="op">)){</span></span>
+<span id="cb2-93"><a href="#cb2-93" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">&lt;</span> xCOM<span class="op">+</span>TOL <span class="op">&amp;&amp;</span> x <span class="op">&gt;</span> xCOM<span class="op">-</span>TOL <span class="op">&amp;&amp;</span> posEq<span class="op">[]</span> <span class="op">!=</span> nodata<span class="op">){</span></span>
+<span id="cb2-94"><a href="#cb2-94" aria-hidden="true" tabindex="-1"></a>      Req <span class="op">+=</span> posEq<span class="op">[];</span></span>
+<span id="cb2-95"><a href="#cb2-95" aria-hidden="true" tabindex="-1"></a>      nEq<span class="op">++;</span></span>
+<span id="cb2-96"><a href="#cb2-96" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-97"><a href="#cb2-97" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-98"><a href="#cb2-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-99"><a href="#cb2-99" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>nEq <span class="op">!=</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb2-100"><a href="#cb2-100" aria-hidden="true" tabindex="-1"></a>    Req <span class="op">/=</span> nEq<span class="op">;</span></span>
+<span id="cb2-101"><a href="#cb2-101" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-102"><a href="#cb2-102" aria-hidden="true" tabindex="-1"></a>    Req <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-103"><a href="#cb2-103" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-104"><a href="#cb2-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-105"><a href="#cb2-105" aria-hidden="true" tabindex="-1"></a>  <span class="dt">double</span> zNP <span class="op">=</span> <span class="fl">0.0</span><span class="op">,</span> zSP <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-106"><a href="#cb2-106" aria-hidden="true" tabindex="-1"></a>  <span class="dt">int</span> nNP <span class="op">=</span> <span class="dv">0</span><span class="op">,</span> nSP <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-107"><a href="#cb2-107" aria-hidden="true" tabindex="-1"></a>  position <span class="op">(</span>ftag<span class="op">,</span> posPoles<span class="op">,</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">0</span><span class="op">});</span></span>
+<span id="cb2-108"><a href="#cb2-108" aria-hidden="true" tabindex="-1"></a>  foreach<span class="op">(</span>reduction<span class="op">(+:</span>zNP<span class="op">)</span> reduction<span class="op">(+:</span>nNP<span class="op">)</span> reduction<span class="op">(+:</span>zSP<span class="op">)</span> reduction<span class="op">(+:</span>nSP<span class="op">)){</span></span>
+<span id="cb2-109"><a href="#cb2-109" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>y <span class="op">&lt;</span> TOL <span class="op">&amp;&amp;</span> posPoles<span class="op">[]</span> <span class="op">!=</span> nodata<span class="op">){</span></span>
+<span id="cb2-110"><a href="#cb2-110" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span>posPoles<span class="op">[]</span> <span class="op">&gt;</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb2-111"><a href="#cb2-111" aria-hidden="true" tabindex="-1"></a>        zNP <span class="op">+=</span> posPoles<span class="op">[];</span></span>
+<span id="cb2-112"><a href="#cb2-112" aria-hidden="true" tabindex="-1"></a>        nNP<span class="op">++;</span></span>
+<span id="cb2-113"><a href="#cb2-113" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-114"><a href="#cb2-114" aria-hidden="true" tabindex="-1"></a>        zSP <span class="op">+=</span> posPoles<span class="op">[];</span></span>
+<span id="cb2-115"><a href="#cb2-115" aria-hidden="true" tabindex="-1"></a>        nSP<span class="op">++;</span></span>
+<span id="cb2-116"><a href="#cb2-116" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span></span>
+<span id="cb2-117"><a href="#cb2-117" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-118"><a href="#cb2-118" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-119"><a href="#cb2-119" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-120"><a href="#cb2-120" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>nNP <span class="op">!=</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb2-121"><a href="#cb2-121" aria-hidden="true" tabindex="-1"></a>    zNP <span class="op">/=</span> nNP<span class="op">;</span></span>
+<span id="cb2-122"><a href="#cb2-122" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-123"><a href="#cb2-123" aria-hidden="true" tabindex="-1"></a>    zNP <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-124"><a href="#cb2-124" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-125"><a href="#cb2-125" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>nSP <span class="op">!=</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb2-126"><a href="#cb2-126" aria-hidden="true" tabindex="-1"></a>    zSP <span class="op">/=</span> nSP<span class="op">;</span></span>
+<span id="cb2-127"><a href="#cb2-127" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-128"><a href="#cb2-128" aria-hidden="true" tabindex="-1"></a>    zSP <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb2-129"><a href="#cb2-129" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-130"><a href="#cb2-130" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-131"><a href="#cb2-131" aria-hidden="true" tabindex="-1"></a>  <span class="dt">static</span> <span class="dt">FILE</span> <span class="op">*</span> fp<span class="op">;</span></span>
+<span id="cb2-132"><a href="#cb2-132" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-133"><a href="#cb2-133" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>pid<span class="op">()</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-134"><a href="#cb2-134" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-135"><a href="#cb2-135" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;i dt t ke Xc Vcm Re ZNp ZSp</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb2-136"><a href="#cb2-136" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;w&quot;</span><span class="op">);</span></span>
+<span id="cb2-137"><a href="#cb2-137" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span>
+<span id="cb2-138"><a href="#cb2-138" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;i dt t ke Xc Vcm Re ZNp ZSp</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb2-139"><a href="#cb2-139" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">,</span> Req<span class="op">,</span> zNP<span class="op">,</span> zSP<span class="op">);</span></span>
+<span id="cb2-140"><a href="#cb2-140" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb2-141"><a href="#cb2-141" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb2-142"><a href="#cb2-142" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;a&quot;</span><span class="op">);</span></span>
+<span id="cb2-143"><a href="#cb2-143" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">,</span> Req<span class="op">,</span> zNP<span class="op">,</span> zSP<span class="op">);</span></span>
+<span id="cb2-144"><a href="#cb2-144" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb2-145"><a href="#cb2-145" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-146"><a href="#cb2-146" aria-hidden="true" tabindex="-1"></a>    fprintf <span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">,</span> Req<span class="op">,</span> zNP<span class="op">,</span> zSP<span class="op">);</span></span>
+<span id="cb2-147"><a href="#cb2-147" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-148"><a href="#cb2-148" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-149"><a href="#cb2-149" aria-hidden="true" tabindex="-1"></a>  assert<span class="op">(</span>ke <span class="op">&gt;</span> <span class="op">-</span><span class="fl">1e-10</span><span class="op">);</span></span>
+<span id="cb2-150"><a href="#cb2-150" aria-hidden="true" tabindex="-1"></a>  <span class="co">// dump (file = &quot;dump&quot;);</span></span>
+<span id="cb2-151"><a href="#cb2-151" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>ke <span class="op">&lt;</span> <span class="fl">1e-5</span> <span class="op">&amp;&amp;</span> i <span class="op">&gt;</span> <span class="dv">1000</span><span class="op">){</span></span>
+<span id="cb2-152"><a href="#cb2-152" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>pid<span class="op">()</span> <span class="op">==</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb2-153"><a href="#cb2-153" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;kinetic energy too small now! Stopping!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb2-154"><a href="#cb2-154" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;a&quot;</span><span class="op">);</span></span>
+<span id="cb2-155"><a href="#cb2-155" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;kinetic energy too small now! Stopping!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb2-156"><a href="#cb2-156" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb2-157"><a href="#cb2-157" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-158"><a href="#cb2-158" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb2-159"><a href="#cb2-159" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb2-160"><a href="#cb2-160" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
+            </div>
+        </main>
+
+        <footer class="site-footer">
+            <div class="footer-left">
+              <a href="https://basilisk.fr/sandbox/vatsal/" target="_blank" rel="noopener noreferrer">
+                <img src="../assets/logos/logoBasilisk_TransparentBackground.png" alt="Basilisk C" class="footer-logo">
+              </a>
+              <a href="https://pof.tnw.utwente.nl/" target="_blank" rel="noopener noreferrer">
+                <img src="../assets/logos/LogoPof_transparent_white.png" alt="Physics of Fluids" class="footer-logo pof-logo">
+              </a>
+              <a href="https://www.utwente.nl/" target="_blank" rel="noopener noreferrer">
+                <img src="../assets/logos/UT_Logo_2400_Sta_White_EN.png" alt="University of Twente" class="footer-logo">
+              </a>
+              <a href="https://www.vatsalsanjay.com/" target="_blank" rel="noopener noreferrer">
+                <img src="../assets/logos/Logo_Vatsal_v3_OutLine.png" alt="Vatsal Sanjay" class="footer-logo">
+              </a>
+            </div>
+            <div class="footer-center">
+              <p class="copyright-text">
+                &copy; Copyright<br>
+                CoMPhy Lab 2025
+              </p>
+            </div>
+            <div class="footer-right">
+              <!-- NOTE: Social media links below are organization-specific. Customize for your organization. -->
+              <a href="https://scholar.google.com/citations?user=tHb_qZoAAAAJ&hl=en" target="_blank" rel="noopener noreferrer" aria-label="Google Scholar Profile">
+                <i class="ai ai-google-scholar" style="font-size: 2.5em; color: white;"></i>
+              </a>
+              <a href="https://github.com/comphy-lab" target="_blank" rel="noopener noreferrer" aria-label="GitHub Organization">
+                <i class="fa-brands fa-github" style="font-size: 2.5em; color: white;"></i>
+              </a>
+              <a href="https://www.youtube.com/@CoMPhyLab" target="_blank" rel="noopener noreferrer" aria-label="YouTube Channel">
+                <i class="fa-brands fa-youtube" style="font-size: 2.5em; color: white;"></i>
+              </a>
+              <a href="https://x.com/VatsalSanjay" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter) Profile">
+                <i class="fa-brands fa-x-twitter" style="font-size: 2.5em; color: white;"></i>
+              </a>
+              <a href="https://bsky.app/profile/comphy-lab.org" target="_blank" rel="noopener noreferrer" aria-label="Bluesky Profile">
+                <i class="fa-brands fa-bluesky" style="font-size: 2.5em; color: white;"></i>
+              </a>
+              <a href="https://github.com/comphy-lab/Asymmetries-in-coalescence/edit/main/simulationCases/coalescenceBubble-tag.c" class="edit-link" aria-label="Edit this page on GitHub">
+                <i class="fa-brands fa-github"></i> Edit this page
+              </a>
+            </div>
+          </footer>
+    </div>  
+
+    <!-- Command Palette -->
+    <div id="simple-command-palette" class="simple-command-palette" style="display: none;">
+        <div class="simple-command-palette-backdrop"></div>
+        <div class="simple-command-palette-modal">
+            <input type="text" id="command-palette-input" placeholder="Type a command..." autocomplete="off">
+            <div id="command-palette-results" class="command-palette-results"></div>
+            <div class="command-palette-footer">
+                <span class="command-palette-footer-item"><kbd>↑</kbd> <kbd>↓</kbd> to navigate</span>
+                <span class="command-palette-footer-item"><kbd>enter</kbd> to select</span>
+                <span class="command-palette-footer-item"><kbd>esc</kbd> to close</span>
+            </div>
+        </div>
+    </div>
+
+
+<script type="text/javascript">
+document.addEventListener('DOMContentLoaded', function() {
+    // Add copy button to each code block container
+    const codeBlocks = document.querySelectorAll('.code-block-container pre');
+    codeBlocks.forEach(function(codeBlock, index) {
+        // Create button element
+        const button = document.createElement('button');
+        button.className = 'copy-button';
+        button.textContent = 'Copy';
+        button.setAttribute('aria-label', 'Copy code to clipboard');
+        button.setAttribute('data-copy-state', 'copy');
+        
+        // Get the code block container (parent of the pre)
+        const container = codeBlock.parentNode;
+        
+        // Add the button to the container
+        container.appendChild(button);
+        
+        // Set up click event
+        button.addEventListener('click', async function() {
+            const codeText = codeBlock.textContent;
+            
+            try {
+                // Try to use the modern clipboard API first
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(codeText);
+                    updateButtonState(button, 'success');
+                } else {
+                    // Fall back to the deprecated execCommand method
+                    const textarea = document.createElement('textarea');
+                    textarea.value = codeText;
+                    textarea.style.position = 'fixed';  // Prevent scrolling to the bottom
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    
+                    const successful = document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    
+                    if (successful) {
+                        updateButtonState(button, 'success');
+                    } else {
+                        updateButtonState(button, 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Copy failed:', err);
+                updateButtonState(button, 'error');
+            }
+        });
+    });
+    
+    // Function to update button state
+    function updateButtonState(button, state) {
+        if (state === 'success') {
+            button.textContent = 'Copied!';
+            button.classList.add('copied');
+        } else if (state === 'error') {
+            button.textContent = 'Error!';
+            button.classList.add('error');
+        }
+        
+        // Reset button state after 2 seconds
+        setTimeout(function() {
+            button.textContent = 'Copy';
+            button.classList.remove('copied', 'error');
+        }, 2000);
+    }
+});
+</script>
+        </body>
+</html>
