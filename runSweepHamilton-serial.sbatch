@@ -85,13 +85,14 @@ echo ""
 # Setup Basilisk Environment
 # ============================================================
 echo "Setting up Basilisk environment..."
+echo "Installing Basilisk (ref-locked)..."
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13 --hard
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
     echo "Basilisk environment loaded from .project_config"
     echo "BASILISK: $BASILISK"
 else
-    echo "ERROR: .project_config not found" >&2
-    echo "       Run reset_install_requirements-no-darcs.sh first" >&2
+    echo "ERROR: .project_config not found after installation" >&2
     exit 1
 fi
 echo ""

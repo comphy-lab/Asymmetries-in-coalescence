@@ -1,6 +1,20 @@
 # Asymmetries-in-coalescence
 Asymmetries in coalescence: size asymmetry. Still axially symmetric.
 
+## Basilisk (Required)
+
+First-time install (or reinstall):
+```bash
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13 --hard
+```
+
+Subsequent runs (reuses existing `basilisk/` if same ref):
+```bash
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13
+```
+
+> **Note**: Replace `v2026-01-13` with the [latest release tag](https://github.com/comphy-lab/basilisk-C/releases).
+
 ## Simulation Files
 
 This project contains two simulation files:

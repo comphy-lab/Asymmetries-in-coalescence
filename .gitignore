@@ -99,3 +99,9 @@ slurm-*.err
 
 # Timestamped CSS backups
 **/custom_styles_backup_*.css
+
+# Basilisk installation (managed externally)
+basilisk/
+
+# Installation scripts (use remote version)
+reset_install*.sh

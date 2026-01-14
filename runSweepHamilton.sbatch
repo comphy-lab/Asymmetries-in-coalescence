@@ -24,10 +24,10 @@
 # BEFORE RUNNING:
 # 1. Run Stage 1 locally to generate restart files for all cases
 # 2. Clone repo to /nobackup/$USER/ (NOT home directory)
-# 3. Run reset_install_requirements-no-darcs.sh to install Basilisk
-# 4. Edit sweep.params to set parameter ranges and case numbers
-# 5. Update --mail-user above with your Durham email
-# 6. Submit with: sbatch runSweepHamilton.sbatch
+# 3. Edit sweep.params to set parameter ranges and case numbers
+# 4. Update --mail-user above with your Durham email
+# 5. Submit with: sbatch runSweepHamilton.sbatch
+# Note: Basilisk is installed automatically via curl during job execution
 #
 # SBATCH Parameters (Hamilton-specific):
 #   -n 128: Number of MPI tasks (whole node = 128 cores)
@@ -90,13 +90,14 @@ echo ""
 # Setup Basilisk Environment
 # ============================================================
 echo "Setting up Basilisk environment..."
+echo "Installing Basilisk (ref-locked)..."
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13 --hard
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
     echo "Basilisk environment loaded from .project_config"
     echo "BASILISK: $BASILISK"
 else
-    echo "ERROR: .project_config not found" >&2
-    echo "       Run reset_install_requirements-no-darcs.sh first" >&2
+    echo "ERROR: .project_config not found after installation" >&2
     exit 1
 fi
 echo ""

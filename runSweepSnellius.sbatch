@@ -72,8 +72,8 @@ echo ""
 # Setup Basilisk Environment
 # ============================================================
 echo "Setting up Basilisk environment..."
-echo "Rebuilding Basilisk (hard)..."
-bash "${SCRIPT_DIR}/reset_install_requirements-no-darcs-no-git.sh" --hard
+echo "Installing Basilisk (ref-locked)..."
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13 --hard
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
     echo "Basilisk environment loaded from .project_config"
