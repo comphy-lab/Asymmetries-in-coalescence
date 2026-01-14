@@ -202,7 +202,7 @@
   </style>
 
   <!-- Critical Meta Tags -->
-  <meta name="description" content="int MAXlevel; // command line input">
+  <meta name="description" content="Axisymmetric simulation of two-bubble coalescence with size asymmetry using the Volume-of-Fluid (VOF) method. The simulation tracks the interface between gas...">
   <meta name="author" content="CoMPhy Lab">
   <meta name="robots" content="index, follow">
   <meta name="keywords" content="axi.h, coalescencebubble, distance.h, navier-stokes/centered.h, navier-stokes/conserving.h, tension.h, two-phase.h">
@@ -430,141 +430,314 @@ window.baseDomain = "https://test.comphy-lab.org";
                     </a>
                 </div>
 
-                <p>/* Title: Coalescence of bubbles</p>
-                <h1 id="version-1.0">Version 1.0</h1>
-                <h1 id="last-modified-oct-15-2024">Last modified: Oct
-                15, 2024</h1>
-                <h1 id="author-vatsal-sanjay">Author: Vatsal Sanjay</h1>
-                <h1
-                id="vatsalsanjaygmail.com">vatsalsanjay@gmail.com</h1>
-                <h1 id="physics-of-fluids">Physics of Fluids</h1>
-                <p>// 1 is bubble #include “axi.h” #include
-                “navier-stokes/centered.h” #define FILTERED 1 #include
-                “two-phase.h” #include “navier-stokes/conserving.h”
-                #include “tension.h” #if !MPI #include “distance.h”
-                #endif int MAXlevel; // command line input #define tsnap
-                (1e-2) #define tsnap2 (1e-4) // Error tolerances #define
-                fErr (1e-3) // error tolerance in VOF #define VelErr
-                (1e-2) // error tolerances in velocity #define TOL
-                (1e-2) // error tolerance in position // boundary
-                conditions f[left] = dirichlet(0.0); u.t[left] =
-                dirichlet(0.0); // Other command - line inputs. double
-                tmax, MuRin, OhOut, RhoIn; double Rr, zWall; double
-                Ldomain; // Dimension of the bugger drop and the domain
-                char nameOut[80], dumpFile[80]; int main(int argc, char
-                const <em>argv[]) { if (argc &lt; 7){ fprintf(ferr,
-                “Lack of command line arguments. Check! Need %d more
-                arguments”, 7-argc); return 1; } // Values taken from
-                the terminal MuRin = 1e-2; OhOut = atof(argv[1]); RhoIn
-                = atof(argv[2]); Rr = atof(argv[3]); MAXlevel =
-                atoi(argv[4]); tmax = atof(argv[5]); zWall =
-                atof(argv[6]); Ldomain = fmin(zWall+2.+2.</em>Rr+4.0,
-                16.); fprintf(ferr, “Level %d, Ldomain %g, tmax %3.2f,
-                MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f”, MAXlevel,
-                Ldomain, tmax, MuRin, OhOut, RhoIn, Rr); L0=Ldomain;
-                origin(-2.0-zWall, 0.0); init_grid (1 &lt;&lt; (6));
-                rho1 = RhoIn; mu1 = MuRin*OhOut; rho2 = 1e0; mu2 =
-                OhOut; f.sigma = 1.0; char comm[80]; sprintf (comm,
-                “mkdir -p intermediate”); system(comm); sprintf
-                (dumpFile, “restart”); run(); } event init(t = 0){ #if
-                _MPI if (!restore(file = dumpFile)) { fprintf(ferr,
-                “Cannot restored from a dump file!”); } #else if
-                (!restore (file = dumpFile)){ char filename[60];
-                sprintf(filename,“InitialConditionRr-%3.2f.dat”, Rr);
-                char comm[160]; sprintf (comm, “scp -r DataFiles/%s .”,
-                filename); system(comm); FILE * fp =
-                fopen(filename,“rb”); if (fp == NULL){ fprintf(ferr,
-                “There is no file named %s”, filename); return 1; }
-                coord* InitialShape; InitialShape = input_xy(fp); fclose
-                (fp); scalar d[]; distance (d, InitialShape); while
-                (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8,
-                1e-8}, MAXlevel).nf);</p>
+                <h1 id="coalescence-of-bubbles">Coalescence of
+                Bubbles</h1>
+                <p>Axisymmetric simulation of two-bubble coalescence
+                with size asymmetry using the Volume-of-Fluid (VOF)
+                method. The simulation tracks the interface between gas
+                (inside bubble, <span
+                class="math inline">\(f=1\)</span>) and liquid (outside,
+                <span class="math inline">\(f=0\)</span>) phases.</p>
+                <h2 id="physical-setup">Physical Setup</h2>
+                <p>Two initially spherical bubbles of different sizes
+                are placed along the axis of symmetry. The larger bubble
+                has radius 1 (reference scale), while the smaller bubble
+                has radius <code>Rr</code> (the radius ratio parameter).
+                Surface tension drives the coalescence dynamics.</p>
+                <h2 id="governing-equations">Governing Equations</h2>
+                <p>The incompressible Navier-Stokes equations with
+                surface tension:</p>
+                <p><span class="math display">\[\nabla \cdot \mathbf{u}
+                = 0\]</span></p>
+                <p><span class="math display">\[\rho\left(\frac{\partial
+                \mathbf{u}}{\partial t} + \mathbf{u} \cdot \nabla
+                \mathbf{u}\right) = -\nabla p + \nabla \cdot (2\mu
+                \mathbf{D}) + \sigma \kappa \delta_s
+                \mathbf{n}\]</span></p>
+                <p>where <span class="math inline">\(\mathbf{D}\)</span>
+                is the strain-rate tensor, <span
+                class="math inline">\(\sigma\)</span> is surface
+                tension, <span class="math inline">\(\kappa\)</span> is
+                interface curvature, and <span
+                class="math inline">\(\delta_s\)</span> is the interface
+                delta function.</p>
+                <h2 id="usage">Usage</h2>
+                <div class="code-block-container"><pre><code>./coalescenceBubble &lt;OhOut&gt; &lt;RhoIn&gt; &lt;Rr&gt; &lt;MAXlevel&gt; &lt;tmax&gt; &lt;zWall&gt;</code></pre></div>
+                <h3 id="command-line-parameters">Command-line
+                Parameters</h3>
+                <ul>
+                <li><code>OhOut</code>: Ohnesorge number for outer
+                fluid, <span class="math inline">\(Oh =
+                \mu_{out}/\sqrt{\rho_{out} \sigma R}\)</span></li>
+                <li><code>RhoIn</code>: Density ratio <span
+                class="math inline">\(\rho_{in}/\rho_{out}\)</span>
+                (typically <span class="math inline">\(10^{-3}\)</span>
+                for air-water)</li>
+                <li><code>Rr</code>: Radius ratio of smaller to larger
+                bubble (1.0 = equal size)</li>
+                <li><code>MAXlevel</code>: Maximum adaptive mesh
+                refinement level</li>
+                <li><code>tmax</code>: Maximum simulation time</li>
+                <li><code>zWall</code>: Wall position (distance from
+                origin to left boundary)</li>
+                </ul>
+                <h2 id="author">Author</h2>
+                <p>Vatsal Sanjay vatsalsanjay@gmail.com Physics of
+                Fluids</p>
+                <p>Last updated: Jan 2026</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/axi.h" title="Link to Basilisk source for axi.h"><span class="im">"axi.h"</span></a></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/navier-stokes/centered.h" title="Link to Basilisk source for navier-stokes/centered.h"><span class="im">"navier-stokes/centered.h"</span></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#define FILTERED</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/two-phase.h" title="Link to Basilisk source for two-phase.h"><span class="im">"two-phase.h"</span></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/navier-stokes/conserving.h" title="Link to Basilisk source for navier-stokes/conserving.h"><span class="im">"navier-stokes/conserving.h"</span></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/tension.h" title="Link to Basilisk source for tension.h"><span class="im">"tension.h"</span></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="pp">#if !MPI</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/distance.h" title="Link to Basilisk source for distance.h"><span class="im">"distance.h"</span></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="pp">#endif</span></span></code></pre></div></div>
+                <h2 id="simulation-parameters">Simulation
+                Parameters</h2>
+                <ul>
+                <li><code>MAXlevel</code>: Maximum refinement level (set
+                via command line)</li>
+                <li><code>tsnap</code>: Time interval for saving full
+                snapshots (0.01)</li>
+                <li><code>tsnap2</code>: Time interval for logging
+                diagnostics (0.0001)</li>
+                </ul>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> MAXlevel<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#define tsnap (1e-2)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="pp">#define tsnap2 (1e-4)</span></span></code></pre></div></div>
+                <h2 id="error-tolerances">Error Tolerances</h2>
+                <p>Adaptive mesh refinement is controlled by these error
+                thresholds:</p>
+                <ul>
+                <li><code>fErr</code>: VOF volume fraction tolerance
+                (determines interface resolution)</li>
+                <li><code>VelErr</code>: Velocity field tolerance
+                (captures flow gradients)</li>
+                <li><code>TOL</code>: Position tolerance for geometric
+                measurements</li>
+                </ul>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define fErr (1e-3)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#define VelErr (1e-2)</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#define TOL (1e-2)</span></span></code></pre></div></div>
+                <h2 id="boundary-conditions">Boundary Conditions</h2>
+                <p>Left boundary (axis of symmetry): -
+                <code>f[left]</code>: No fluid at left boundary
+                (Dirichlet <span class="math inline">\(f=0\)</span>) -
+                <code>u.t[left]</code>: No tangential velocity (no-slip
+                for azimuthal component)</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">[</span>left<span class="op">]</span> <span class="op">=</span> dirichlet<span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>u<span class="op">.</span>t<span class="op">[</span>left<span class="op">]</span> <span class="op">=</span> dirichlet<span class="op">(</span><span class="fl">0.0</span><span class="op">);</span></span></code></pre></div></div>
+                <h2 id="global-variables">Global Variables</h2>
+                <p>Physical parameters and output configuration:</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> Rr<span class="op">,</span> zWall<span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> Ldomain<span class="op">;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> nameOut<span class="op">[</span><span class="dv">80</span><span class="op">],</span> dumpFile<span class="op">[</span><span class="dv">80</span><span class="op">];</span></span></code></pre></div></div>
+                <h2 id="main-function">Main Function</h2>
+                <p>Initialize simulation parameters from command line
+                and configure the domain.</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">(</span><span class="dt">int</span> argc<span class="op">,</span> <span class="dt">char</span> <span class="dt">const</span> <span class="op">*</span>argv<span class="op">[])</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>argc <span class="op">&lt;</span> <span class="dv">7</span><span class="op">){</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Lack of command line arguments. Check! Need %d more arguments</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> <span class="dv">7</span><span class="op">-</span>argc<span class="op">);</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span></code></pre></div></div>
+                <p>Parse command-line arguments:</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>  MuRin <span class="op">=</span> <span class="fl">1e-2</span><span class="op">;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  OhOut <span class="op">=</span> atof<span class="op">(</span>argv<span class="op">[</span><span class="dv">1</span><span class="op">]);</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  RhoIn <span class="op">=</span> atof<span class="op">(</span>argv<span class="op">[</span><span class="dv">2</span><span class="op">]);</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  Rr <span class="op">=</span> atof<span class="op">(</span>argv<span class="op">[</span><span class="dv">3</span><span class="op">]);</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  MAXlevel <span class="op">=</span> atoi<span class="op">(</span>argv<span class="op">[</span><span class="dv">4</span><span class="op">]);</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  tmax <span class="op">=</span> atof<span class="op">(</span>argv<span class="op">[</span><span class="dv">5</span><span class="op">]);</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  zWall <span class="op">=</span> atof<span class="op">(</span>argv<span class="op">[</span><span class="dv">6</span><span class="op">]);</span></span></code></pre></div></div>
+                <p>Domain size is calculated to fit both bubbles with
+                sufficient margin. The formula ensures adequate space:
+                wall + larger bubble (R=1) + gap + smaller bubble (R=Rr)
+                + buffer.</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>  Ldomain <span class="op">=</span> fmin<span class="op">(</span>zWall<span class="op">+</span><span class="fl">2.</span><span class="op">+</span><span class="fl">2.</span><span class="op">*</span>Rr<span class="op">+</span><span class="fl">4.0</span><span class="op">,</span> <span class="fl">16.</span><span class="op">);</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span></code></pre></div></div>
+                <p>Configure domain and fluid properties:</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>  L0<span class="op">=</span>Ldomain<span class="op">;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  origin<span class="op">(-</span><span class="fl">2.0</span><span class="op">-</span>zWall<span class="op">,</span> <span class="fl">0.0</span><span class="op">);</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  init_grid <span class="op">(</span><span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="op">(</span><span class="dv">6</span><span class="op">));</span></span></code></pre></div></div>
+                <p>Set fluid properties: - Phase 1 (bubble interior):
+                low density, low viscosity - Phase 2 (surrounding
+                liquid): reference density and viscosity - Surface
+                tension coefficient normalized to 1</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>  rho1 <span class="op">=</span> RhoIn<span class="op">;</span> mu1 <span class="op">=</span> MuRin<span class="op">*</span>OhOut<span class="op">;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  rho2 <span class="op">=</span> <span class="fl">1e0</span><span class="op">;</span> mu2 <span class="op">=</span> OhOut<span class="op">;</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  f<span class="op">.</span>sigma <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">char</span> comm<span class="op">[</span><span class="dv">80</span><span class="op">];</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>  sprintf <span class="op">(</span>comm<span class="op">,</span> <span class="st">&quot;mkdir -p intermediate&quot;</span><span class="op">);</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>  system<span class="op">(</span>comm<span class="op">);</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>  sprintf <span class="op">(</span>dumpFile<span class="op">,</span> <span class="st">&quot;restart&quot;</span><span class="op">);</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>  run<span class="op">();</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
+                <h2 id="initialization-event">Initialization Event</h2>
+                <p>Load initial bubble shapes from pre-computed data
+                files. The initial condition files contain the interface
+                coordinates for different radius ratios.</p>
+                <p>For MPI runs, the simulation must be restarted from a
+                dump file created by a prior serial/OpenMP run (due to
+                <code>distance.h</code> incompatibility with MPI).</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>event init<span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#if _MPI</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>restore<span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Cannot restored from a dump file!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#else</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>restore <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">)){</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> filename<span class="op">[</span><span class="dv">60</span><span class="op">];</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    sprintf<span class="op">(</span>filename<span class="op">,</span><span class="st">&quot;InitialConditionRr-%3.2f.dat&quot;</span><span class="op">,</span> Rr<span class="op">);</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> comm<span class="op">[</span><span class="dv">160</span><span class="op">];</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    sprintf <span class="op">(</span>comm<span class="op">,</span> <span class="st">&quot;scp -r DataFiles/%s .&quot;</span><span class="op">,</span> filename<span class="op">);</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    system<span class="op">(</span>comm<span class="op">);</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">FILE</span> <span class="op">*</span> fp <span class="op">=</span> fopen<span class="op">(</span>filename<span class="op">,</span><span class="st">&quot;rb&quot;</span><span class="op">);</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>fp <span class="op">==</span> NULL<span class="op">){</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;There is no file named %s</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> filename<span class="op">);</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>      <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    coord<span class="op">*</span> InitialShape<span class="op">;</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    InitialShape <span class="op">=</span> input_xy<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    fclose <span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    scalar d<span class="op">[];</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    distance <span class="op">(</span>d<span class="op">,</span> InitialShape<span class="op">);</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>adapt_wavelet <span class="op">((</span>scalar <span class="op">*){</span>f<span class="op">,</span> d<span class="op">},</span> <span class="op">(</span><span class="dt">double</span><span class="op">[]){</span><span class="fl">1e-8</span><span class="op">,</span> <span class="fl">1e-8</span><span class="op">},</span> MAXlevel<span class="op">).</span>nf<span class="op">);</span></span></code></pre></div></div>
                 <p>The distance function is defined at the center of
                 each cell, we have to calculate the value of this
                 function at each vertex.</p>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>    vertex scalar phi<span class="op">[];</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    foreach_vertex<span class="op">(){</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>      phi<span class="op">[]</span> <span class="op">=</span> <span class="op">(</span>d<span class="op">[]</span> <span class="op">+</span> d<span class="op">[-</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> d<span class="op">[</span><span class="dv">0</span><span class="op">,-</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> d<span class="op">[-</span><span class="dv">1</span><span class="op">,-</span><span class="dv">1</span><span class="op">])/</span><span class="fl">4.</span><span class="op">;</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span></code></pre></div></div>
+                class="sourceCode c"><code class="sourceCode c"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>    vertex scalar phi<span class="op">[];</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    foreach_vertex<span class="op">(){</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>      phi<span class="op">[]</span> <span class="op">=</span> <span class="op">(</span>d<span class="op">[]</span> <span class="op">+</span> d<span class="op">[-</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> d<span class="op">[</span><span class="dv">0</span><span class="op">,-</span><span class="dv">1</span><span class="op">]</span> <span class="op">+</span> d<span class="op">[-</span><span class="dv">1</span><span class="op">,-</span><span class="dv">1</span><span class="op">])/</span><span class="fl">4.</span><span class="op">;</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span></code></pre></div></div>
                 <p>We can now initialize the volume fraction of the
                 domain.</p>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>    fractions <span class="op">(</span>phi<span class="op">,</span> f<span class="op">);</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    foreach<span class="op">(){</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>      u<span class="op">.</span>x<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>      u<span class="op">.</span>y<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>      <span class="co">// p[] = 2*(1.-f[]);</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    dump <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">);</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">FILE</span> <span class="op">*</span> fp2<span class="op">;</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    fp2 <span class="op">=</span> fopen<span class="op">(</span><span class="st">&quot;InitialConditionStatus.dat&quot;</span><span class="op">,</span><span class="st">&quot;w&quot;</span><span class="op">);</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>fp2<span class="op">,</span> <span class="st">&quot;Initial condition is written to %s</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> dumpFile<span class="op">);</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    fclose<span class="op">(</span>fp2<span class="op">);</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">// return 1;</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="pp">#endif</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>event adapt<span class="op">(</span>i<span class="op">++){</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  adapt_wavelet <span class="op">((</span>scalar <span class="op">*){</span>f<span class="op">,</span> u<span class="op">.</span>x<span class="op">,</span> u<span class="op">.</span>y<span class="op">},</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>     <span class="op">(</span><span class="dt">double</span><span class="op">[]){</span>fErr<span class="op">,</span> VelErr<span class="op">,</span> VelErr<span class="op">},</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>      MAXlevel<span class="op">,</span> MAXlevel<span class="op">-</span><span class="dv">6</span><span class="op">);</span></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="co">// Outputs</span></span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>event writingFiles <span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> t <span class="op">+=</span> tsnap<span class="op">;</span> t <span class="op">&lt;=</span> tmax<span class="op">+</span>tsnap<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>  dump <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">);</span></span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>  sprintf <span class="op">(</span>nameOut<span class="op">,</span> <span class="st">&quot;intermediate/snapshot-%5.4f&quot;</span><span class="op">,</span> t<span class="op">);</span></span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>  dump<span class="op">(</span>file<span class="op">=</span>nameOut<span class="op">);</span></span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>event end <span class="op">(</span>t <span class="op">=</span> end<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>  fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, Oh2 %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>event logWriting <span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> t <span class="op">+=</span> tsnap2<span class="op">;</span> t <span class="op">&lt;=</span> tmax<span class="op">+</span>tsnap<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>  <span class="dt">double</span> ke <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> wt <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> xCOM <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> Vcm <span class="op">=</span> <span class="fl">0.</span><span class="op">;</span></span>
-<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>  foreach <span class="op">(</span>reduction<span class="op">(+:</span>ke<span class="op">)</span> reduction<span class="op">(+:</span>wt<span class="op">)</span> reduction<span class="op">(+:</span>xCOM<span class="op">)</span> reduction<span class="op">(+:</span>Vcm<span class="op">)){</span></span>
-<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>    ke <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*(</span><span class="fl">0.5</span><span class="op">*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.</span><span class="op">,</span> <span class="fl">1.</span><span class="op">)*(</span>sq<span class="op">(</span>u<span class="op">.</span>x<span class="op">[])</span> <span class="op">+</span> sq<span class="op">(</span>u<span class="op">.</span>y<span class="op">[])))*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
-<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>    xCOM <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>x<span class="op">*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
-<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>    Vcm <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>u<span class="op">.</span>x<span class="op">[]*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
-<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    wt <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
-<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>  xCOM <span class="op">/=</span> wt<span class="op">;</span></span>
-<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>  <span class="dt">static</span> <span class="dt">FILE</span> <span class="op">*</span> fp<span class="op">;</span></span>
-<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>pid<span class="op">()</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;i dt t ke Xc Vcm</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
-<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;w&quot;</span><span class="op">);</span></span>
-<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span>
-<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;i dt t ke Xc Vcm</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
-<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">);</span></span>
-<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
-<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
-<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;a&quot;</span><span class="op">);</span></span>
-<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">);</span></span>
-<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
-<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>    fprintf <span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">);</span></span>
-<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>  assert<span class="op">(</span>ke <span class="op">&gt;</span> <span class="op">-</span><span class="fl">1e-10</span><span class="op">);</span></span>
-<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a>  <span class="co">// dump (file = &quot;dump&quot;);</span></span>
-<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>ke <span class="op">&lt;</span> <span class="fl">1e-5</span> <span class="op">&amp;&amp;</span> i <span class="op">&gt;</span> <span class="dv">1000</span><span class="op">){</span></span>
-<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>pid<span class="op">()</span> <span class="op">==</span> <span class="dv">0</span><span class="op">){</span></span>
-<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;kinetic energy too small now! Stopping!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
-<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;a&quot;</span><span class="op">);</span></span>
-<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;kinetic energy too small now! Stopping!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
-<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
-<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
-<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
+                class="sourceCode c"><code class="sourceCode c"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>    fractions <span class="op">(</span>phi<span class="op">,</span> f<span class="op">);</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    foreach<span class="op">(){</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>      u<span class="op">.</span>x<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>      u<span class="op">.</span>y<span class="op">[]</span> <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    dump <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">);</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">FILE</span> <span class="op">*</span> fp2<span class="op">;</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    fp2 <span class="op">=</span> fopen<span class="op">(</span><span class="st">&quot;InitialConditionStatus.dat&quot;</span><span class="op">,</span><span class="st">&quot;w&quot;</span><span class="op">);</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>fp2<span class="op">,</span> <span class="st">&quot;Initial condition is written to %s</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> dumpFile<span class="op">);</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    fclose<span class="op">(</span>fp2<span class="op">);</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="pp">#endif</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
+                <h2 id="adaptive-mesh-refinement">Adaptive Mesh
+                Refinement</h2>
+                <p>Refine the mesh based on: - Interface position (VOF
+                field <code>f</code>) - Velocity gradients
+                (<code>u.x</code>, <code>u.y</code>)</p>
+                <p>Refinement ranges from <code>MAXlevel-6</code>
+                (coarse, far from interface) to <code>MAXlevel</code>
+                (fine, near interface and in high-gradient regions).</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>event adapt<span class="op">(</span>i<span class="op">++){</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>  adapt_wavelet <span class="op">((</span>scalar <span class="op">*){</span>f<span class="op">,</span> u<span class="op">.</span>x<span class="op">,</span> u<span class="op">.</span>y<span class="op">},</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>     <span class="op">(</span><span class="dt">double</span><span class="op">[]){</span>fErr<span class="op">,</span> VelErr<span class="op">,</span> VelErr<span class="op">},</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>      MAXlevel<span class="op">,</span> MAXlevel<span class="op">-</span><span class="dv">6</span><span class="op">);</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
+                <h2 id="output-files">Output Files</h2>
+                <p>Save simulation snapshots at regular intervals: -
+                <code>restart</code>: Current state for
+                checkpoint/restart -
+                <code>intermediate/snapshot-&lt;time&gt;</code>: Time
+                series for post-processing</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>event writingFiles <span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> t <span class="op">+=</span> tsnap<span class="op">;</span> t <span class="op">&lt;=</span> tmax<span class="op">+</span>tsnap<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  dump <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">);</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  sprintf <span class="op">(</span>nameOut<span class="op">,</span> <span class="st">&quot;intermediate/snapshot-%5.4f&quot;</span><span class="op">,</span> t<span class="op">);</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  dump<span class="op">(</span>file<span class="op">=</span>nameOut<span class="op">);</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>event end <span class="op">(</span>t <span class="op">=</span> end<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>  fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, Oh2 %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
+                <h2 id="logging-event">Logging Event</h2>
+                <p>Track simulation diagnostics at fine time intervals.
+                Computed quantities:</p>
+                <ul>
+                <li><p><code>ke</code>: Total kinetic energy in the
+                bubble phase <span class="math display">\[KE = \int_V
+                \frac{1}{2} f \rho |\mathbf{u}|^2 \,
+                dV\]</span></p></li>
+                <li><p><code>xCOM</code>: Axial position of center of
+                mass <span class="math display">\[x_{COM} = \frac{\int_V
+                f \cdot x \, dV}{\int_V f \, dV}\]</span></p></li>
+                <li><p><code>Vcm</code>: Axial velocity of center of
+                mass <span class="math display">\[V_{cm} = \frac{\int_V
+                f \cdot u_x \, dV}{\int_V f \, dV}\]</span></p></li>
+                </ul>
+                <p>The simulation automatically stops when kinetic
+                energy drops below <span
+                class="math inline">\(10^{-5}\)</span> (indicating the
+                system has reached equilibrium).</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>event logWriting <span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> t <span class="op">+=</span> tsnap2<span class="op">;</span> t <span class="op">&lt;=</span> tmax<span class="op">+</span>tsnap<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">double</span> ke <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> wt <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> xCOM <span class="op">=</span> <span class="fl">0.</span><span class="op">,</span> Vcm <span class="op">=</span> <span class="fl">0.</span><span class="op">;</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  foreach <span class="op">(</span>reduction<span class="op">(+:</span>ke<span class="op">)</span> reduction<span class="op">(+:</span>wt<span class="op">)</span> reduction<span class="op">(+:</span>xCOM<span class="op">)</span> reduction<span class="op">(+:</span>Vcm<span class="op">)){</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    ke <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*(</span><span class="fl">0.5</span><span class="op">*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.</span><span class="op">,</span> <span class="fl">1.</span><span class="op">)*(</span>sq<span class="op">(</span>u<span class="op">.</span>x<span class="op">[])</span> <span class="op">+</span> sq<span class="op">(</span>u<span class="op">.</span>y<span class="op">[])))*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    xCOM <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>x<span class="op">*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    Vcm <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>u<span class="op">.</span>x<span class="op">[]*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    wt <span class="op">+=</span> <span class="dv">2</span><span class="op">*</span>pi<span class="op">*</span>y<span class="op">*</span>clamp<span class="op">(</span>f<span class="op">[],</span> <span class="fl">0.0</span><span class="op">,</span> <span class="fl">1.0</span><span class="op">)*</span>sq<span class="op">(</span>Delta<span class="op">);</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>  xCOM <span class="op">/=</span> wt<span class="op">;</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">static</span> <span class="dt">FILE</span> <span class="op">*</span> fp<span class="op">;</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>pid<span class="op">()</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;i dt t ke Xc Vcm</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;w&quot;</span><span class="op">);</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> MAXlevel<span class="op">,</span> Ldomain<span class="op">,</span> tmax<span class="op">,</span> MuRin<span class="op">,</span> OhOut<span class="op">,</span> RhoIn<span class="op">,</span> Rr<span class="op">);</span></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;i dt t ke Xc Vcm</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">);</span></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;a&quot;</span><span class="op">);</span></span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a>      fprintf <span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">);</span></span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a>    fprintf <span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;%d %g %g %g %g %g</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> i<span class="op">,</span> dt<span class="op">,</span> t<span class="op">,</span> ke<span class="op">,</span> xCOM<span class="op">,</span> Vcm<span class="op">/</span>wt<span class="op">);</span></span>
+<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>  assert<span class="op">(</span>ke <span class="op">&gt;</span> <span class="op">-</span><span class="fl">1e-10</span><span class="op">);</span></span>
+<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(</span>ke <span class="op">&lt;</span> <span class="fl">1e-5</span> <span class="op">&amp;&amp;</span> i <span class="op">&gt;</span> <span class="dv">1000</span><span class="op">){</span></span>
+<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>pid<span class="op">()</span> <span class="op">==</span> <span class="dv">0</span><span class="op">){</span></span>
+<span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;kinetic energy too small now! Stopping!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb17-35"><a href="#cb17-35" aria-hidden="true" tabindex="-1"></a>      fp <span class="op">=</span> fopen <span class="op">(</span><span class="st">&quot;log&quot;</span><span class="op">,</span> <span class="st">&quot;a&quot;</span><span class="op">);</span></span>
+<span id="cb17-36"><a href="#cb17-36" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>fp<span class="op">,</span> <span class="st">&quot;kinetic energy too small now! Stopping!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
+<span id="cb17-37"><a href="#cb17-37" aria-hidden="true" tabindex="-1"></a>      fclose<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb17-38"><a href="#cb17-38" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-39"><a href="#cb17-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb17-40"><a href="#cb17-40" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb17-41"><a href="#cb17-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div></div>
             </div>
         </main>
 

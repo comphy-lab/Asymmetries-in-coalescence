@@ -202,7 +202,7 @@
   </style>
 
   <!-- Critical Meta Tags -->
-  <meta name="description" content="This file helps setup simulations for flows of two fluids separated by an interface (i.e. immiscible fluids). It is typically used in combination with a [Nav...">
+  <meta name="description" content="This file extends the standard [two-phase.h](two-phase.h) setup for flows of two fluids separated by an interface. It is typically used in combination with a...">
   <meta name="author" content="CoMPhy Lab">
   <meta name="robots" content="index, follow">
   <meta name="keywords" content="phase, two-phase-generic.h, vof.h">
@@ -430,33 +430,91 @@ window.baseDomain = "https://test.comphy-lab.org";
                     </a>
                 </div>
 
-                <h1 id="two-phase-interfacial-flows">Two-phase
-                interfacial flows</h1>
-                <p>This file helps setup simulations for flows of two
-                fluids separated by an interface (i.e. immiscible
-                fluids). It is typically used in combination with a <a
-                href="navier-stokes/centered.h">Navier–Stokes
+                <h1
+                id="two-phase-interfacial-flows-with-interface-tagging">Two-phase
+                Interfacial Flows with Interface Tagging</h1>
+                <p>This file extends the standard <a
+                href="two-phase.h">two-phase.h</a> setup for flows of
+                two fluids separated by an interface. It is typically
+                used in combination with a <a
+                href="navier-stokes/centered.h">Navier-Stokes
                 solver</a>.</p>
+                <h2 id="overview">Overview</h2>
                 <p>The interface between the fluids is tracked with a
                 Volume-Of-Fluid method. The volume fraction in fluid 1
                 is <span class="math inline">\(f=1\)</span> and <span
                 class="math inline">\(f=0\)</span> in fluid 2. The
                 densities and dynamic viscosities for fluid 1 and 2 are
-                <em>rho1</em>, <em>mu1</em>, <em>rho2</em>,
-                <em>mu2</em>, respectively.</p>
+                <code>rho1</code>, <code>mu1</code>, <code>rho2</code>,
+                <code>mu2</code>, respectively.</p>
+                <h2 id="interface-fields">Interface Fields</h2>
+                <p>This header declares <strong>two</strong> VOF
+                fields:</p>
+                <ul>
+                <li><p><code>f[]</code>: The primary VOF field used for
+                all physical calculations (density, viscosity, surface
+                tension). This is the field that appears in the
+                Navier-Stokes equations.</p></li>
+                <li><p><code>ftag[]</code>: A secondary VOF field used
+                <strong>only for tracking purposes</strong>. This field
+                can be manipulated (e.g., filtered with
+                <code>tag.h</code> to remove satellite droplets) without
+                affecting the physical simulation.</p></li>
+                </ul>
+                <h2 id="typical-usage">Typical Usage</h2>
+                <p>In <code>coalescenceBubble-tag.c</code>, the
+                <code>ftag</code> field is used with connected component
+                analysis (<code>tag.h</code>) to identify and track only
+                the main bubble, filtering out small satellite droplets
+                that may form during coalescence.</p>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/vof.h" title="Link to Basilisk source for vof.h"><span class="im">"vof.h"</span></a></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>scalar f<span class="op">[],</span> ftag<span class="op">[],</span> <span class="op">*</span> interfaces <span class="op">=</span> <span class="op">{</span>f<span class="op">,</span> ftag<span class="op">};</span></span>
+                class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// In main():</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>f<span class="op">.</span>sigma <span class="op">=</span> <span class="fl">1.0</span><span class="op">;</span>      <span class="co">// Physical surface tension</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ftag<span class="op">.</span>sigma <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span>   <span class="co">// No surface tension (tracking only)</span></span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/two-phase-generic.h" title="Link to Basilisk source for two-phase-generic.h"><span class="im">"two-phase-generic.h"</span></a><span class="pp"></span></span></code></pre></div></div>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// In logging event:</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>foreach<span class="op">()</span> ftag<span class="op">[]</span> <span class="op">=</span> f<span class="op">[];</span>           <span class="co">// Copy current interface</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">// ... apply tag() filtering to ftag ...</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">// ... compute diagnostics using ftag (filtered) ...</span></span></code></pre></div></div>
+                <h2 id="when-to-use-this-vs-standard-two-phase.h">When
+                to Use This vs Standard two-phase.h</h2>
+                <ul>
+                <li><p>Use <strong>two-phase.h</strong> for most
+                simulations where you only need to track a single
+                interface and don’t need satellite droplet
+                filtering.</p></li>
+                <li><p>Use <strong>two-phase-tag.h</strong> when you
+                need to:</p>
+                <ul>
+                <li>Filter out satellite droplets for cleaner
+                diagnostics</li>
+                <li>Track multiple disconnected regions separately</li>
+                <li>Compute geometric measurements on only the main
+                fluid body</li>
+                </ul></li>
+                </ul>
                 <h2 id="see-also">See also</h2>
                 <ul>
+                <li><a href="two-phase.h">Two-phase interfacial
+                flows</a></li>
                 <li><a href="two-phase-clsvof.h">Two-phase interfacial
                 flows with coupled VOF and levelset</a></li>
                 <li><a href="two-phase-levelset.h">Two-phase interfacial
                 flows with levelset</a></li>
+                <li><a href="tag.h">Connected component
+                analysis</a></li>
                 </ul>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/vof.h" title="Link to Basilisk source for vof.h"><span class="im">"vof.h"</span></a><span class="pp"></span></span></code></pre></div></div>
+                <h2 id="vof-field-declarations">VOF Field
+                Declarations</h2>
+                <p>Both fields are added to the <code>interfaces</code>
+                list for proper advection and refinement handling by the
+                VOF solver.</p>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>scalar f<span class="op">[],</span> ftag<span class="op">[],</span> <span class="op">*</span> interfaces <span class="op">=</span> <span class="op">{</span>f<span class="op">,</span> ftag<span class="op">};</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><a href="https://basilisk.fr/src/two-phase-generic.h" title="Link to Basilisk source for two-phase-generic.h"><span class="im">"two-phase-generic.h"</span></a></span></code></pre></div></div>
             </div>
         </main>
 

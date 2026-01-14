@@ -1,9 +1,57 @@
 #!/bin/bash
-# parse_params.sh - Shell library for parameter file parsing
-# Source this file: source src-local/parse_params.sh
+# ==============================================================================
+# parse_params.sh - Shell Library for Parameter File Parsing
+#
+# A reusable shell library for parsing parameter files and generating parameter
+# sweep combinations. Designed for use with simulation workflows that need
+# configurable parameters.
+#
+# Usage:
+#   source src-local/parse_params.sh
+#
+# After sourcing, the following functions are available:
+#   - parse_param_file <file>        Parse a parameter file
+#   - get_param <key> [default]      Get a parameter value
+#   - generate_sweep_cases <file>    Generate sweep case files
+#   - validate_required_params ...   Check required parameters exist
+#   - print_params                   Print all loaded parameters
+#
+# Parameter File Format:
+#   key=value
+#   # Comments start with #
+#   key2=value2  # Inline comments are supported
+#
+# Example parameter file (default.params):
+#   # Simulation parameters
+#   OhOut=1e-2
+#   RhoIn=1e-3
+#   MAXlevel=12
+#   tmax=40.0
+#
+# Author: Vatsal Sanjay
+# Last updated: Jan 2026
+# ==============================================================================
 
-# Parse a parameter file and export all parameters as environment variables
-# Usage: parse_param_file <file>
+# ==============================================================================
+# Function: parse_param_file
+#
+# Description:
+#   Parse a parameter file and export all key=value pairs as environment
+#   variables with a PARAM_ prefix. Comments and empty lines are skipped.
+#
+# Parameters:
+#   $1 - Path to the parameter file
+#
+# Returns:
+#   0 on success, 1 if file not found
+#
+# Side Effects:
+#   Exports environment variables named PARAM_<key> for each parameter
+#
+# Example:
+#   parse_param_file "default.params"
+#   echo $PARAM_OhOut  # Prints: 1e-2
+# ==============================================================================
 parse_param_file() {
     local param_file=$1
 
@@ -18,7 +66,7 @@ parse_param_file() {
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$key" ]] && continue
 
-        # Remove inline comments and whitespace
+        # Remove inline comments and whitespace using sed and xargs
         value=$(echo "$value" | sed 's/#.*//' | xargs)
         key=$(echo "$key" | xargs)
 
@@ -33,8 +81,23 @@ parse_param_file() {
     return 0
 }
 
-# Get a parameter value with optional default
-# Usage: get_param <key> [default]
+# ==============================================================================
+# Function: get_param
+#
+# Description:
+#   Retrieve a parameter value by key. Returns default value if not set.
+#
+# Parameters:
+#   $1 - Parameter key (without PARAM_ prefix)
+#   $2 - Default value (optional, defaults to empty string)
+#
+# Returns:
+#   Prints the parameter value to stdout
+#
+# Example:
+#   OhOut=$(get_param "OhOut" "1e-2")
+#   MAXlevel=$(get_param "MAXlevel" "10")
+# ==============================================================================
 get_param() {
     local key=$1
     local default=${2:-}
@@ -42,9 +105,38 @@ get_param() {
     echo "${!var_name:-$default}"
 }
 
-# Generate sweep combinations and create parameter files
-# Usage: generate_sweep_cases <sweep_file>
-# Returns: directory containing generated parameter files
+# ==============================================================================
+# Function: generate_sweep_cases
+#
+# Description:
+#   Generate parameter files for all combinations in a parameter sweep.
+#   Creates a Cartesian product of all SWEEP_* variables defined in the
+#   sweep file.
+#
+# Parameters:
+#   $1 - Path to the sweep configuration file
+#
+# Returns:
+#   Prints path to temporary directory containing generated case files
+#   Returns 1 on error
+#
+# Sweep File Format:
+#   BASE_CONFIG=path/to/base.params    # Required: base parameter file
+#   OUTPUT_TEMPLATE=output/{Rr}/{Oh}   # Output directory template
+#   SWEEP_Rr=0.5,0.7,1.0               # Sweep variable (comma-separated)
+#   SWEEP_Oh=1e-2,1e-3                 # Another sweep variable
+#
+# Generated Files:
+#   Creates case_0000.params, case_0001.params, etc. in a temporary directory.
+#   Each file contains the base configuration with sweep values overridden.
+#
+# Example:
+#   cases_dir=$(generate_sweep_cases "sweep.params")
+#   for case_file in "$cases_dir"/*.params; do
+#       parse_param_file "$case_file"
+#       # Run simulation with these parameters...
+#   done
+# ==============================================================================
 generate_sweep_cases() {
     local sweep_file=$1
 
@@ -68,7 +160,8 @@ generate_sweep_cases() {
     # Create temporary directory for generated cases
     local temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/sweep.XXXXXX")
 
-    # Extract sweep variables
+    # Extract sweep variables from the sweep file
+    # Match lines like: SWEEP_varname=value1,value2,value3
     local sweep_vars=()
     local sweep_values=()
 
@@ -77,7 +170,7 @@ generate_sweep_cases() {
         line=$(echo "$line" | sed 's/#.*//')
         [ -z "$line" ] && continue
 
-        # Match SWEEP_* variables
+        # Match SWEEP_* variables using regex
         if [[ "$line" =~ ^[[:space:]]*SWEEP_([^=]+)=(.+)$ ]]; then
             var_name="${BASH_REMATCH[1]}"
             var_values="${BASH_REMATCH[2]}"
@@ -95,7 +188,17 @@ generate_sweep_cases() {
     # Generate cartesian product of sweep values
     local case_num=0
 
-    # Recursive function to generate all combinations
+    # --------------------------------------------------------------------------
+    # Recursive function: generate_recursive
+    #
+    # Recursively generates all combinations of sweep variable values.
+    # At each level of recursion, iterates through values for one variable.
+    # When all variables are assigned, creates a parameter file.
+    #
+    # Parameters:
+    #   $1      - Current recursion depth (0 to num_sweep_vars-1)
+    #   $2...   - Accumulated values for variables 0 to depth-1
+    # --------------------------------------------------------------------------
     generate_recursive() {
         local depth=$1
         shift
@@ -109,12 +212,12 @@ generate_sweep_cases() {
             # Copy base config
             cp "$BASE_CONFIG" "$case_file"
 
-            # Override with sweep values
+            # Override with sweep values and build output directory path
             for i in "${!sweep_vars[@]}"; do
                 local var="${sweep_vars[$i]}"
                 local val="${current_values[$i]}"
 
-                # Replace in parameter file
+                # Replace in parameter file (or append if not present)
                 if grep -q "^${var}=" "$case_file"; then
                     sed -i.bak "s|^${var}=.*|${var}=${val}|" "$case_file"
                 else
@@ -122,11 +225,11 @@ generate_sweep_cases() {
                 fi
                 rm -f "${case_file}.bak"
 
-                # Replace in output template
+                # Replace placeholder in output template: {varname} -> value
                 output_dir="${output_dir//\{${var}\}/${val}}"
             done
 
-            # Set output directory
+            # Set output directory in the case file
             if grep -q "^output_dir=" "$case_file"; then
                 sed -i.bak "s|^output_dir=.*|output_dir=${output_dir}|" "$case_file"
             else
@@ -148,15 +251,32 @@ generate_sweep_cases() {
         done
     }
 
-    # Start recursion
+    # Start recursion with depth 0 and no accumulated values
     generate_recursive 0
 
     echo "$temp_dir"
     return 0
 }
 
-# Validate that required variables are set in parameter file
-# Usage: validate_required_params <param1> <param2> ...
+# ==============================================================================
+# Function: validate_required_params
+#
+# Description:
+#   Check that all required parameters have been loaded. Prints error messages
+#   for any missing parameters.
+#
+# Parameters:
+#   $@ - List of required parameter names (without PARAM_ prefix)
+#
+# Returns:
+#   0 if all parameters are present, 1 if any are missing
+#
+# Example:
+#   if ! validate_required_params OhOut RhoIn MAXlevel tmax; then
+#       echo "Missing required parameters, exiting"
+#       exit 1
+#   fi
+# ==============================================================================
 validate_required_params() {
     local missing=0
 
@@ -171,7 +291,28 @@ validate_required_params() {
     return $missing
 }
 
-# Print all loaded parameters (for debugging)
+# ==============================================================================
+# Function: print_params
+#
+# Description:
+#   Print all currently loaded parameters for debugging purposes.
+#   Lists all environment variables with the PARAM_ prefix.
+#
+# Parameters:
+#   None
+#
+# Returns:
+#   Prints formatted parameter list to stdout
+#
+# Example:
+#   parse_param_file "default.params"
+#   print_params
+#   # Output:
+#   # Loaded parameters:
+#   #   MAXlevel = 12
+#   #   OhOut = 1e-2
+#   #   ...
+# ==============================================================================
 print_params() {
     echo "Loaded parameters:"
     env | grep "^PARAM_" | sort | while IFS='=' read -r key value; do
