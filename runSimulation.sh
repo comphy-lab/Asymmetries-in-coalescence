@@ -296,8 +296,20 @@ else
     echo "Case directory exists"
 fi
 
-# Copy parameter file to case directory for record keeping
-cp "$PARAM_FILE" "$CASE_DIR/case.params"
+# Use existing case.params if present (allows manual parameter edits for reruns)
+if [ ! -f "$CASE_DIR/case.params" ]; then
+    cp "$PARAM_FILE" "$CASE_DIR/case.params"
+else
+    echo "Using existing case.params (manual edits preserved)"
+    # Re-parse from case.params
+    parse_param_file "$CASE_DIR/case.params"
+    OhOut=$(get_param "OhOut" "1e-2")
+    RhoIn=$(get_param "RhoIn" "1e-3")
+    Rr=$(get_param "Rr" "1.0")
+    MAXlevel=$(get_param "MAXlevel" "10")
+    tmax=$(get_param "tmax" "40.0")
+    zWall=$(get_param "zWall" "0.01")
+fi
 
 # Change to case directory
 cd "$CASE_DIR"
@@ -316,9 +328,13 @@ if [ ! -f "$SRC_FILE_ORIG" ]; then
     exit 1
 fi
 
-# Copy source file to case directory
-cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
-echo "Copied source file to case directory"
+# Use existing source file if present (allows local code edits for reruns)
+if [ ! -f "$SRC_FILE_LOCAL" ]; then
+    cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
+    echo "Copied source file to case directory"
+else
+    echo "Using existing coalescenceBubble.c (local edits preserved)"
+fi
 
 # Create symlink to DataFiles (required for initial condition loading)
 if [ ! -e "DataFiles" ]; then

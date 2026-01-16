@@ -299,6 +299,19 @@ run_stage1_case() {
     # Create case directory BEFORE redirecting to log file
     mkdir -p "$CASE_DIR"
 
+    # Use existing case.params if present (allows manual parameter edits for reruns)
+    # Otherwise, create from sweep-generated params
+    if [ ! -f "$CASE_DIR/case.params" ]; then
+        cp "$param_file" "$CASE_DIR/case.params"
+    fi
+    # Re-parse from case.params (source of truth for this case)
+    parse_param_file "$CASE_DIR/case.params"
+    OhOut=$(get_param "OhOut" "1e-2")
+    RhoIn=$(get_param "RhoIn" "1e-3")
+    Rr=$(get_param "Rr" "1.0")
+    MAXlevel=$(get_param "MAXlevel" "10")
+    zWall=$(get_param "zWall" "0.01")
+
     {
         echo "========================================="
         echo "Case $CASE_NO - Stage 1 ($(date))"
@@ -315,7 +328,10 @@ run_stage1_case() {
             echo "FAILED" > "${status_dir}/${CASE_NO}"
             return 1
         fi
-        cp "$SRC_FILE_ORIG" "coalescenceBubble.c"
+        # Use existing source file if present (allows local code edits for reruns)
+        if [ ! -f "coalescenceBubble.c" ]; then
+            cp "$SRC_FILE_ORIG" "coalescenceBubble.c"
+        fi
 
         # Create symlink to DataFiles
         if [ ! -e "DataFiles" ]; then
