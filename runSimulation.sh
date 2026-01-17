@@ -13,6 +13,9 @@ set -euo pipefail  # Exit on error, unset variables, pipeline failures
 # ============================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Stage 1 tmax - short run to generate restart file
+STAGE1_TMAX="5e-2"
+
 # Source project configuration
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
@@ -296,8 +299,20 @@ else
     echo "Case directory exists"
 fi
 
-# Copy parameter file to case directory for record keeping
-cp "$PARAM_FILE" "$CASE_DIR/case.params"
+# Use existing case.params if present (allows manual parameter edits for reruns)
+if [ ! -f "$CASE_DIR/case.params" ]; then
+    cp "$PARAM_FILE" "$CASE_DIR/case.params"
+else
+    echo "Using existing case.params (manual edits preserved)"
+    # Re-parse from case.params
+    parse_param_file "$CASE_DIR/case.params"
+    OhOut=$(get_param "OhOut" "1e-2")
+    RhoIn=$(get_param "RhoIn" "1e-3")
+    Rr=$(get_param "Rr" "1.0")
+    MAXlevel=$(get_param "MAXlevel" "10")
+    tmax=$(get_param "tmax" "40.0")
+    zWall=$(get_param "zWall" "0.01")
+fi
 
 # Change to case directory
 cd "$CASE_DIR"
@@ -316,9 +331,13 @@ if [ ! -f "$SRC_FILE_ORIG" ]; then
     exit 1
 fi
 
-# Copy source file to case directory
-cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
-echo "Copied source file to case directory"
+# Use existing source file if present (allows local code edits for reruns)
+if [ ! -f "$SRC_FILE_LOCAL" ]; then
+    cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
+    echo "Copied source file to case directory"
+else
+    echo "Using existing coalescenceBubble.c (local edits preserved)"
+fi
 
 # Create symlink to DataFiles (required for initial condition loading)
 if [ ! -e "DataFiles" ]; then
@@ -340,20 +359,20 @@ if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
         echo "Compiling with OpenMP..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions -fopenmp \
+            -Wall -O2 -disable-dimensions -fopenmp \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     else
         echo "Compiling for serial execution..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions \
+            -Wall -O2 -disable-dimensions \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi
@@ -382,9 +401,9 @@ if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
     else
         echo "  Running single-threaded"
     fi
-    echo "  Command: ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall"
+    echo "  Command: ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall"
 
-    ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall
+    ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall
 
     if [ ! -f "restart" ]; then
         echo "ERROR: Stage 1 failed - restart file was not created" >&2
@@ -449,20 +468,20 @@ if [ $STAGE -eq 2 ] || [ $STAGE -eq 0 ]; then
         echo "Compiling with OpenMP..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions -fopenmp \
+            -Wall -O2 -disable-dimensions -fopenmp \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     else
         echo "Compiling for serial execution..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions \
+            -Wall -O2 -disable-dimensions \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi

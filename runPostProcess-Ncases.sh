@@ -61,11 +61,17 @@ Options:
     -h, --help          Show this help message
 
 Arguments:
-    CASE_NO             4-digit case numbers (1000-9999)
+    CASE_NO             4-digit case numbers (1000-9999) or ranges (e.g., 3000-3010)
 
 Examples:
     # Process multiple cases with default settings
     $0 3000 3001 3002
+
+    # Process a range of cases
+    $0 3000-3010
+
+    # Mix individual cases and ranges
+    $0 3000 3005-3007 3010
 
     # Process with 8 CPUs
     $0 --CPUs 8 3000 3001
@@ -84,8 +90,55 @@ Output locations:
     simulationCases/<CaseNo>/<CaseNo>_COMData.csv # COM time series
     simulationCases/<CaseNo>/<CaseNo>.mp4        # Encoded video
 
-For more information, see CLAUDE.md
+For more information, see README.md
 EOF
+}
+
+# ============================================================
+# Helper: Expand Case Argument (single number or range)
+# ============================================================
+expand_case_arg() {
+    local arg="$1"
+
+    # Check if it's a range (contains hyphen between two numbers)
+    if [[ "$arg" =~ ^([0-9]{4})-([0-9]{4})$ ]]; then
+        local start="${BASH_REMATCH[1]}"
+        local end="${BASH_REMATCH[2]}"
+
+        # Validate range bounds
+        if [ "$start" -lt 1000 ] || [ "$start" -gt 9999 ]; then
+            echo "ERROR: Range start out of bounds (1000-9999): $start" >&2
+            return 1
+        fi
+        if [ "$end" -lt 1000 ] || [ "$end" -gt 9999 ]; then
+            echo "ERROR: Range end out of bounds (1000-9999): $end" >&2
+            return 1
+        fi
+
+        # Validate range order
+        if [ "$start" -gt "$end" ]; then
+            echo "ERROR: Invalid range (start > end): $arg" >&2
+            return 1
+        fi
+
+        # Expand range using seq
+        seq "$start" "$end"
+        return 0
+    fi
+
+    # Check if it's a single 4-digit number
+    if [[ "$arg" =~ ^[0-9]{4}$ ]]; then
+        if [ "$arg" -lt 1000 ] || [ "$arg" -gt 9999 ]; then
+            echo "ERROR: Case number out of range (1000-9999): $arg" >&2
+            return 1
+        fi
+        echo "$arg"
+        return 0
+    fi
+
+    # Invalid format
+    echo "ERROR: Invalid case argument (expected 4-digit number or range): $arg" >&2
+    return 1
 }
 
 # ============================================================
@@ -103,6 +156,7 @@ SKIP_VIDEO_ENCODE=0
 DRY_RUN=0
 VERBOSE=0
 
+RAW_CASE_ARGS=()
 CASE_NUMBERS=()
 
 while [[ $# -gt 0 ]]; do
@@ -169,35 +223,33 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            # Collect case numbers
-            CASE_NUMBERS+=("$1")
+            # Collect raw case arguments (numbers or ranges)
+            RAW_CASE_ARGS+=("$1")
             shift
             ;;
     esac
+done
+
+# Expand raw case arguments into individual case numbers
+for raw_arg in "${RAW_CASE_ARGS[@]}"; do
+    expanded=$(expand_case_arg "$raw_arg") || exit 1
+    while IFS= read -r case_no; do
+        CASE_NUMBERS+=("$case_no")
+    done <<< "$expanded"
 done
 
 # ============================================================
 # Validation
 # ============================================================
 
-# Check at least one case number provided
-if [ ${#CASE_NUMBERS[@]} -eq 0 ]; then
+# Check at least one case argument provided
+if [ ${#RAW_CASE_ARGS[@]} -eq 0 ]; then
     echo "ERROR: No case numbers provided" >&2
     usage
     exit 1
 fi
 
-# Validate case numbers are 4-digit
-for case_no in "${CASE_NUMBERS[@]}"; do
-    if ! [[ "$case_no" =~ ^[0-9]{4}$ ]]; then
-        echo "ERROR: Case number must be 4 digits (1000-9999), got: $case_no" >&2
-        exit 1
-    fi
-    if [ "$case_no" -lt 1000 ] || [ "$case_no" -gt 9999 ]; then
-        echo "ERROR: Case number out of range (1000-9999), got: $case_no" >&2
-        exit 1
-    fi
-done
+# Note: Individual case number validation is handled by expand_case_arg()
 
 # Check Python availability
 if ! command -v python &> /dev/null; then

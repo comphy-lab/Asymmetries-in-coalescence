@@ -15,6 +15,29 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 
 > **Note**: Replace `v2026-01-13` with the [latest release tag](https://github.com/comphy-lab/basilisk-C/releases).
 
+## Repository Structure
+
+```
+├── simulationCases/                 Main simulation code
+│   ├── coalescenceBubble.c         Primary simulation (production runs)
+│   ├── coalescenceBubble-tag.c     Extended version with shape tracking
+├── src-local/                       Custom Basilisk headers
+│   ├── two-phase-tag.h             Two-phase flow with interface tagging
+│   └── parse_params.sh             Parameter file parsing library
+├── postProcess/                     Post-processing tools
+│   ├── getData-generic.c           Field extraction on structured grids
+│   ├── getFacet.c                  Interface geometry extraction
+│   ├── getCOM.c                    Center of mass extraction
+│   └── Video-generic.py            Frame-by-frame visualization pipeline
+├── runSimulation.sh                 Single case runner (OpenMP/MPI)
+├── runParameterSweep.sh             Parameter sweep runner
+├── runPostProcess-Ncases.sh         Batch post-processing runner
+├── default.params                   Single-case configuration
+├── sweep.params                     Sweep configuration template
+├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
+└── runSweepHamilton.sbatch          SLURM script for Hamilton HPC
+```
+
 ## Simulation Files
 
 This project contains two simulation files:
@@ -73,6 +96,40 @@ The `coalescenceBubble-tag.c` file additionally uses `tag.h` for tracking shape 
 # Submit parameter sweep to SLURM
 sbatch runSweepSnellius.sbatch
 ```
+
+### Post-Processing
+```shell
+# Process multiple cases with default settings
+./runPostProcess-Ncases.sh 3000 3001 3002
+
+# Process a range of cases
+./runPostProcess-Ncases.sh 3000-3010
+
+# Process with 8 CPUs and custom snapshot count
+./runPostProcess-Ncases.sh --CPUs 8 --nGFS 100 3000
+
+# Skip video encoding (only generate frames)
+./runPostProcess-Ncases.sh --skip-video-encode 3000
+
+# Dry run to preview commands
+./runPostProcess-Ncases.sh --dry-run 3000
+```
+
+**C Helper Tools** (must be compiled before running):
+```shell
+qcc -O2 -Wall postProcess/getFacet.c -o postProcess/getFacet -lm
+qcc -O2 -Wall postProcess/getData-generic.c -o postProcess/getData-generic -lm
+qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm
+```
+
+- `getFacet`: Extracts interface facets using PLIC reconstruction
+- `getData-generic`: Samples velocity/strain-rate fields on structured grids
+- `getCOM`: Computes center of mass position and velocity
+
+**Output locations:**
+- `simulationCases/<CaseNo>/Video/` - PNG frames
+- `simulationCases/<CaseNo>/<CaseNo>_COMData.csv` - COM time series
+- `simulationCases/<CaseNo>/<CaseNo>.mp4` - Encoded video
 
 ### Command Line Parameters
 The simulation takes 6 arguments: `OhOut RhoIn Rr MAXlevel tmax zWall`

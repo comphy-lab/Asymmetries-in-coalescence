@@ -353,6 +353,21 @@ for param_file in "${CASE_FILES[@]}"; do
 
     echo "Found restart file"
 
+    # Use existing case.params if present (allows manual parameter edits)
+    if [ ! -f "$CASE_DIR/case.params" ]; then
+        cp "$param_file" "$CASE_DIR/case.params"
+    else
+        echo "Using existing case.params (manual edits preserved)"
+    fi
+    # Re-parse from case.params (source of truth)
+    parse_param_file "$CASE_DIR/case.params"
+    OhOut=$(get_param "OhOut" "1e-2")
+    RhoIn=$(get_param "RhoIn" "1e-3")
+    Rr=$(get_param "Rr" "1.0")
+    MAXlevel=$(get_param "MAXlevel" "10")
+    tmax=$(get_param "tmax" "40.0")
+    zWall=$(get_param "zWall" "0.01")
+
     # Copy source file to case directory if needed
     SRC_FILE_ORIG="${SCRIPT_DIR}/simulationCases/coalescenceBubble.c"
     SRC_FILE_LOCAL="$CASE_DIR/coalescenceBubble.c"
@@ -364,7 +379,12 @@ for param_file in "${CASE_FILES[@]}"; do
         continue
     fi
 
-    cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
+    # Use existing source file if present (allows local code edits for reruns)
+    if [ ! -f "$SRC_FILE_LOCAL" ]; then
+        cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
+    else
+        echo "Using existing coalescenceBubble.c (local edits preserved)"
+    fi
 
     # Create symlink to DataFiles if needed
     if [ ! -e "DataFiles" ]; then
