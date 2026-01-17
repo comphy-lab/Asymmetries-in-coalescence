@@ -577,6 +577,41 @@ window.baseDomain = "https://test.comphy-lab.org";
                 <h3 id="hpc-snellius">HPC (Snellius)</h3>
                 <div class="code-block-container"><pre class="shell"><code># Submit parameter sweep to SLURM
 sbatch runSweepSnellius.sbatch</code></pre></div>
+                <h3 id="post-processing">Post-Processing</h3>
+                <div class="code-block-container"><pre class="shell"><code># Process multiple cases with default settings
+./runPostProcess-Ncases.sh 3000 3001 3002
+
+# Process a range of cases
+./runPostProcess-Ncases.sh 3000-3010
+
+# Process with 8 CPUs and custom snapshot count
+./runPostProcess-Ncases.sh --CPUs 8 --nGFS 100 3000
+
+# Skip video encoding (only generate frames)
+./runPostProcess-Ncases.sh --skip-video-encode 3000
+
+# Dry run to preview commands
+./runPostProcess-Ncases.sh --dry-run 3000</code></pre></div>
+                <p><strong>C Helper Tools</strong> (must be compiled
+                before running):</p>
+                <div class="code-block-container"><pre class="shell"><code>qcc -O2 -Wall postProcess/getFacet.c -o postProcess/getFacet -lm
+qcc -O2 -Wall postProcess/getData-generic.c -o postProcess/getData-generic -lm
+qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm</code></pre></div>
+                <ul>
+                <li><code>getFacet</code>: Extracts interface facets
+                using PLIC reconstruction</li>
+                <li><code>getData-generic</code>: Samples
+                velocity/strain-rate fields on structured grids</li>
+                <li><code>getCOM</code>: Computes center of mass
+                position and velocity</li>
+                </ul>
+                <p><strong>Output locations:</strong> -
+                <code>simulationCases/&lt;CaseNo&gt;/Video/</code> - PNG
+                frames -
+                <code>simulationCases/&lt;CaseNo&gt;/&lt;CaseNo&gt;_COMData.csv</code>
+                - COM time series -
+                <code>simulationCases/&lt;CaseNo&gt;/&lt;CaseNo&gt;.mp4</code>
+                - Encoded video</p>
                 <h3 id="command-line-parameters">Command Line
                 Parameters</h3>
                 <p>The simulation takes 6 arguments:
