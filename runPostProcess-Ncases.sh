@@ -90,7 +90,7 @@ Output locations:
     simulationCases/<CaseNo>/<CaseNo>_COMData.csv # COM time series
     simulationCases/<CaseNo>/<CaseNo>.mp4        # Encoded video
 
-For more information, see CLAUDE.md
+For more information, see README.md
 EOF
 }
 
