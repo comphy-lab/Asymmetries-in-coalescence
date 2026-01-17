@@ -13,6 +13,9 @@ set -euo pipefail  # Exit on error, unset variables, pipeline failures
 # ============================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Stage 1 tmax - short run to generate restart file
+STAGE1_TMAX="5e-2"
+
 # Source project configuration
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
@@ -356,20 +359,20 @@ if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
         echo "Compiling with OpenMP..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions -fopenmp \
+            -Wall -O2 -disable-dimensions -fopenmp \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     else
         echo "Compiling for serial execution..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions \
+            -Wall -O2 -disable-dimensions \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi
@@ -398,9 +401,9 @@ if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
     else
         echo "  Running single-threaded"
     fi
-    echo "  Command: ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall"
+    echo "  Command: ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall"
 
-    ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel 0.01 $zWall
+    ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall
 
     if [ ! -f "restart" ]; then
         echo "ERROR: Stage 1 failed - restart file was not created" >&2
@@ -465,20 +468,20 @@ if [ $STAGE -eq 2 ] || [ $STAGE -eq 0 ]; then
         echo "Compiling with OpenMP..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions -fopenmp $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions -fopenmp \
+            -Wall -O2 -disable-dimensions -fopenmp \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     else
         echo "Compiling for serial execution..."
         [ $VERBOSE -eq 1 ] && echo "Compiler: qcc"
         [ $VERBOSE -eq 1 ] && echo "Include paths: -I../../src-local"
-        [ $VERBOSE -eq 1 ] && echo "Flags: -O2 -Wall -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
+        [ $VERBOSE -eq 1 ] && echo "Flags: -Wall -O2 -disable-dimensions $DEBUG_FLAGS $QCC_FLAGS"
 
         qcc -I../../src-local \
-            -O2 -Wall -disable-dimensions \
+            -Wall -O2 -disable-dimensions \
             $DEBUG_FLAGS $QCC_FLAGS \
             "$SRC_FILE_LOCAL" -o "$EXECUTABLE" -lm
     fi

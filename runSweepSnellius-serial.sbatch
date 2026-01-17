@@ -41,7 +41,7 @@ SWEEP_FILE="${SCRIPT_DIR}/sweep.params"
 MAX_CONCURRENT=${SLURM_NTASKS:-48}
 
 # Stage 1 tmax - short run to generate restart file
-STAGE1_TMAX="0.1"
+STAGE1_TMAX="5e-2"
 
 # ============================================================
 # Print Job Information
@@ -67,8 +67,8 @@ echo ""
 echo "Loading modules..."
 module purge
 module load 2024
-module load OpenMPI/5.0.3-GCC-13.3.0
-echo "Modules loaded successfully"
+# No MPI needed for serial execution
+echo "Modules loaded (serial mode - no MPI)"
 echo ""
 
 # ============================================================
