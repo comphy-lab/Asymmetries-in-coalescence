@@ -66,16 +66,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://comphy-lab.org/Asymmetries-in-coalescence/simulationCases/2000/case.params.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://comphy-lab.org/Asymmetries-in-coalescence/simulationCases/2000/coalescenceBubble.c.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://comphy-lab.org/Asymmetries-in-coalescence/simulationCases/coalescenceBubble-tag.c.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>

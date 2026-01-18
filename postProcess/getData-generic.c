@@ -1,23 +1,49 @@
-/* Title: getting Data from simulation snapshot
-# Author: Vatsal Sanjay
-# vatsal.sanjay@comphy-lab.org
-# CoMPhy Lab
-# Durham University
-# Last updated: Jan 2026
+/**
+# Structured Field Extraction from Simulation Snapshots
+
+Sample strain-rate and velocity fields from Basilisk snapshots on a regular
+grid. The primary diagnostic is $\log_{10}(D^2)$ where $D^2$ is the second
+invariant of the strain-rate tensor, used as a proxy for viscous dissipation
+in coalescence-driven jetting.
+
+## Output Columns
+
+Each line contains:
+`x y log10(D2) |u|`
+
+The output is streamed to `stderr` so it can be piped directly into plotting
+tools or Python/Matlab scripts.
+
+## Usage
+
+```
+./getData-generic <snapshot-file> <xmin> <ymin> <xmax> <ymax> <ny>
+```
+
+## Author
+
+Vatsal Sanjay
+vatsal.sanjay@comphy-lab.org
+CoMPhy Lab, Durham University
+Last updated: Jan 2026
 */
 
 #include "utils.h"
 #include "output.h"
 
 /**
- * Geometry configuration: Set AXI=1 for axisymmetric, AXI=0 for 2D Cartesian.
- * - Axisymmetric: x=radial, y=axial (includes azimuthal D22 term)
- * - 2D Cartesian: x=x-coordinate, y=y-coordinate (no D22 term)
- *
- * To change geometry:
- *   Method 1: Edit line 22 below - change "AXI 1" to "AXI 0" for 2D
- *   Method 2: Compile with flag: qcc -DAXI=0 ... (for 2D executable)
- */
+## Geometry Configuration
+
+Set `AXI=1` for axisymmetric, `AXI=0` for 2D Cartesian:
+
+- Axisymmetric: `x` = radial, `y` = axial (includes azimuthal $D_{22}$ term)
+- 2D Cartesian: `x` and `y` are planar coordinates (no $D_{22}$ term)
+
+To change geometry:
+
+1. Edit the definition below (`#define AXI 1` -> `#define AXI 0`)
+2. Or compile with `qcc -DAXI=0 ...`
+*/
 #ifndef AXI
 #define AXI 1  // Default to axisymmetric
 #endif
@@ -26,20 +52,23 @@ scalar f[];
 vector u[];
 
 /**
- * Lightweight utility for extracting Basilisk snapshot data on a structured
- * Cartesian sampling grid. The workflow is intentionally linear:
- *   1. Parse CLI bounds/grid spacing into `extraction_config`.
- *   2. Restore the snapshot (`restore(file=...)`).
- *   3. Register each derived scalar in `field_list`.
- *   4. Compute fields and interpolate them onto a regular grid.
- *   5. Stream x, y, <fields...> rows to stderr (used as output pipe).
- *
- * To add a new derived quantity (e.g., Aij):
- *   1. Declare scalar: `scalar Aij[];` (line ~38)
- *   2. Register in `register_fields()`: `field_list = list_add(field_list, Aij);`
- *   3. Compute in `compute_fields()`: `compute_Aij_field(Aij);`
- *   4. Write compute function: `static void compute_Aij_field(scalar target) { ... }`
- */
+## Data Flow
+
+The workflow is intentionally linear:
+
+1. Parse CLI bounds/grid spacing into `extraction_config`.
+2. Restore the snapshot (`restore(file=...)`).
+3. Register each derived scalar in `field_list`.
+4. Compute fields and interpolate them onto a regular grid.
+5. Stream `x y <fields...>` rows to `stderr` (used as an output pipe).
+
+### Adding a New Derived Quantity
+
+1. Declare the scalar: `scalar Aij[];`
+2. Register in `register_fields()`: `field_list = list_add(field_list, Aij);`
+3. Compute in `compute_fields()`: `compute_Aij_field(Aij);`
+4. Implement `static void compute_Aij_field(scalar target) { ... }`
+*/
 typedef struct {
   char filename[4096];
   double xmin, ymin, xmax, ymax;
@@ -66,23 +95,22 @@ static void compute_D2c_field(scalar target);
 static void compute_velocity_field(scalar target);
 
 /**
-   * @brief Entry point for simulation snapshot extraction and processing.
-   *
-   * This function validates command-line arguments and orchestrates the simulation
-   * data restoration, derivative and velocity computations, and interpolation onto
-   * a grid. It expects the program name followed by exactly six parameters:
-   * a filename, the lower bounds (xmin and ymin), the upper bounds (xmax and ymax), and
-   * the number of divisions along the y-axis (ny). If the argument count is incorrect,
-   * an error message and usage instructions are printed to stderr and the program exits
-   * with a status of 1.
-   *
-   * @param a The total number of command-line arguments.
-   * @param arguments Array of command-line argument strings, where arguments[0] is the
-   * program name and the remaining elements provide the required simulation parameters.
-   *
-   * @return int Exit status of the program (1 on error, 0 on success).
-   */
-  int main(int a, char const *arguments[])
+### main()
+
+Entry point for snapshot extraction and sampling. Validates CLI arguments,
+restores the snapshot, computes derived fields, and interpolates them to
+a structured grid.
+
+#### Parameters
+
+- `a`: Number of command-line arguments
+- `arguments`: Argument vector (expects 6 parameters after program name)
+
+#### Returns
+
+- `int`: `0` on success, `1` on invalid input
+*/
+int main(int a, char const *arguments[])
 {
   extraction_config cfg;
   if (!parse_arguments(a, arguments, &cfg))
@@ -227,27 +255,30 @@ static void cleanup_output(FILE *fp, double **field_buffer)
 }
 
 /**
- * @brief Compute log10(D²) where D² is the second invariant of the strain
- * rate tensor.
- *
- * Geometry-dependent formulation:
- *
- * Axisymmetric (AXI=1, x=radial, y=axial):
- *   D11 = ∂u_y/∂y      (axial velocity gradient)
- *   D22 = u_y/y        (azimuthal component from cylindrical geometry)
- *   D33 = ∂u_x/∂x      (radial velocity gradient)
- *   D13 = (∂u_y/∂x + ∂u_x/∂y)/2  (shear component)
- *   D² = D11² + D22² + D33² + 2*D13²
- *
- * 2D Cartesian (AXI=0, x and y coordinates):
- *   D11 = ∂u_y/∂y
- *   D33 = ∂u_x/∂x
- *   D13 = (∂u_y/∂x + ∂u_x/∂y)/2
- *   D² = D11² + D33² + 2*D13²  (no D22 term)
- *
- * Returns log10(D²) for positive values, -10 otherwise (floor for
- * visualization). Shown throughout the entire domain.
- */
+### compute_D2c_field()
+
+Compute $\log_{10}(D^2)$ where $D^2$ is the second invariant of the
+strain-rate tensor. This field is plotted as a proxy for viscous dissipation.
+
+#### Geometry-dependent formulation
+
+Axisymmetric (AXI=1, `x` = radial, `y` = axial):
+
+- $D_{11} = \partial u_y/\partial y$
+- $D_{22} = u_y/y$
+- $D_{33} = \partial u_x/\partial x$
+- $D_{13} = (\partial u_y/\partial x + \partial u_x/\partial y)/2$
+- $D^2 = D_{11}^2 + D_{22}^2 + D_{33}^2 + 2 D_{13}^2$
+
+2D Cartesian (AXI=0):
+
+- $D_{11} = \partial u_y/\partial y$
+- $D_{33} = \partial u_x/\partial x$
+- $D_{13} = (\partial u_y/\partial x + \partial u_x/\partial y)/2$
+- $D^2 = D_{11}^2 + D_{33}^2 + 2 D_{13}^2$
+
+Values $\le 0$ are floored to `-10` for visualization.
+*/
 static void compute_D2c_field(scalar target)
 {
   foreach() {
@@ -272,14 +303,15 @@ static void compute_D2c_field(scalar target)
 }
 
 /**
- * @brief Compute velocity magnitude.
- *
- * Geometry-independent calculation:
- *   Axisymmetric (AXI=1): u.x=radial, u.y=axial
- *   2D Cartesian (AXI=0): u.x=x-component, u.y=y-component
- *
- * Returns |u| = sqrt(u_x² + u_y²).
- */
+### compute_velocity_field()
+
+Compute velocity magnitude, $|u| = \sqrt{u_x^2 + u_y^2}$.
+
+Geometry-independent calculation:
+
+- Axisymmetric (AXI=1): `u.x` = radial, `u.y` = axial
+- 2D Cartesian (AXI=0): `u.x` = x-component, `u.y` = y-component
+*/
 static void compute_velocity_field(scalar target)
 {
   foreach()

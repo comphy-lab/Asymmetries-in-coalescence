@@ -1,29 +1,35 @@
-# Author: Vatsal Sanjay
-# vatsal.sanjay@comphy-lab.org
-# CoMPhy Lab
-# Durham University
-# Last updated: Jan 2026
-
 """
-Generic video post-processing pipeline for Basilisk bubble coalescence runs.
+# Video Post-Processing for Bubble Coalescence
 
-Overview
---------
-The helper executables `postProcess/getFacet`, `postProcess/getData-generic`,
-and `postProcess/getCOM` are compiled as part of the Basilisk workflow. This
-Python wrapper shells out to those binaries for every snapshot, reshapes the
-returned grids, and renders axisymmetric visualisations with center of mass
-tracking.
+Render interface geometry, strain-rate invariant, and velocity magnitude from
+Basilisk snapshots of asymmetric bubble coalescence. These visualizations
+support analysis of capillary-wave focusing, jetting, and droplet pinch-off by
+tracking interface evolution alongside a dissipation proxy and flow speed.
 
-Usage
------
-Typical invocation from the repository root::
+## Workflow
 
-    python3 postProcess/Video-generic.py --caseToProcess simulationCases/3000 --Rr 1.0
+- `postProcess/getFacet`: extract PLIC interface segments
+- `postProcess/getData-generic`: sample $\log_{10}(D^2)$ and $|u|$ on a grid
+- `postProcess/getCOM`: compute axial center-of-mass position and velocity
 
-Command-line switches expose all relevant knobs (grid density, domain limits,
-time stride, CPU count, radius ratio). The output directory is created on-demand
-and filled with zero-padded PNG files compatible with downstream stitching utilities.
+## Usage
+
+```bash
+python3 postProcess/Video-generic.py --caseToProcess simulationCases/3000 --Rr 1.0
+```
+
+## Outputs
+
+- `simulationCases/<case>/Video/*.png`: rendered frames
+- `simulationCases/<case>/<case>_COMData.csv`: COM time series
+- `simulationCases/<case>/<case>.mp4`: encoded movie (if enabled)
+
+## Author
+
+Vatsal Sanjay
+vatsal.sanjay@comphy-lab.org
+CoMPhy Lab, Durham University
+Last updated: Jan 2026
 """
 
 import argparse

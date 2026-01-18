@@ -438,6 +438,25 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 (inside bubble, <span
                 class="math inline">\(f=1\)</span>) and liquid (outside,
                 <span class="math inline">\(f=0\)</span>) phases.</p>
+                <h2 id="scientific-context">Scientific Context</h2>
+                <p>This model isolates the hydrodynamic event
+                responsible for electrolyte entrainment in gas-evolving
+                electrochemical systems: coalescence between a large
+                “parent” bubble and a smaller bubble. The key physical
+                pathway is capillary-wave focusing on the smaller bubble
+                that generates a Worthington jet and droplet pinch-off
+                into the parent bubble.</p>
+                <h2 id="hydrodynamic-pathway-captured-here">Hydrodynamic
+                Pathway (Captured Here)</h2>
+                <ol type="1">
+                <li>First contact creates a neck that expands
+                rapidly.</li>
+                <li>The neck launches capillary waves over the small
+                bubble.</li>
+                <li>Waves focus at the small bubble’s south pole.</li>
+                <li>A Worthington jet forms and breaks up, injecting
+                droplets into the gas.</li>
+                </ol>
                 <h2 id="physical-setup">Physical Setup</h2>
                 <p>Two initially spherical bubbles of different sizes
                 are placed along the axis of symmetry. The larger bubble
@@ -466,21 +485,47 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 <h3 id="command-line-parameters">Command-line
                 Parameters</h3>
                 <ul>
-                <li><code>OhOut</code>: Ohnesorge number for outer
-                fluid, <span class="math inline">\(Oh =
-                \mu_{out}/\sqrt{\rho_{out} \sigma R}\)</span></li>
+                <li><code>OhOut</code>: Solvent Ohnesorge number based
+                on the small bubble radius, <span
+                class="math inline">\(Oh_s = \mu_{out}/\sqrt{\rho_{out}
+                \sigma r}\)</span></li>
                 <li><code>RhoIn</code>: Density ratio <span
-                class="math inline">\(\rho_{in}/\rho_{out}\)</span>
+                class="math inline">\(\rho_{b}/\rho_{s}\)</span>
                 (typically <span class="math inline">\(10^{-3}\)</span>
                 for air-water)</li>
-                <li><code>Rr</code>: Radius ratio of smaller to larger
-                bubble (1.0 = equal size)</li>
+                <li><code>Rr</code>: Radius ratio <span
+                class="math inline">\(r/R\)</span> (small to large
+                bubble). Note that some literature reports the inverse
+                (<span class="math inline">\(R/r\)</span>); this code
+                uses <span class="math inline">\(r/R\)</span>.</li>
                 <li><code>MAXlevel</code>: Maximum adaptive mesh
                 refinement level</li>
                 <li><code>tmax</code>: Maximum simulation time</li>
                 <li><code>zWall</code>: Wall position (distance from
                 origin to left boundary)</li>
                 </ul>
+                <h2
+                id="nondimensional-mapping-used-in-this-code">Nondimensional
+                Mapping Used in This Code</h2>
+                <ul>
+                <li>The large-bubble radius is the reference length
+                (<span class="math inline">\(R=1\)</span>).</li>
+                <li>The small-bubble radius is <code>r = Rr</code>.</li>
+                <li>The bubble viscosity ratio is fixed as
+                <code>MuRin = 1e-2</code>, so <span
+                class="math inline">\(Oh_b/Oh_s = 0.01\)</span> with
+                <span class="math inline">\(Oh_b = \mu_b/\sqrt{\rho_s
+                \sigma r}\)</span>.</li>
+                <li>Confinement is controlled via <code>zWall</code>:
+                smaller <code>zWall</code> places the small bubble
+                closer to the wall, corresponding to smaller <span
+                class="math inline">\(\chi = d/r\)</span>.</li>
+                </ul>
+                <h2 id="parameter-sweeps">Parameter Sweeps</h2>
+                <p>Typical sweeps vary <code>OhOut</code> and
+                <code>Rr</code> (bulk) or <code>zWall</code> (confined)
+                to build droplet/no-droplet regime maps and to quantify
+                the first injected droplet size.</p>
                 <h2 id="author">Author</h2>
                 <p>Vatsal Sanjay vatsalsanjay@gmail.com Physics of
                 Fluids</p>

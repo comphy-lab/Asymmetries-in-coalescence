@@ -5,6 +5,21 @@ Axisymmetric simulation of two-bubble coalescence with size asymmetry using
 the Volume-of-Fluid (VOF) method. The simulation tracks the interface between
 gas (inside bubble, $f=1$) and liquid (outside, $f=0$) phases.
 
+## Scientific Context
+
+This model isolates the hydrodynamic event responsible for electrolyte
+entrainment in gas-evolving electrochemical systems: coalescence between a
+large "parent" bubble and a smaller bubble. The key physical pathway is
+capillary-wave focusing on the smaller bubble that generates a Worthington
+jet and droplet pinch-off into the parent bubble.
+
+## Hydrodynamic Pathway (Captured Here)
+
+1. First contact creates a neck that expands rapidly.
+2. The neck launches capillary waves over the small bubble.
+3. Waves focus at the small bubble's south pole.
+4. A Worthington jet forms and breaks up, injecting droplets into the gas.
+
 ## Physical Setup
 
 Two initially spherical bubbles of different sizes are placed along the axis
@@ -31,12 +46,28 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
 
 ### Command-line Parameters
 
-- `OhOut`: Ohnesorge number for outer fluid, $Oh = \mu_{out}/\sqrt{\rho_{out} \sigma R}$
-- `RhoIn`: Density ratio $\rho_{in}/\rho_{out}$ (typically $10^{-3}$ for air-water)
-- `Rr`: Radius ratio of smaller to larger bubble (1.0 = equal size)
+- `OhOut`: Solvent Ohnesorge number based on the small bubble radius,
+  $Oh_s = \mu_{out}/\sqrt{\rho_{out} \sigma r}$
+- `RhoIn`: Density ratio $\rho_{b}/\rho_{s}$ (typically $10^{-3}$ for air-water)
+- `Rr`: Radius ratio $r/R$ (small to large bubble). Note that some literature
+  reports the inverse ($R/r$); this code uses $r/R$.
 - `MAXlevel`: Maximum adaptive mesh refinement level
 - `tmax`: Maximum simulation time
 - `zWall`: Wall position (distance from origin to left boundary)
+
+## Nondimensional Mapping Used in This Code
+
+- The large-bubble radius is the reference length ($R=1$).
+- The small-bubble radius is `r = Rr`.
+- The bubble viscosity ratio is fixed as `MuRin = 1e-2`, so
+  $Oh_b/Oh_s = 0.01$ with $Oh_b = \mu_b/\sqrt{\rho_s \sigma r}$.
+- Confinement is controlled via `zWall`: smaller `zWall` places the small
+  bubble closer to the wall, corresponding to smaller $\chi = d/r$.
+
+## Parameter Sweeps
+
+Typical sweeps vary `OhOut` and `Rr` (bulk) or `zWall` (confined) to build
+droplet/no-droplet regime maps and to quantify the first injected droplet size.
 
 ## Author
 

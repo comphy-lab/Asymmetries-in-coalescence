@@ -557,46 +557,51 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 <h2 id="running-with-scripts-recommended">Running with
                 Scripts (Recommended)</h2>
                 <h3 id="single-case">Single Case</h3>
-                <div class="code-block-container"><pre class="shell"><code># Serial execution (both stages: OpenMP for restart, then serial)
-./runSimulation.sh default.params
-
-# MPI execution (Stage 1: OpenMP, Stage 2: MPI)
-./runSimulation.sh --mpi --cores 8 default.params
-
-# Compile only (check for errors)
-./runSimulation.sh --compile-only default.params</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Serial execution (both stages: OpenMP for restart, then serial)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runSimulation.sh</span> default.params</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># MPI execution (Stage 1: OpenMP, Stage 2: MPI)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runSimulation.sh</span> <span class="at">--mpi</span> <span class="at">--cores</span> 8 default.params</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compile only (check for errors)</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runSimulation.sh</span> <span class="at">--compile-only</span> default.params</span></code></pre></div></div>
                 <h3 id="parameter-sweep">Parameter Sweep</h3>
-                <div class="code-block-container"><pre class="shell"><code># Dry run (see parameter combinations)
-./runParameterSweep.sh --dry-run
-
-# Run all combinations (serial)
-./runParameterSweep.sh sweep.params
-
-# Run with MPI (8 cores per case)
-./runParameterSweep.sh --mpi --cores 8 sweep.params</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Dry run (see parameter combinations)</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runParameterSweep.sh</span> <span class="at">--dry-run</span></span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run all combinations (serial)</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runParameterSweep.sh</span> sweep.params</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run with MPI (8 cores per case)</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runParameterSweep.sh</span> <span class="at">--mpi</span> <span class="at">--cores</span> 8 sweep.params</span></code></pre></div></div>
                 <h3 id="hpc-snellius">HPC (Snellius)</h3>
-                <div class="code-block-container"><pre class="shell"><code># Submit parameter sweep to SLURM
-sbatch runSweepSnellius.sbatch</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Submit parameter sweep to SLURM</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">sbatch</span> runSweepSnellius.sbatch</span></code></pre></div></div>
                 <h3 id="post-processing">Post-Processing</h3>
-                <div class="code-block-container"><pre class="shell"><code># Process multiple cases with default settings
-./runPostProcess-Ncases.sh 3000 3001 3002
-
-# Process a range of cases
-./runPostProcess-Ncases.sh 3000-3010
-
-# Process with 8 CPUs and custom snapshot count
-./runPostProcess-Ncases.sh --CPUs 8 --nGFS 100 3000
-
-# Skip video encoding (only generate frames)
-./runPostProcess-Ncases.sh --skip-video-encode 3000
-
-# Dry run to preview commands
-./runPostProcess-Ncases.sh --dry-run 3000</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Process multiple cases with default settings</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runPostProcess-Ncases.sh</span> 3000 3001 3002</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Process a range of cases</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runPostProcess-Ncases.sh</span> 3000-3010</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Process with 8 CPUs and custom snapshot count</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runPostProcess-Ncases.sh</span> <span class="at">--CPUs</span> 8 <span class="at">--nGFS</span> 100 3000</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Skip video encoding (only generate frames)</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runPostProcess-Ncases.sh</span> <span class="at">--skip-video-encode</span> 3000</span></code></pre></div></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Dry run to preview commands</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./runPostProcess-Ncases.sh</span> <span class="at">--dry-run</span> 3000</span></code></pre></div></div>
                 <p><strong>C Helper Tools</strong> (must be compiled
                 before running):</p>
-                <div class="code-block-container"><pre class="shell"><code>qcc -O2 -Wall postProcess/getFacet.c -o postProcess/getFacet -lm
-qcc -O2 -Wall postProcess/getData-generic.c -o postProcess/getData-generic -lm
-qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> postProcess/getFacet.c <span class="at">-o</span> postProcess/getFacet <span class="at">-lm</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> postProcess/getData-generic.c <span class="at">-o</span> postProcess/getData-generic <span class="at">-lm</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> postProcess/getCOM.c <span class="at">-o</span> postProcess/getCOM <span class="at">-lm</span></span></code></pre></div></div>
                 <ul>
                 <li><code>getFacet</code>: Extracts interface facets
                 using PLIC reconstruction</li>
@@ -630,13 +635,15 @@ qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm</code></pre></div>
                 <ol type="1">
                 <li>Using the vanilla basilisk method:</li>
                 </ol>
-                <div class="code-block-container"><pre class="shell"><code>qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm 
-./coalescenceBubble</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> </span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span></span></code></pre></div></div>
                 <ol start="2" type="1">
                 <li>Using the makefile (can be interactively run using
                 bview browser):</li>
                 </ol>
-                <div class="code-block-container"><pre class="shell"><code>CFLAGS=-DDISPLAY=-1 make coalescenceBubble.tst</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="va">CFLAGS</span><span class="op">=</span>-DDISPLAY=-1 <span class="fu">make</span> coalescenceBubble.tst</span></code></pre></div></div>
                 <p>Check the localhost on
                 coalescenceBubble/display.html. something like: <a
                 href="https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100">https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100</a>
@@ -644,9 +651,10 @@ qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm</code></pre></div>
                 <h3
                 id="to-run-using-openmp-please-use-the-flag--fopenmp">To
                 run using openMP, please use the flag -fopenmp</h3>
-                <div class="code-block-container"><pre class="shell"><code>qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
-export OMP_NUM_THREADS=8
-./coalescenceBubble</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> <span class="at">-fopenmp</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">OMP_NUM_THREADS</span><span class="op">=</span>8</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span></span></code></pre></div></div>
                 <p><strong>Note:</strong> The code will not directly
                 work with openmpi (with -D_MPI flag and mpirun). To do
                 that, please follow the procedure we use:</p>
@@ -654,16 +662,18 @@ export OMP_NUM_THREADS=8
                 <li>Run the following for a few timesteps (stop using
                 tmax=1e-2 or so)</li>
                 </ol>
-                <div class="code-block-container"><pre class="shell"><code>qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
-export OMP_NUM_THREADS=8
-./coalescenceBubble</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> <span class="at">-fopenmp</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">OMP_NUM_THREADS</span><span class="op">=</span>8</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span></span></code></pre></div></div>
                 <p>This will generate a “restart” file</p>
                 <ol start="2" type="1">
                 <li>Do not delete the restart file. Now you can use
                 mpirun, like:</li>
                 </ol>
-                <div class="code-block-container"><pre class="shell"><code>CC99=&#39;mpicc -std=c99&#39; qcc -Wall -O2 -D_MPI=1 -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
-mpirun -np 8 coalescenceBubble</code></pre></div>
+                <div class="code-block-container"><div class="code-block-container"><pre
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="va">CC99</span><span class="op">=</span><span class="st">&#39;mpicc -std=c99&#39;</span> <span class="ex">qcc</span> <span class="at">-Wall</span> <span class="at">-O2</span> <span class="at">-D_MPI</span><span class="op">=</span>1 <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="ex">mpirun</span> <span class="at">-np</span> 8 coalescenceBubble</span></code></pre></div></div>
                 <h2 id="generated-documentation">Generated
                 Documentation</h2>
                 <h3 id="root-directory">Root Directory</h3>
@@ -699,10 +709,6 @@ mpirun -np 8 coalescenceBubble</code></pre></div>
                 </ul>
                 <h3 id="simulationcases">simulationCases</h3>
                 <ul>
-                <li><a
-                href="simulationCases/2000/case.params.html">simulationCases/2000/case.params</a></li>
-                <li><a
-                href="simulationCases/2000/coalescenceBubble.c.html">simulationCases/2000/coalescenceBubble.c</a></li>
                 <li><a
                 href="simulationCases/coalescenceBubble-tag.c.html">simulationCases/coalescenceBubble-tag.c</a></li>
                 <li><a

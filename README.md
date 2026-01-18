@@ -68,55 +68,71 @@ The `coalescenceBubble-tag.c` file additionally uses `tag.h` for tracking shape 
 ## Running with Scripts (Recommended)
 
 ### Single Case
-```shell
+```bash
 # Serial execution (both stages: OpenMP for restart, then serial)
 ./runSimulation.sh default.params
+```
 
+```bash
 # MPI execution (Stage 1: OpenMP, Stage 2: MPI)
 ./runSimulation.sh --mpi --cores 8 default.params
+```
 
+```bash
 # Compile only (check for errors)
 ./runSimulation.sh --compile-only default.params
 ```
 
 ### Parameter Sweep
-```shell
+```bash
 # Dry run (see parameter combinations)
 ./runParameterSweep.sh --dry-run
+```
 
+```bash
 # Run all combinations (serial)
 ./runParameterSweep.sh sweep.params
+```
 
+```bash
 # Run with MPI (8 cores per case)
 ./runParameterSweep.sh --mpi --cores 8 sweep.params
 ```
 
 ### HPC (Snellius)
-```shell
+```bash
 # Submit parameter sweep to SLURM
 sbatch runSweepSnellius.sbatch
 ```
 
 ### Post-Processing
-```shell
+```bash
 # Process multiple cases with default settings
 ./runPostProcess-Ncases.sh 3000 3001 3002
+```
 
+```bash
 # Process a range of cases
 ./runPostProcess-Ncases.sh 3000-3010
+```
 
+```bash
 # Process with 8 CPUs and custom snapshot count
 ./runPostProcess-Ncases.sh --CPUs 8 --nGFS 100 3000
+```
 
+```bash
 # Skip video encoding (only generate frames)
 ./runPostProcess-Ncases.sh --skip-video-encode 3000
+```
 
+```bash
 # Dry run to preview commands
 ./runPostProcess-Ncases.sh --dry-run 3000
 ```
 
 **C Helper Tools** (must be compiled before running):
-```shell
+```bash
 qcc -O2 -Wall postProcess/getFacet.c -o postProcess/getFacet -lm
 qcc -O2 -Wall postProcess/getData-generic.c -o postProcess/getData-generic -lm
 qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm
@@ -146,21 +162,21 @@ There are two ways to run the codes:
 
 1. Using the vanilla basilisk method:
 
-```shell
+```bash
 qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm 
 ./coalescenceBubble
 ```
 
 2. Using the makefile (can be interactively run using bview browser):
 
-```shell
+```bash
 CFLAGS=-DDISPLAY=-1 make coalescenceBubble.tst
 ```
 Check the localhost on coalescenceBubble/display.html. something like: [https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100](https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100) and run interactively.
 
 ### To run using openMP, please use the flag -fopenmp
 
-```shell
+```bash
 qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
 export OMP_NUM_THREADS=8
 ./coalescenceBubble
@@ -169,7 +185,7 @@ export OMP_NUM_THREADS=8
 **Note:** The code will not directly work with openmpi (with -D_MPI flag and mpirun). To do that, please follow the procedure we use: 
 
 1. Run the following for a few timesteps (stop using tmax=1e-2 or so)
-```shell
+```bash
 qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
 export OMP_NUM_THREADS=8
 ./coalescenceBubble
@@ -179,7 +195,7 @@ This will generate a "restart" file
 
 2. Do not delete the restart file. Now you can use mpirun, like:
 
-```shell
+```bash
 CC99='mpicc -std=c99' qcc -Wall -O2 -D_MPI=1 -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
 mpirun -np 8 coalescenceBubble
 ```

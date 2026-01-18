@@ -4,6 +4,13 @@
 This is an **optional** extended version of `coalescenceBubble.c` that provides
 additional interface tracking using Basilisk's `tag.h` functionality.
 
+## Scientific Context
+
+The simulations target coalescence-driven droplet injection into a parent
+bubble (Worthington jetting after capillary-wave focusing). This tagged version
+helps quantify geometry (poles, equatorial radius) while filtering out small
+satellite droplets that can otherwise bias diagnostics.
+
 ## Key Differences from coalescenceBubble.c
 
 1. Uses `two-phase-tag.h` instead of `two-phase.h` (adds `ftag[]` field)
