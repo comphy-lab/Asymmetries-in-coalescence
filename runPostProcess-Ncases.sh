@@ -99,46 +99,20 @@ EOF
 # ============================================================
 expand_case_arg() {
     local arg="$1"
-
-    # Check if it's a range (contains hyphen between two numbers)
+    # Check if it's a range (contains hyphen between two 4-digit numbers)
     if [[ "$arg" =~ ^([0-9]{4})-([0-9]{4})$ ]]; then
         local start="${BASH_REMATCH[1]}"
         local end="${BASH_REMATCH[2]}"
-
-        # Validate range bounds
-        if [ "$start" -lt 1000 ] || [ "$start" -gt 9999 ]; then
-            echo "ERROR: Range start out of bounds (1000-9999): $start" >&2
-            return 1
-        fi
-        if [ "$end" -lt 1000 ] || [ "$end" -gt 9999 ]; then
-            echo "ERROR: Range end out of bounds (1000-9999): $end" >&2
-            return 1
-        fi
-
-        # Validate range order
         if [ "$start" -gt "$end" ]; then
-            echo "ERROR: Invalid range (start > end): $arg" >&2
+            echo "ERROR: Invalid range $arg (start > end)" >&2
             return 1
         fi
-
-        # Expand range using seq
         seq "$start" "$end"
         return 0
     fi
-
-    # Check if it's a single 4-digit number
-    if [[ "$arg" =~ ^[0-9]{4}$ ]]; then
-        if [ "$arg" -lt 1000 ] || [ "$arg" -gt 9999 ]; then
-            echo "ERROR: Case number out of range (1000-9999): $arg" >&2
-            return 1
-        fi
-        echo "$arg"
-        return 0
-    fi
-
-    # Invalid format
-    echo "ERROR: Invalid case argument (expected 4-digit number or range): $arg" >&2
-    return 1
+    # Single case number
+    echo "$arg"
+    return 0
 }
 
 # ============================================================
@@ -156,7 +130,6 @@ SKIP_VIDEO_ENCODE=0
 DRY_RUN=0
 VERBOSE=0
 
-RAW_CASE_ARGS=()
 CASE_NUMBERS=()
 
 while [[ $# -gt 0 ]]; do
@@ -223,37 +196,40 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            # Collect raw case arguments (numbers or ranges)
-            RAW_CASE_ARGS+=("$1")
+            # Expand ranges and collect case numbers
+            # Capture output and check exit status before appending
+            if ! expanded_cases=$(expand_case_arg "$1"); then
+                # expand_case_arg already printed error to stderr
+                exit 1
+            fi
+            while IFS= read -r case_no; do
+                CASE_NUMBERS+=("$case_no")
+            done <<< "$expanded_cases"
             shift
             ;;
     esac
-done
-
-# Expand raw case arguments into individual case numbers
-for raw_arg in "${RAW_CASE_ARGS[@]}"; do
-    expanded=$(expand_case_arg "$raw_arg") || exit 1
-    while IFS= read -r case_no; do
-        CASE_NUMBERS+=("$case_no")
-    done <<< "$expanded"
 done
 
 # ============================================================
 # Validation
 # ============================================================
 
-# Check at least one case argument provided
-if [ ${#RAW_CASE_ARGS[@]} -eq 0 ]; then
+# Check at least one case number provided
+if [ ${#CASE_NUMBERS[@]} -eq 0 ]; then
     echo "ERROR: No case numbers provided" >&2
     usage
     exit 1
 fi
 
-# Note: Individual case number validation is handled by expand_case_arg()
-
 # Check Python availability
 if ! command -v python &> /dev/null; then
     echo "ERROR: python not found in PATH" >&2
+    exit 1
+fi
+
+# Check qcc availability (needed to compile helpers)
+if ! command -v qcc &> /dev/null; then
+    echo "ERROR: qcc not found in PATH" >&2
     exit 1
 fi
 
@@ -263,12 +239,35 @@ if [ ! -f "$VIDEO_SCRIPT" ]; then
     exit 1
 fi
 
-# Check C helpers exist
+# Compile C helpers (always recompile to ensure consistency)
+echo "Compiling C helpers..."
+pushd "${SCRIPT_DIR}/postProcess" > /dev/null
+
+if ! qcc -O2 -Wall -disable-dimensions getFacet.c -o getFacet -lm; then
+    echo "ERROR: Failed to compile getFacet.c" >&2
+    popd > /dev/null
+    exit 1
+fi
+
+if ! qcc -O2 -Wall -disable-dimensions getData-generic.c -o getData-generic -lm; then
+    echo "ERROR: Failed to compile getData-generic.c" >&2
+    popd > /dev/null
+    exit 1
+fi
+
+if ! qcc -O2 -Wall -disable-dimensions getCOM.c -o getCOM -lm; then
+    echo "ERROR: Failed to compile getCOM.c" >&2
+    popd > /dev/null
+    exit 1
+fi
+
+popd > /dev/null
+echo "C helpers compiled successfully"
+
+# Validate helpers are executable (sanity check after compilation)
 for helper in "$HELPER_GETFACET" "$HELPER_GETDATA" "$HELPER_GETCOM"; do
     if [ ! -x "$helper" ]; then
-        helper_name=$(basename "$helper")
-        echo "ERROR: Compiled helper not found or not executable: $helper" >&2
-        echo "       Compile with: qcc -O2 -Wall postProcess/${helper_name}.c -o postProcess/${helper_name} -lm" >&2
+        echo "ERROR: Compiled helper not executable: $helper" >&2
         exit 1
     fi
 done
@@ -404,6 +403,13 @@ for case_no in "${CASE_NUMBERS[@]}"; do
     # Count snapshots
     snapshot_count=$(find "$intermediate_dir" -name "snapshot-*" 2>/dev/null | wc -l | tr -d ' ')
     echo "  Found $snapshot_count snapshots in intermediate/"
+
+    # Display case parameters if case.params exists
+    case_params="${case_dir}/case.params"
+    if [ -f "$case_params" ] && [ $VERBOSE -eq 1 ]; then
+        parse_param_file "$case_params"
+        echo "  Parameters: OhOut=$(get_param "OhOut" "?"), Rr=$(get_param "Rr" "?"), MAXlevel=$(get_param "MAXlevel" "?")"
+    fi
 
     if [ "$snapshot_count" -eq 0 ]; then
         echo "  ERROR: No snapshots found"

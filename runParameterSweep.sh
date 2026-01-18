@@ -298,7 +298,7 @@ generate_combinations() {
 
         # Override CaseNo
         if grep -q "^CaseNo=" "$case_file"; then
-            sed -i.bak "s|^CaseNo=.*|CaseNo=${CASE_NUM}|" "$case_file"
+            sed -i'.bak' "s|^CaseNo=.*|CaseNo=${CASE_NUM}|" "$case_file"
         else
             echo "CaseNo=${CASE_NUM}" >> "$case_file"
         fi
@@ -310,7 +310,7 @@ generate_combinations() {
             local val="${current_values[$i]}"
 
             if grep -q "^${var}=" "$case_file"; then
-                sed -i.bak "s|^${var}=.*|${var}=${val}|" "$case_file"
+                sed -i'.bak' "s|^${var}=.*|${var}=${val}|" "$case_file"
             else
                 echo "${var}=${val}" >> "$case_file"
             fi

@@ -54,7 +54,7 @@ Last updated: Jan 2026
 #include "navier-stokes/conserving.h"
 #include "tension.h"
 
-#if !MPI
+#if !_MPI
 #include "distance.h"
 #endif
 
@@ -78,12 +78,10 @@ Adaptive mesh refinement is controlled by these error thresholds:
 
 - `fErr`: VOF volume fraction tolerance (determines interface resolution)
 - `VelErr`: Velocity field tolerance (captures flow gradients)
-- `TOL`: Position tolerance for geometric measurements
 */
 
 #define fErr (1e-3)
 #define VelErr (1e-2)
-#define TOL (1e-2)
 
 /**
 ## Boundary Conditions
@@ -157,6 +155,10 @@ int main(int argc, char const *argv[]) {
   sprintf (comm, "mkdir -p intermediate");
   system(comm);
   sprintf (dumpFile, "restart");
+
+  TOLERANCE = 1e-4;
+  CFL = 1e-1;
+
 
   run();
 }
