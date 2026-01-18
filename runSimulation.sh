@@ -16,12 +16,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Stage 1 tmax - short run to generate restart file
 STAGE1_TMAX="5e-2"
 
+# Source version configuration for install instructions
+if [ -f "${SCRIPT_DIR}/src-local/basilisk_version.sh" ]; then
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/src-local/basilisk_version.sh"
+fi
+
 # Source project configuration
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
+    # shellcheck disable=SC1090
     source "${SCRIPT_DIR}/.project_config"
 else
-    echo "ERROR: .project_config not found" >&2
-    exit 1
+    echo "WARNING: .project_config not found. BASILISK path may not be set." >&2
+    echo "         Install Basilisk first (creates .project_config):" >&2
+    echo "         curl -sL ${BASILISK_INSTALL_URL:-https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh} | bash -s -- --ref=${BASILISK_REF:-v2026-01-13}" >&2
 fi
 
 # Source parameter parsing library
@@ -60,6 +68,8 @@ Parallelization:
 Other Options:
     -c, --compile-only  Compile but don't run simulation
     -d, --debug         Compile with debug flags (-g -DTRASH=1)
+    -f, --force         Force overwrite of case.params and source file
+                        (by default, existing files are preserved for reruns)
     -v, --verbose       Verbose output
     -h, --help          Show this help message
 
@@ -97,6 +107,7 @@ EOF
 COMPILE_ONLY=0
 DEBUG_FLAGS=""
 VERBOSE=0
+FORCE_OVERWRITE=0
 STAGE=0                # Default to both stages (0 = both, 1 = stage1, 2 = stage2)
 FOPENMP_ENABLED=0
 FOPENMP_THREADS=8      # Default thread count
@@ -113,6 +124,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--debug)
             DEBUG_FLAGS="-g -DTRASH=1"
+            shift
+            ;;
+        -f|--force)
+            FORCE_OVERWRITE=1
             shift
             ;;
         --stage1)
@@ -260,8 +275,38 @@ fi
 CASE_DIR="simulationCases/${CASE_NO}"
 
 # ============================================================
+# Create Case Directory
+# ============================================================
+if [ ! -d "$CASE_DIR" ]; then
+    echo "Creating case directory: $CASE_DIR"
+    mkdir -p "$CASE_DIR"
+else
+    echo "Case directory exists"
+fi
+
+# Copy or preserve case.params
+if [ $FORCE_OVERWRITE -eq 1 ]; then
+    cp "$PARAM_FILE" "$CASE_DIR/case.params"
+    echo "Copied case.params (--force: overwriting existing)"
+elif [ ! -f "$CASE_DIR/case.params" ]; then
+    cp "$PARAM_FILE" "$CASE_DIR/case.params"
+else
+    echo "Using existing case.params (manual edits preserved; use --force to overwrite)"
+    # Re-parse from case.params to get potentially modified values
+    parse_param_file "$CASE_DIR/case.params"
+    OhOut=$(get_param "OhOut" "1e-2")
+    RhoIn=$(get_param "RhoIn" "1e-3")
+    Rr=$(get_param "Rr" "1.0")
+    MAXlevel=$(get_param "MAXlevel" "10")
+    tmax=$(get_param "tmax" "40.0")
+    zWall=$(get_param "zWall" "0.01")
+fi
+
+# ============================================================
 # Display Configuration
 # ============================================================
+# NOTE: Display AFTER preservation logic so values reflect what will actually be used
+echo ""
 echo "========================================="
 echo "Bubble Coalescence Simulation"
 echo "========================================="
@@ -289,31 +334,6 @@ else
 fi
 echo ""
 
-# ============================================================
-# Create Case Directory
-# ============================================================
-if [ ! -d "$CASE_DIR" ]; then
-    echo "Creating case directory: $CASE_DIR"
-    mkdir -p "$CASE_DIR"
-else
-    echo "Case directory exists"
-fi
-
-# Use existing case.params if present (allows manual parameter edits for reruns)
-if [ ! -f "$CASE_DIR/case.params" ]; then
-    cp "$PARAM_FILE" "$CASE_DIR/case.params"
-else
-    echo "Using existing case.params (manual edits preserved)"
-    # Re-parse from case.params
-    parse_param_file "$CASE_DIR/case.params"
-    OhOut=$(get_param "OhOut" "1e-2")
-    RhoIn=$(get_param "RhoIn" "1e-3")
-    Rr=$(get_param "Rr" "1.0")
-    MAXlevel=$(get_param "MAXlevel" "10")
-    tmax=$(get_param "tmax" "40.0")
-    zWall=$(get_param "zWall" "0.01")
-fi
-
 # Change to case directory
 cd "$CASE_DIR"
 [ $VERBOSE -eq 1 ] && echo "Working directory: $(pwd)"
@@ -331,12 +351,15 @@ if [ ! -f "$SRC_FILE_ORIG" ]; then
     exit 1
 fi
 
-# Use existing source file if present (allows local code edits for reruns)
-if [ ! -f "$SRC_FILE_LOCAL" ]; then
+# Copy or preserve source file
+if [ $FORCE_OVERWRITE -eq 1 ]; then
+    cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
+    echo "Copied source file (--force: overwriting existing)"
+elif [ ! -f "$SRC_FILE_LOCAL" ]; then
     cp "$SRC_FILE_ORIG" "$SRC_FILE_LOCAL"
     echo "Copied source file to case directory"
 else
-    echo "Using existing coalescenceBubble.c (local edits preserved)"
+    echo "Using existing coalescenceBubble.c (local edits preserved; use --force to overwrite)"
 fi
 
 # Create symlink to DataFiles (required for initial condition loading)
@@ -405,8 +428,9 @@ if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
 
     ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall
 
-    if [ ! -f "restart" ]; then
-        echo "ERROR: Stage 1 failed - restart file was not created" >&2
+    # Validate the restart file was created successfully
+    if ! validate_restart_file "restart"; then
+        echo "ERROR: Stage 1 failed - restart file validation failed" >&2
         exit 1
     fi
 
@@ -427,9 +451,8 @@ fi
 # Stage 2: Full Simulation
 # ============================================================
 if [ $STAGE -eq 2 ] || [ $STAGE -eq 0 ]; then
-    # Check restart file exists
-    if [ ! -f "restart" ]; then
-        echo "ERROR: restart file not found in $CASE_DIR" >&2
+    # Validate restart file (exists, non-empty, readable)
+    if ! validate_restart_file "restart"; then
         echo "       Run Stage 1 first: $0 --stage1 $PARAM_FILE" >&2
         exit 1
     fi
