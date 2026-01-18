@@ -75,8 +75,17 @@ echo ""
 # Setup Basilisk Environment
 # ============================================================
 echo "Setting up Basilisk environment..."
-echo "Installing Basilisk (ref-locked)..."
-curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13 --hard
+
+# Source version configuration
+if [ -f "${SCRIPT_DIR}/src-local/basilisk_version.sh" ]; then
+    source "${SCRIPT_DIR}/src-local/basilisk_version.sh"
+else
+    echo "ERROR: src-local/basilisk_version.sh not found" >&2
+    exit 1
+fi
+
+echo "Installing Basilisk (ref: ${BASILISK_REF})..."
+install_basilisk --hard
 if [ -f "${SCRIPT_DIR}/.project_config" ]; then
     source "${SCRIPT_DIR}/.project_config"
     echo "Basilisk environment loaded from .project_config"
