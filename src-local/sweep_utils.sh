@@ -120,6 +120,8 @@ print_sweep_variables() {
 # Setup temporary directory for sweep generation
 # Sets: SWEEP_TEMP_DIR
 # Usage: setup_sweep_temp_dir [base_dir]
+# WARNING: Sets an EXIT trap for cleanup which overrides any existing
+#          EXIT trap. Calling scripts should not set their own EXIT traps.
 # ============================================================
 setup_sweep_temp_dir() {
     local base_dir="${1:-}"
@@ -277,10 +279,9 @@ sweep_progress_init() {
 }
 
 # Update and display progress
-# Usage: sweep_progress_update <case_no>
+# Usage: sweep_progress_update
 # Returns: Prints progress line with ETA
 sweep_progress_update() {
-    local case_no="$1"
     SWEEP_PROGRESS_COMPLETED=$((SWEEP_PROGRESS_COMPLETED + 1))
 
     local elapsed=$(($(date +%s) - SWEEP_PROGRESS_START_TIME))
