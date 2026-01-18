@@ -197,9 +197,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             # Expand ranges and collect case numbers
+            # Capture output and check exit status before appending
+            if ! expanded_cases=$(expand_case_arg "$1"); then
+                # expand_case_arg already printed error to stderr
+                exit 1
+            fi
             while IFS= read -r case_no; do
                 CASE_NUMBERS+=("$case_no")
-            done < <(expand_case_arg "$1")
+            done <<< "$expanded_cases"
             shift
             ;;
     esac
