@@ -66,6 +66,16 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://comphy-lab.org/Asymmetries-in-coalescence/simulationCases/2000/case.params.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://comphy-lab.org/Asymmetries-in-coalescence/simulationCases/2000/coalescenceBubble.c.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://comphy-lab.org/Asymmetries-in-coalescence/simulationCases/coalescenceBubble-tag.c.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -76,7 +86,17 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://comphy-lab.org/Asymmetries-in-coalescence/src-local/basilisk_version.sh.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://comphy-lab.org/Asymmetries-in-coalescence/src-local/parse_params.sh.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://comphy-lab.org/Asymmetries-in-coalescence/src-local/sweep_utils.sh.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

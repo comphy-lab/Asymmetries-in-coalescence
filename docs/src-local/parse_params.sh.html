@@ -653,7 +653,7 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb1-219"><a href="#cb1-219" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-220"><a href="#cb1-220" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Replace in parameter file (or append if not present)</span></span>
 <span id="cb1-221"><a href="#cb1-221" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="fu">grep</span> <span class="at">-q</span> <span class="st">&quot;^</span><span class="dt">\$</span><span class="st">{var}=&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-222"><a href="#cb1-222" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">sed</span> <span class="at">-i.bak</span> <span class="st">&quot;s|^</span><span class="dt">\$</span><span class="st">{var}=.*|</span><span class="dt">\$</span><span class="st">{var}=</span><span class="dt">\$</span><span class="st">{val}|&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
+<span id="cb1-222"><a href="#cb1-222" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">sed</span> <span class="at">-i</span><span class="st">&#39;.bak&#39;</span> <span class="st">&quot;s|^</span><span class="dt">\$</span><span class="st">{var}=.*|</span><span class="dt">\$</span><span class="st">{var}=</span><span class="dt">\$</span><span class="st">{val}|&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
 <span id="cb1-223"><a href="#cb1-223" aria-hidden="true" tabindex="-1"></a>                <span class="cf">else</span></span>
 <span id="cb1-224"><a href="#cb1-224" aria-hidden="true" tabindex="-1"></a>                    <span class="bu">echo</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{var}=</span><span class="dt">\$</span><span class="st">{val}&quot;</span> <span class="op">&gt;&gt;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
 <span id="cb1-225"><a href="#cb1-225" aria-hidden="true" tabindex="-1"></a>                <span class="cf">fi</span></span>
@@ -665,7 +665,7 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb1-231"><a href="#cb1-231" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-232"><a href="#cb1-232" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Set output directory in the case file</span></span>
 <span id="cb1-233"><a href="#cb1-233" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="fu">grep</span> <span class="at">-q</span> <span class="st">&quot;^output_dir=&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-234"><a href="#cb1-234" aria-hidden="true" tabindex="-1"></a>                <span class="fu">sed</span> <span class="at">-i.bak</span> <span class="st">&quot;s|^output_dir=.*|output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}|&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
+<span id="cb1-234"><a href="#cb1-234" aria-hidden="true" tabindex="-1"></a>                <span class="fu">sed</span> <span class="at">-i</span><span class="st">&#39;.bak&#39;</span> <span class="st">&quot;s|^output_dir=.*|output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}|&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
 <span id="cb1-235"><a href="#cb1-235" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span></span>
 <span id="cb1-236"><a href="#cb1-236" aria-hidden="true" tabindex="-1"></a>                <span class="bu">echo</span> <span class="st">&quot;output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}&quot;</span> <span class="op">&gt;&gt;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
 <span id="cb1-237"><a href="#cb1-237" aria-hidden="true" tabindex="-1"></a>            <span class="cf">fi</span></span>
@@ -753,7 +753,47 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb1-319"><a href="#cb1-319" aria-hidden="true" tabindex="-1"></a>        <span class="va">key</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{key#PARAM_}&quot;</span></span>
 <span id="cb1-320"><a href="#cb1-320" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;  </span><span class="dt">\$</span><span class="st">key = </span><span class="dt">\$</span><span class="st">value&quot;</span></span>
 <span id="cb1-321"><a href="#cb1-321" aria-hidden="true" tabindex="-1"></a>    <span class="cf">done</span></span>
-<span id="cb1-322"><a href="#cb1-322" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span></code></pre></div></div>
+<span id="cb1-322"><a href="#cb1-322" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
+<span id="cb1-323"><a href="#cb1-323" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-324"><a href="#cb1-324" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-325"><a href="#cb1-325" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: validate_restart_file</span></span>
+<span id="cb1-326"><a href="#cb1-326" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-327"><a href="#cb1-327" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
+<span id="cb1-328"><a href="#cb1-328" aria-hidden="true" tabindex="-1"></a><span class="co">#   Validate a restart file exists, is non-empty, and is readable.</span></span>
+<span id="cb1-329"><a href="#cb1-329" aria-hidden="true" tabindex="-1"></a><span class="co">#   Provides clear error messages for each failure case.</span></span>
+<span id="cb1-330"><a href="#cb1-330" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-331"><a href="#cb1-331" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
+<span id="cb1-332"><a href="#cb1-332" aria-hidden="true" tabindex="-1"></a><span class="co">#   \$1 - Path to restart file (optional, defaults to &quot;restart&quot;)</span></span>
+<span id="cb1-333"><a href="#cb1-333" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-334"><a href="#cb1-334" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
+<span id="cb1-335"><a href="#cb1-335" aria-hidden="true" tabindex="-1"></a><span class="co">#   0 if valid, 1 if invalid</span></span>
+<span id="cb1-336"><a href="#cb1-336" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-337"><a href="#cb1-337" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
+<span id="cb1-338"><a href="#cb1-338" aria-hidden="true" tabindex="-1"></a><span class="co">#   if ! validate_restart_file &quot;restart&quot;; then</span></span>
+<span id="cb1-339"><a href="#cb1-339" aria-hidden="true" tabindex="-1"></a><span class="co">#       echo &quot;Cannot proceed without valid restart file&quot;</span></span>
+<span id="cb1-340"><a href="#cb1-340" aria-hidden="true" tabindex="-1"></a><span class="co">#       exit 1</span></span>
+<span id="cb1-341"><a href="#cb1-341" aria-hidden="true" tabindex="-1"></a><span class="co">#   fi</span></span>
+<span id="cb1-342"><a href="#cb1-342" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-343"><a href="#cb1-343" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_restart_file()</span> <span class="kw">{</span></span>
+<span id="cb1-344"><a href="#cb1-344" aria-hidden="true" tabindex="-1"></a>    <span class="bu">local</span> <span class="va">restart_file</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{1:-restart}&quot;</span></span>
+<span id="cb1-345"><a href="#cb1-345" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-346"><a href="#cb1-346" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-f</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-347"><a href="#cb1-347" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file not found: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-348"><a href="#cb1-348" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
+<span id="cb1-349"><a href="#cb1-349" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
+<span id="cb1-350"><a href="#cb1-350" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-351"><a href="#cb1-351" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-s</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-352"><a href="#cb1-352" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file is empty: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-353"><a href="#cb1-353" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
+<span id="cb1-354"><a href="#cb1-354" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
+<span id="cb1-355"><a href="#cb1-355" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-356"><a href="#cb1-356" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-r</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-357"><a href="#cb1-357" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file not readable: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-358"><a href="#cb1-358" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
+<span id="cb1-359"><a href="#cb1-359" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
+<span id="cb1-360"><a href="#cb1-360" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-361"><a href="#cb1-361" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span></span>
+<span id="cb1-362"><a href="#cb1-362" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span></code></pre></div></div>
             </div>
         </main>
 
