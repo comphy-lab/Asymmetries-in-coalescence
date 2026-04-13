@@ -23,6 +23,9 @@ fi
 # Post-processing script paths
 VIDEO_SCRIPT="${SCRIPT_DIR}/postProcess/Video-generic.py"
 
+# Python interpreter (prefer python3 when python is absent)
+PYTHON_BIN=""
+
 # C helper executables
 HELPER_GETFACET="${SCRIPT_DIR}/postProcess/getFacet"
 HELPER_GETDATA="${SCRIPT_DIR}/postProcess/getData-generic"
@@ -222,8 +225,12 @@ if [ ${#CASE_NUMBERS[@]} -eq 0 ]; then
 fi
 
 # Check Python availability
-if ! command -v python &> /dev/null; then
-    echo "ERROR: python not found in PATH" >&2
+if command -v python3 &> /dev/null; then
+    PYTHON_BIN="$(command -v python3)"
+elif command -v python &> /dev/null; then
+    PYTHON_BIN="$(command -v python)"
+else
+    echo "ERROR: Neither python3 nor python was found in PATH" >&2
     exit 1
 fi
 
@@ -357,11 +364,11 @@ run_video() {
     [ $SKIP_VIDEO_ENCODE -eq 1 ] && cmd_args+=("--skip-video-encode")
 
     if [ $VERBOSE -eq 1 ] || [ $DRY_RUN -eq 1 ]; then
-        echo "  CMD: python ${VIDEO_SCRIPT} ${cmd_args[*]}"
+        echo "  CMD: ${PYTHON_BIN} ${VIDEO_SCRIPT} ${cmd_args[*]}"
     fi
 
     if [ $DRY_RUN -eq 0 ]; then
-        python "${VIDEO_SCRIPT}" "${cmd_args[@]}"
+        "${PYTHON_BIN}" "${VIDEO_SCRIPT}" "${cmd_args[@]}"
     fi
 }
 

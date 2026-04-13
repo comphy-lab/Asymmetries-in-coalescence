@@ -149,7 +149,7 @@ generate_sweep_cases() {
     source "$sweep_file"
 
     # Check if BASE_CONFIG is defined
-    if [ -z "$BASE_CONFIG" ]; then
+    if [ -z "${BASE_CONFIG:-}" ]; then
         echo "ERROR: BASE_CONFIG not defined in sweep file" >&2
         return 1
     fi
@@ -207,7 +207,7 @@ generate_sweep_cases() {
         if [ $depth -eq ${#sweep_vars[@]} ]; then
             # Base case: all variables assigned, create parameter file
             local case_file="${temp_dir}/case_$(printf "%04d" $case_num).params"
-            local output_dir="$OUTPUT_TEMPLATE"
+            local output_dir="${OUTPUT_TEMPLATE:-}"
 
             # Copy base config
             cp "$BASE_CONFIG" "$case_file"
@@ -230,10 +230,12 @@ generate_sweep_cases() {
             done
 
             # Set output directory in the case file
-            if grep -q "^output_dir=" "$case_file"; then
-                sed -i'.bak' "s|^output_dir=.*|output_dir=${output_dir}|" "$case_file"
-            else
-                echo "output_dir=${output_dir}" >> "$case_file"
+            if [ -n "$output_dir" ]; then
+                if grep -q "^output_dir=" "$case_file"; then
+                    sed -i'.bak' "s|^output_dir=.*|output_dir=${output_dir}|" "$case_file"
+                else
+                    echo "output_dir=${output_dir}" >> "$case_file"
+                fi
             fi
             rm -f "${case_file}.bak"
 

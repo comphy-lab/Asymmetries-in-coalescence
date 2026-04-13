@@ -170,8 +170,12 @@ event init(t = 0){
     sprintf(filename,"InitialConditionRr-%3.2f.dat", Rr);
 
     char comm[160];
-    sprintf (comm, "scp -r DataFiles/%s .", filename);
-    system(comm);
+    snprintf (comm, sizeof(comm), "cp DataFiles/%s .", filename);
+    if (system(comm) != 0) {
+      fprintf(ferr, "Failed to copy initial-condition file '%s' from DataFiles/.\n",
+              filename);
+      return 1;
+    }
 
     FILE * fp = fopen(filename,"rb");
     if (fp == NULL){

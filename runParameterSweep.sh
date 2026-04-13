@@ -209,12 +209,12 @@ echo ""
 source "$SWEEP_FILE"
 
 # Validate required variables
-if [ -z "$BASE_CONFIG" ]; then
+if [ -z "${BASE_CONFIG:-}" ]; then
     echo "ERROR: BASE_CONFIG not defined in sweep file" >&2
     exit 1
 fi
 
-if [ -z "$CASE_START" ] || [ -z "$CASE_END" ]; then
+if [ -z "${CASE_START:-}" ] || [ -z "${CASE_END:-}" ]; then
     echo "ERROR: CASE_START and CASE_END must be defined in sweep file" >&2
     exit 1
 fi

@@ -133,9 +133,9 @@ sbatch runSweepSnellius.sbatch
 
 **C Helper Tools** (must be compiled before running):
 ```bash
-qcc -O2 -Wall postProcess/getFacet.c -o postProcess/getFacet -lm
-qcc -O2 -Wall postProcess/getData-generic.c -o postProcess/getData-generic -lm
-qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm
+qcc -O2 -Wall -disable-dimensions postProcess/getFacet.c -o postProcess/getFacet -lm
+qcc -O2 -Wall -disable-dimensions postProcess/getData-generic.c -o postProcess/getData-generic -lm
+qcc -O2 -Wall -disable-dimensions postProcess/getCOM.c -o postProcess/getCOM -lm
 ```
 
 - `getFacet`: Extracts interface facets using PLIC reconstruction
@@ -163,13 +163,15 @@ There are two ways to run the codes:
 1. Using the vanilla basilisk method:
 
 ```bash
-qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm 
-./coalescenceBubble
+cd simulationCases
+qcc -I../src-local -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
+./coalescenceBubble 1e-2 1e-3 1.00 12 1.5 0.05
 ```
 
 2. Using the makefile (can be interactively run using bview browser):
 
 ```bash
+cd simulationCases
 CFLAGS=-DDISPLAY=-1 make coalescenceBubble.tst
 ```
 Check the localhost on coalescenceBubble/display.html. something like: [https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100](https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100) and run interactively.
@@ -177,18 +179,20 @@ Check the localhost on coalescenceBubble/display.html. something like: [https://
 ### To run using openMP, please use the flag -fopenmp
 
 ```bash
-qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
+cd simulationCases
+qcc -I../src-local -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
 export OMP_NUM_THREADS=8
-./coalescenceBubble
+./coalescenceBubble 1e-2 1e-3 1.00 12 1.5 0.05
 ```
 
 **Note:** The code will not directly work with openmpi (with -D_MPI flag and mpirun). To do that, please follow the procedure we use: 
 
 1. Run the following for a few timesteps (stop using tmax=1e-2 or so)
 ```bash
-qcc -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
+cd simulationCases
+qcc -I../src-local -O2 -Wall -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm -fopenmp
 export OMP_NUM_THREADS=8
-./coalescenceBubble
+./coalescenceBubble 1e-2 1e-3 1.00 12 1e-2 0.05
 ```
 
 This will generate a "restart" file
@@ -196,6 +200,7 @@ This will generate a "restart" file
 2. Do not delete the restart file. Now you can use mpirun, like:
 
 ```bash
-CC99='mpicc -std=c99' qcc -Wall -O2 -D_MPI=1 -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
-mpirun -np 8 coalescenceBubble
+cd simulationCases
+CC99='mpicc -std=c99' qcc -I../src-local -Wall -O2 -D_MPI=1 -disable-dimensions coalescenceBubble.c -o coalescenceBubble -lm
+mpirun -np 8 ./coalescenceBubble 1e-2 1e-3 1.00 12 1.5 0.05
 ```

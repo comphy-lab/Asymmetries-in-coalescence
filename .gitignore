@@ -107,6 +107,7 @@ slurm-*.err
 
 # Basilisk installation (managed externally)
 basilisk/
+.comphy-basilisk
 
 # Installation scripts (use remote version)
 reset_install*.sh
