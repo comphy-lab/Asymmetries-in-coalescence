@@ -149,9 +149,9 @@ qcc -O2 -Wall postProcess/getCOM.c -o postProcess/getCOM -lm
 
 ### Command Line Parameters
 The simulation takes 6 arguments: `OhOut RhoIn Rr MAXlevel tmax zWall`
-- `OhOut`: Ohnesorge number for outer fluid (e.g., 1e-2)
+- `OhOut`: Ohnesorge number for outer fluid, based on the small-bubble radius `R_s` (e.g., 1e-2)
 - `RhoIn`: Density ratio inner/outer (e.g., 1e-3)
-- `Rr`: Radius ratio - available values: 1.00, 1.50, 2.00, 4.00, 8.00 (matching DataFiles)
+- `Rr`: Radius ratio `R_l/R_s` with `R_s = 1` and `R_l = Rr`; available values: 1.00, 1.50, 2.00, 4.00, 8.00 (matching DataFiles)
 - `MAXlevel`: Maximum refinement level (e.g., 10)
 - `tmax`: Maximum simulation time (e.g., 40.0)
 - `zWall`: Wall position (e.g., 0.01)

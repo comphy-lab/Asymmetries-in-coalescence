@@ -621,14 +621,17 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 Parameters</h3>
                 <p>The simulation takes 6 arguments:
                 <code>OhOut RhoIn Rr MAXlevel tmax zWall</code> -
-                <code>OhOut</code>: Ohnesorge number for outer fluid
-                (e.g., 1e-2) - <code>RhoIn</code>: Density ratio
-                inner/outer (e.g., 1e-3) - <code>Rr</code>: Radius ratio
-                - available values: 1.00, 1.50, 2.00, 4.00, 8.00
-                (matching DataFiles) - <code>MAXlevel</code>: Maximum
-                refinement level (e.g., 10) - <code>tmax</code>: Maximum
-                simulation time (e.g., 40.0) - <code>zWall</code>: Wall
-                position (e.g., 0.01)</p>
+                <code>OhOut</code>: Ohnesorge number for outer fluid,
+                based on the small-bubble radius <code>R_s</code> (e.g.,
+                1e-2) - <code>RhoIn</code>: Density ratio inner/outer
+                (e.g., 1e-3) - <code>Rr</code>: Radius ratio
+                <code>R_l/R_s</code> with <code>R_s = 1</code> and
+                <code>R_l = Rr</code>; available values: 1.00, 1.50,
+                2.00, 4.00, 8.00 (matching DataFiles) -
+                <code>MAXlevel</code>: Maximum refinement level (e.g.,
+                10) - <code>tmax</code>: Maximum simulation time (e.g.,
+                40.0) - <code>zWall</code>: Wall position (e.g.,
+                0.01)</p>
                 <h2 id="running-manually-legacy">Running Manually
                 (Legacy)</h2>
                 <p>There are two ways to run the codes:</p>

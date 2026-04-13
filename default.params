@@ -12,14 +12,17 @@ CaseNo=2000
 # ============================================================
 # Physical Parameters (Dimensionless Numbers)
 # ============================================================
-# Ohnesorge number (outer fluid): Oh = mu/sqrt(rho*sigma*R)
+# Ohnesorge number (outer fluid), based on the small-bubble radius:
+# Oh_s = mu/sqrt(rho*sigma*R_s)
 # Controls viscous vs surface tension effects
 OhOut=1e-2
 
 # Density ratio: rho_inner/rho_outer (bubble in liquid ~ 1e-3)
 RhoIn=1e-3
 
-# Radius ratio: R_small/R_large
+# Radius ratio: R_large/R_small
+# In this repo the small bubble is the unit length, so:
+#   R_s = 1, R_l = Rr
 # Available values (matching DataFiles): 1.00, 1.50, 2.00, 4.00, 8.00
 Rr=1.00
 

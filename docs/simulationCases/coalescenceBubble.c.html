@@ -459,10 +459,11 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 </ol>
                 <h2 id="physical-setup">Physical Setup</h2>
                 <p>Two initially spherical bubbles of different sizes
-                are placed along the axis of symmetry. The larger bubble
-                has radius 1 (reference scale), while the smaller bubble
-                has radius <code>Rr</code> (the radius ratio parameter).
-                Surface tension drives the coalescence dynamics.</p>
+                are placed along the axis of symmetry. The smaller
+                bubble has radius 1 (reference scale), while the larger
+                bubble has radius <code>Rr</code> (the radius ratio
+                parameter). Surface tension drives the coalescence
+                dynamics.</p>
                 <h2 id="governing-equations">Governing Equations</h2>
                 <p>The incompressible Navier-Stokes equations with
                 surface tension:</p>
@@ -488,16 +489,16 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 <li><code>OhOut</code>: Solvent Ohnesorge number based
                 on the small bubble radius, <span
                 class="math inline">\(Oh_s = \mu_{out}/\sqrt{\rho_{out}
-                \sigma r}\)</span></li>
+                \sigma R_s}\)</span></li>
                 <li><code>RhoIn</code>: Density ratio <span
                 class="math inline">\(\rho_{b}/\rho_{s}\)</span>
                 (typically <span class="math inline">\(10^{-3}\)</span>
                 for air-water)</li>
                 <li><code>Rr</code>: Radius ratio <span
-                class="math inline">\(r/R\)</span> (small to large
-                bubble). Note that some literature reports the inverse
-                (<span class="math inline">\(R/r\)</span>); this code
-                uses <span class="math inline">\(r/R\)</span>.</li>
+                class="math inline">\(R_l/R_s\)</span> (large to small
+                bubble). The geometry files use the small bubble as the
+                unit length, so the larger bubble radius is
+                <code>Rr</code>.</li>
                 <li><code>MAXlevel</code>: Maximum adaptive mesh
                 refinement level</li>
                 <li><code>tmax</code>: Maximum simulation time</li>
@@ -508,18 +509,19 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 id="nondimensional-mapping-used-in-this-code">Nondimensional
                 Mapping Used in This Code</h2>
                 <ul>
-                <li>The large-bubble radius is the reference length
-                (<span class="math inline">\(R=1\)</span>).</li>
-                <li>The small-bubble radius is <code>r = Rr</code>.</li>
+                <li>The small-bubble radius is the reference length
+                (<span class="math inline">\(R_s=1\)</span>).</li>
+                <li>The large-bubble radius is
+                <code>R_l = Rr</code>.</li>
                 <li>The bubble viscosity ratio is fixed as
                 <code>MuRin = 1e-2</code>, so <span
                 class="math inline">\(Oh_b/Oh_s = 0.01\)</span> with
                 <span class="math inline">\(Oh_b = \mu_b/\sqrt{\rho_s
-                \sigma r}\)</span>.</li>
+                \sigma R_s}\)</span>.</li>
                 <li>Confinement is controlled via <code>zWall</code>:
                 smaller <code>zWall</code> places the small bubble
                 closer to the wall, corresponding to smaller <span
-                class="math inline">\(\chi = d/r\)</span>.</li>
+                class="math inline">\(\chi = d/R_s\)</span>.</li>
                 </ul>
                 <h2 id="parameter-sweeps">Parameter Sweeps</h2>
                 <p>Typical sweeps vary <code>OhOut</code> and
@@ -605,8 +607,8 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  zWall <span class="op">=</span> atof<span class="op">(</span>argv<span class="op">[</span><span class="dv">6</span><span class="op">]);</span></span></code></pre></div></div>
                 <p>Domain size is calculated to fit both bubbles with
                 sufficient margin. The formula ensures adequate space:
-                wall + larger bubble (R=1) + gap + smaller bubble (R=Rr)
-                + buffer.</p>
+                wall + small bubble (R_s=1) + gap + large bubble
+                (R_l=Rr) + buffer.</p>
                 <div class="code-block-container"><div class="code-block-container"><pre
                 class="sourceCode c"><code class="sourceCode c"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>  Ldomain <span class="op">=</span> fmin<span class="op">(</span>zWall<span class="op">+</span><span class="fl">2.</span><span class="op">+</span><span class="fl">2.</span><span class="op">*</span>Rr<span class="op">+</span><span class="fl">4.0</span><span class="op">,</span> <span class="fl">16.</span><span class="op">);</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>

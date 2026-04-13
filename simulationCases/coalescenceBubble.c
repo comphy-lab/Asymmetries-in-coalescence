@@ -23,8 +23,8 @@ jet and droplet pinch-off into the parent bubble.
 ## Physical Setup
 
 Two initially spherical bubbles of different sizes are placed along the axis
-of symmetry. The larger bubble has radius 1 (reference scale), while the
-smaller bubble has radius `Rr` (the radius ratio parameter). Surface tension
+of symmetry. The smaller bubble has radius 1 (reference scale), while the
+larger bubble has radius `Rr` (the radius ratio parameter). Surface tension
 drives the coalescence dynamics.
 
 ## Governing Equations
@@ -47,22 +47,22 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
 ### Command-line Parameters
 
 - `OhOut`: Solvent Ohnesorge number based on the small bubble radius,
-  $Oh_s = \mu_{out}/\sqrt{\rho_{out} \sigma r}$
+  $Oh_s = \mu_{out}/\sqrt{\rho_{out} \sigma R_s}$
 - `RhoIn`: Density ratio $\rho_{b}/\rho_{s}$ (typically $10^{-3}$ for air-water)
-- `Rr`: Radius ratio $r/R$ (small to large bubble). Note that some literature
-  reports the inverse ($R/r$); this code uses $r/R$.
+- `Rr`: Radius ratio $R_l/R_s$ (large to small bubble). The geometry files
+  use the small bubble as the unit length, so the larger bubble radius is `Rr`.
 - `MAXlevel`: Maximum adaptive mesh refinement level
 - `tmax`: Maximum simulation time
 - `zWall`: Wall position (distance from origin to left boundary)
 
 ## Nondimensional Mapping Used in This Code
 
-- The large-bubble radius is the reference length ($R=1$).
-- The small-bubble radius is `r = Rr`.
+- The small-bubble radius is the reference length ($R_s=1$).
+- The large-bubble radius is `R_l = Rr`.
 - The bubble viscosity ratio is fixed as `MuRin = 1e-2`, so
-  $Oh_b/Oh_s = 0.01$ with $Oh_b = \mu_b/\sqrt{\rho_s \sigma r}$.
+  $Oh_b/Oh_s = 0.01$ with $Oh_b = \mu_b/\sqrt{\rho_s \sigma R_s}$.
 - Confinement is controlled via `zWall`: smaller `zWall` places the small
-  bubble closer to the wall, corresponding to smaller $\chi = d/r$.
+  bubble closer to the wall, corresponding to smaller $\chi = d/R_s$.
 
 ## Parameter Sweeps
 
@@ -161,8 +161,8 @@ int main(int argc, char const *argv[]) {
 
   /**
   Domain size is calculated to fit both bubbles with sufficient margin.
-  The formula ensures adequate space: wall + larger bubble (R=1) +
-  gap + smaller bubble (R=Rr) + buffer. */
+  The formula ensures adequate space: wall + small bubble (R_s=1) +
+  gap + large bubble (R_l=Rr) + buffer. */
   Ldomain = fmin(zWall+2.+2.*Rr+4.0, 16.);
 
   fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
