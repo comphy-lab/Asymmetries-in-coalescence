@@ -1869,10 +1869,12 @@ def generate_directory_index(directory_name: str, directory_path: Path, generate
         
         # Replace main content
         content_replacement = toc_html
+        replacement_html = f'<div class="page-content">\n{content_replacement}\n</div>'
         html_content = re.sub(
-            r'<div class="page-content">\s*.*?\$body\$.*?</div>', 
-            f'<div class="page-content">\n{content_replacement}\n</div>', 
-            html_content, flags=re.DOTALL
+            r'<div class="page-content">\s*.*?\$body\$.*?</div>',
+            lambda _m: replacement_html,
+            html_content,
+            flags=re.DOTALL
         )
         
         # Remove remaining template variables

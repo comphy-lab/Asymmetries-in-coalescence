@@ -1,4 +1,4 @@
-"""
+r"""
 # Video Post-Processing for Bubble Coalescence
 
 Render interface geometry, strain-rate invariant, and velocity magnitude from

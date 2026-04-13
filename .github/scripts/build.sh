@@ -79,50 +79,63 @@ else
 fi
 DOCS_DIR="$PROJECT_ROOT/docs"
 PYTHON_SCRIPT="$PROJECT_ROOT/.github/scripts/generate_docs.py"
+PYTHON_RUNNER="python3"
 
 # Function to display messages
 function log_message() {
   echo "$(date +"%Y-%m-%d %H:%M:%S") - $1"
 }
 
-# Install required dependencies using a virtual environment
+# Install required dependencies using the repo-local virtual environment
 if [ -f "$PROJECT_ROOT/.github/scripts/requirements.txt" ]; then
   log_message "Setting up Python virtual environment..."
 
-  # Create a venv directory if it doesn't exist
   VENV_DIR="$PROJECT_ROOT/.venv"
+  VENV_PYTHON="$VENV_DIR/bin/python"
+  REQUIREMENTS_FILE="$PROJECT_ROOT/.github/scripts/requirements.txt"
 
-  # Check if virtual environment already exists
   if [ ! -d "$VENV_DIR" ]; then
-    python3 -m venv "$VENV_DIR"
-    log_message "Created new virtual environment in $VENV_DIR"
+    if command -v uv >/dev/null 2>&1; then
+      uv venv "$VENV_DIR"
+      log_message "Created new virtual environment in $VENV_DIR using uv"
+    else
+      python3 -m venv "$VENV_DIR"
+      log_message "Created new virtual environment in $VENV_DIR using python3 -m venv"
+    fi
   else
     log_message "Using existing virtual environment in $VENV_DIR"
   fi
 
-  # Activate the virtual environment
-  source "$VENV_DIR/bin/activate"
+  if [ ! -x "$VENV_PYTHON" ]; then
+    log_message "Error: Virtual environment Python not found at $VENV_PYTHON"
+    exit 1
+  fi
 
   log_message "Installing Python dependencies in virtual environment..."
-  pip install --upgrade pip
-  pip install -r "$PROJECT_ROOT/.github/scripts/requirements.txt"
+  if command -v uv >/dev/null 2>&1; then
+    uv pip install --python "$VENV_PYTHON" -r "$REQUIREMENTS_FILE"
+  else
+    "$VENV_PYTHON" -m ensurepip --upgrade >/dev/null 2>&1 || true
+    "$VENV_PYTHON" -m pip install --upgrade pip
+    "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE"
+  fi
 
-  # Don't deactivate here - keep the environment active for subsequent Python calls
   log_message "Dependencies installed successfully"
+  PYTHON_RUNNER="$VENV_PYTHON"
 fi
 
 # Run the documentation generation script
 log_message "Starting documentation generation..."
 if [ -n "$FORCE_REBUILD" ]; then
-  python3 "$PYTHON_SCRIPT" --force-rebuild
+  "$PYTHON_RUNNER" "$PYTHON_SCRIPT" --force-rebuild
 else
-  python3 "$PYTHON_SCRIPT"
+  "$PYTHON_RUNNER" "$PYTHON_SCRIPT"
 fi
 
 # Clean HTML files to remove empty anchor tags
 # Using fix_empty_anchors.py which is more targeted and preserves icons and other content
 log_message "Cleaning HTML files to remove empty anchor tags..."
-python3 "$PROJECT_ROOT/.github/scripts/fix_empty_anchors.py" "$DOCS_DIR"
+"$PYTHON_RUNNER" "$PROJECT_ROOT/.github/scripts/fix_empty_anchors.py" "$DOCS_DIR"
 
 
 if [ $? -ne 0 ]; then
