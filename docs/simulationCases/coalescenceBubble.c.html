@@ -649,28 +649,34 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 class="sourceCode c"><code class="sourceCode c"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>event init<span class="op">(</span>t <span class="op">=</span> <span class="dv">0</span><span class="op">){</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#if _MPI</span></span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>restore<span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">))</span> <span class="op">{</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Cannot restored from a dump file!</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">);</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#else</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>restore <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">)){</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> filename<span class="op">[</span><span class="dv">60</span><span class="op">];</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    sprintf<span class="op">(</span>filename<span class="op">,</span><span class="st">&quot;InitialConditionRr-%3.2f.dat&quot;</span><span class="op">,</span> Rr<span class="op">);</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> comm<span class="op">[</span><span class="dv">160</span><span class="op">];</span></span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    sprintf <span class="op">(</span>comm<span class="op">,</span> <span class="st">&quot;scp -r DataFiles/%s .&quot;</span><span class="op">,</span> filename<span class="op">);</span></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    system<span class="op">(</span>comm<span class="op">);</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">FILE</span> <span class="op">*</span> fp <span class="op">=</span> fopen<span class="op">(</span>filename<span class="op">,</span><span class="st">&quot;rb&quot;</span><span class="op">);</span></span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>fp <span class="op">==</span> NULL<span class="op">){</span></span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;There is no file named %s</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> filename<span class="op">);</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Cannot restore from dump file &#39;%s&#39;. Run Stage 1 first.</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>            dumpFile<span class="op">);</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="pp">#else</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(!</span>restore <span class="op">(</span>file <span class="op">=</span> dumpFile<span class="op">)){</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> filename<span class="op">[</span><span class="dv">60</span><span class="op">];</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    sprintf<span class="op">(</span>filename<span class="op">,</span><span class="st">&quot;InitialConditionRr-%3.2f.dat&quot;</span><span class="op">,</span> Rr<span class="op">);</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span> comm<span class="op">[</span><span class="dv">160</span><span class="op">];</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    snprintf <span class="op">(</span>comm<span class="op">,</span> <span class="kw">sizeof</span><span class="op">(</span>comm<span class="op">),</span> <span class="st">&quot;cp DataFiles/%s .&quot;</span><span class="op">,</span> filename<span class="op">);</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>system<span class="op">(</span>comm<span class="op">)</span> <span class="op">!=</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;Failed to copy initial-condition file &#39;%s&#39; from DataFiles/.</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>              filename<span class="op">);</span></span>
 <span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>      <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
 <span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    coord<span class="op">*</span> InitialShape<span class="op">;</span></span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    InitialShape <span class="op">=</span> input_xy<span class="op">(</span>fp<span class="op">);</span></span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    fclose <span class="op">(</span>fp<span class="op">);</span></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    scalar d<span class="op">[];</span></span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    distance <span class="op">(</span>d<span class="op">,</span> InitialShape<span class="op">);</span></span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>adapt_wavelet <span class="op">((</span>scalar <span class="op">*){</span>f<span class="op">,</span> d<span class="op">},</span> <span class="op">(</span><span class="dt">double</span><span class="op">[]){</span><span class="fl">1e-8</span><span class="op">,</span> <span class="fl">1e-8</span><span class="op">},</span> MAXlevel<span class="op">).</span>nf<span class="op">);</span></span></code></pre></div></div>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">FILE</span> <span class="op">*</span> fp <span class="op">=</span> fopen<span class="op">(</span>filename<span class="op">,</span><span class="st">&quot;rb&quot;</span><span class="op">);</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>fp <span class="op">==</span> NULL<span class="op">){</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>      fprintf<span class="op">(</span>ferr<span class="op">,</span> <span class="st">&quot;There is no file named %s</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> filename<span class="op">);</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>      <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    coord<span class="op">*</span> InitialShape<span class="op">;</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    InitialShape <span class="op">=</span> input_xy<span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>    fclose <span class="op">(</span>fp<span class="op">);</span></span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>    scalar d<span class="op">[];</span></span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    distance <span class="op">(</span>d<span class="op">,</span> InitialShape<span class="op">);</span></span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>adapt_wavelet <span class="op">((</span>scalar <span class="op">*){</span>f<span class="op">,</span> d<span class="op">},</span> <span class="op">(</span><span class="dt">double</span><span class="op">[]){</span><span class="fl">1e-8</span><span class="op">,</span> <span class="fl">1e-8</span><span class="op">},</span> MAXlevel<span class="op">).</span>nf<span class="op">);</span></span></code></pre></div></div>
                 <p>The distance function is defined at the center of
                 each cell, we have to calculate the value of this
                 function at each vertex.</p>
