@@ -583,7 +583,7 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb1-149"><a href="#cb1-149" aria-hidden="true" tabindex="-1"></a>    <span class="bu">source</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">sweep_file&quot;</span></span>
 <span id="cb1-150"><a href="#cb1-150" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-151"><a href="#cb1-151" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Check if BASE_CONFIG is defined</span></span>
-<span id="cb1-152"><a href="#cb1-152" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">-z</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">BASE_CONFIG&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-152"><a href="#cb1-152" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">-z</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{BASE_CONFIG:-}&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
 <span id="cb1-153"><a href="#cb1-153" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: BASE_CONFIG not defined in sweep file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
 <span id="cb1-154"><a href="#cb1-154" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
 <span id="cb1-155"><a href="#cb1-155" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
@@ -641,7 +641,7 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb1-207"><a href="#cb1-207" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">[</span> <span class="dt">\$</span>depth <span class="ot">-eq</span> <span class="dt">\$</span>{#sweep_vars[@]} <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
 <span id="cb1-208"><a href="#cb1-208" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Base case: all variables assigned, create parameter file</span></span>
 <span id="cb1-209"><a href="#cb1-209" aria-hidden="true" tabindex="-1"></a>            <span class="bu">local</span> <span class="va">case_file</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{temp_dir}/case_</span><span class="dt">\$</span><span class="st">(printf &quot;</span>%04d<span class="st">&quot; </span><span class="dt">\$</span><span class="st">case_num).params&quot;</span></span>
-<span id="cb1-210"><a href="#cb1-210" aria-hidden="true" tabindex="-1"></a>            <span class="bu">local</span> <span class="va">output_dir</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">OUTPUT_TEMPLATE&quot;</span></span>
+<span id="cb1-210"><a href="#cb1-210" aria-hidden="true" tabindex="-1"></a>            <span class="bu">local</span> <span class="va">output_dir</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{OUTPUT_TEMPLATE:-}&quot;</span></span>
 <span id="cb1-211"><a href="#cb1-211" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-212"><a href="#cb1-212" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Copy base config</span></span>
 <span id="cb1-213"><a href="#cb1-213" aria-hidden="true" tabindex="-1"></a>            <span class="fu">cp</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">BASE_CONFIG&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
@@ -664,136 +664,138 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
 <span id="cb1-230"><a href="#cb1-230" aria-hidden="true" tabindex="-1"></a>            <span class="cf">done</span></span>
 <span id="cb1-231"><a href="#cb1-231" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-232"><a href="#cb1-232" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Set output directory in the case file</span></span>
-<span id="cb1-233"><a href="#cb1-233" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="fu">grep</span> <span class="at">-q</span> <span class="st">&quot;^output_dir=&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-234"><a href="#cb1-234" aria-hidden="true" tabindex="-1"></a>                <span class="fu">sed</span> <span class="at">-i</span><span class="st">&#39;.bak&#39;</span> <span class="st">&quot;s|^output_dir=.*|output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}|&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
-<span id="cb1-235"><a href="#cb1-235" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span></span>
-<span id="cb1-236"><a href="#cb1-236" aria-hidden="true" tabindex="-1"></a>                <span class="bu">echo</span> <span class="st">&quot;output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}&quot;</span> <span class="op">&gt;&gt;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
-<span id="cb1-237"><a href="#cb1-237" aria-hidden="true" tabindex="-1"></a>            <span class="cf">fi</span></span>
-<span id="cb1-238"><a href="#cb1-238" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rm</span> <span class="at">-f</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{case_file}.bak&quot;</span></span>
-<span id="cb1-239"><a href="#cb1-239" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-240"><a href="#cb1-240" aria-hidden="true" tabindex="-1"></a>            <span class="kw">((</span><span class="va">case_num</span><span class="op">++</span><span class="kw">))</span></span>
-<span id="cb1-241"><a href="#cb1-241" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
-<span id="cb1-242"><a href="#cb1-242" aria-hidden="true" tabindex="-1"></a>        <span class="cf">fi</span></span>
-<span id="cb1-243"><a href="#cb1-243" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-244"><a href="#cb1-244" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Recursive case: iterate through values for current variable</span></span>
-<span id="cb1-245"><a href="#cb1-245" aria-hidden="true" tabindex="-1"></a>        <span class="bu">local</span> <span class="va">values</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{sweep_values[</span><span class="dt">\$</span><span class="st">depth]}&quot;</span></span>
-<span id="cb1-246"><a href="#cb1-246" aria-hidden="true" tabindex="-1"></a>        <span class="va">IFS</span><span class="op">=</span><span class="st">&#39;,&#39;</span> <span class="bu">read</span> <span class="at">-ra</span> <span class="va">value_array</span> <span class="op">&lt;&lt;&lt;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">values&quot;</span></span>
-<span id="cb1-247"><a href="#cb1-247" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-248"><a href="#cb1-248" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> val <span class="kw">in</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{value_array[@]}&quot;</span><span class="kw">;</span> <span class="cf">do</span></span>
-<span id="cb1-249"><a href="#cb1-249" aria-hidden="true" tabindex="-1"></a>            <span class="va">val</span><span class="op">=</span><span class="dt">\$</span><span class="kw">(</span><span class="bu">echo</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">val&quot;</span> <span class="kw">|</span> <span class="fu">xargs</span><span class="kw">)</span>  <span class="co"># Trim whitespace</span></span>
-<span id="cb1-250"><a href="#cb1-250" aria-hidden="true" tabindex="-1"></a>            <span class="ex">generate_recursive</span> <span class="dt">\$</span><span class="er">(</span><span class="kw">(</span><span class="ex">depth</span> + 1<span class="kw">))</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{current_values[@]}&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">val&quot;</span></span>
-<span id="cb1-251"><a href="#cb1-251" aria-hidden="true" tabindex="-1"></a>        <span class="cf">done</span></span>
-<span id="cb1-252"><a href="#cb1-252" aria-hidden="true" tabindex="-1"></a>    <span class="kw">}</span></span>
-<span id="cb1-253"><a href="#cb1-253" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-254"><a href="#cb1-254" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Start recursion with depth 0 and no accumulated values</span></span>
-<span id="cb1-255"><a href="#cb1-255" aria-hidden="true" tabindex="-1"></a>    <span class="ex">generate_recursive</span> 0</span>
-<span id="cb1-256"><a href="#cb1-256" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-257"><a href="#cb1-257" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">temp_dir&quot;</span></span>
-<span id="cb1-258"><a href="#cb1-258" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span></span>
-<span id="cb1-259"><a href="#cb1-259" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
-<span id="cb1-260"><a href="#cb1-260" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-261"><a href="#cb1-261" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
-<span id="cb1-262"><a href="#cb1-262" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: validate_required_params</span></span>
-<span id="cb1-263"><a href="#cb1-263" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-264"><a href="#cb1-264" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
-<span id="cb1-265"><a href="#cb1-265" aria-hidden="true" tabindex="-1"></a><span class="co">#   Check that all required parameters have been loaded. Prints error messages</span></span>
-<span id="cb1-266"><a href="#cb1-266" aria-hidden="true" tabindex="-1"></a><span class="co">#   for any missing parameters.</span></span>
-<span id="cb1-267"><a href="#cb1-267" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-268"><a href="#cb1-268" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
-<span id="cb1-269"><a href="#cb1-269" aria-hidden="true" tabindex="-1"></a><span class="co">#   \$@ - List of required parameter names (without PARAM_ prefix)</span></span>
-<span id="cb1-270"><a href="#cb1-270" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-271"><a href="#cb1-271" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
-<span id="cb1-272"><a href="#cb1-272" aria-hidden="true" tabindex="-1"></a><span class="co">#   0 if all parameters are present, 1 if any are missing</span></span>
-<span id="cb1-273"><a href="#cb1-273" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-274"><a href="#cb1-274" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
-<span id="cb1-275"><a href="#cb1-275" aria-hidden="true" tabindex="-1"></a><span class="co">#   if ! validate_required_params OhOut RhoIn MAXlevel tmax; then</span></span>
-<span id="cb1-276"><a href="#cb1-276" aria-hidden="true" tabindex="-1"></a><span class="co">#       echo &quot;Missing required parameters, exiting&quot;</span></span>
-<span id="cb1-277"><a href="#cb1-277" aria-hidden="true" tabindex="-1"></a><span class="co">#       exit 1</span></span>
-<span id="cb1-278"><a href="#cb1-278" aria-hidden="true" tabindex="-1"></a><span class="co">#   fi</span></span>
-<span id="cb1-279"><a href="#cb1-279" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
-<span id="cb1-280"><a href="#cb1-280" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_required_params()</span> <span class="kw">{</span></span>
-<span id="cb1-281"><a href="#cb1-281" aria-hidden="true" tabindex="-1"></a>    <span class="bu">local</span> <span class="va">missing</span><span class="op">=</span>0</span>
-<span id="cb1-282"><a href="#cb1-282" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-283"><a href="#cb1-283" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> param <span class="kw">in</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">@&quot;</span><span class="kw">;</span> <span class="cf">do</span></span>
-<span id="cb1-284"><a href="#cb1-284" aria-hidden="true" tabindex="-1"></a>        <span class="bu">local</span> <span class="va">var_name</span><span class="op">=</span><span class="st">&quot;PARAM_</span><span class="dt">\$</span><span class="st">{param}&quot;</span></span>
-<span id="cb1-285"><a href="#cb1-285" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">[</span> <span class="ot">-z</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{!var_name}&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-286"><a href="#cb1-286" aria-hidden="true" tabindex="-1"></a>            <span class="bu">echo</span> <span class="st">&quot;ERROR: Required parameter &#39;</span><span class="dt">\$</span><span class="st">param&#39; not found&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
-<span id="cb1-287"><a href="#cb1-287" aria-hidden="true" tabindex="-1"></a>            <span class="va">missing</span><span class="op">=</span>1</span>
-<span id="cb1-288"><a href="#cb1-288" aria-hidden="true" tabindex="-1"></a>        <span class="cf">fi</span></span>
-<span id="cb1-289"><a href="#cb1-289" aria-hidden="true" tabindex="-1"></a>    <span class="cf">done</span></span>
-<span id="cb1-290"><a href="#cb1-290" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-291"><a href="#cb1-291" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ex">\$missing</span></span>
-<span id="cb1-292"><a href="#cb1-292" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
-<span id="cb1-293"><a href="#cb1-293" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-294"><a href="#cb1-294" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
-<span id="cb1-295"><a href="#cb1-295" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: print_params</span></span>
-<span id="cb1-296"><a href="#cb1-296" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-297"><a href="#cb1-297" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
-<span id="cb1-298"><a href="#cb1-298" aria-hidden="true" tabindex="-1"></a><span class="co">#   Print all currently loaded parameters for debugging purposes.</span></span>
-<span id="cb1-299"><a href="#cb1-299" aria-hidden="true" tabindex="-1"></a><span class="co">#   Lists all environment variables with the PARAM_ prefix.</span></span>
-<span id="cb1-300"><a href="#cb1-300" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-301"><a href="#cb1-301" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
-<span id="cb1-302"><a href="#cb1-302" aria-hidden="true" tabindex="-1"></a><span class="co">#   None</span></span>
-<span id="cb1-303"><a href="#cb1-303" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-304"><a href="#cb1-304" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
-<span id="cb1-305"><a href="#cb1-305" aria-hidden="true" tabindex="-1"></a><span class="co">#   Prints formatted parameter list to stdout</span></span>
-<span id="cb1-306"><a href="#cb1-306" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-307"><a href="#cb1-307" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
-<span id="cb1-308"><a href="#cb1-308" aria-hidden="true" tabindex="-1"></a><span class="co">#   parse_param_file &quot;default.params&quot;</span></span>
-<span id="cb1-309"><a href="#cb1-309" aria-hidden="true" tabindex="-1"></a><span class="co">#   print_params</span></span>
-<span id="cb1-310"><a href="#cb1-310" aria-hidden="true" tabindex="-1"></a><span class="co">#   # Output:</span></span>
-<span id="cb1-311"><a href="#cb1-311" aria-hidden="true" tabindex="-1"></a><span class="co">#   # Loaded parameters:</span></span>
-<span id="cb1-312"><a href="#cb1-312" aria-hidden="true" tabindex="-1"></a><span class="co">#   #   MAXlevel = 12</span></span>
-<span id="cb1-313"><a href="#cb1-313" aria-hidden="true" tabindex="-1"></a><span class="co">#   #   OhOut = 1e-2</span></span>
-<span id="cb1-314"><a href="#cb1-314" aria-hidden="true" tabindex="-1"></a><span class="co">#   #   ...</span></span>
-<span id="cb1-315"><a href="#cb1-315" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
-<span id="cb1-316"><a href="#cb1-316" aria-hidden="true" tabindex="-1"></a><span class="fu">print_params()</span> <span class="kw">{</span></span>
-<span id="cb1-317"><a href="#cb1-317" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;Loaded parameters:&quot;</span></span>
-<span id="cb1-318"><a href="#cb1-318" aria-hidden="true" tabindex="-1"></a>    <span class="fu">env</span> <span class="kw">|</span> <span class="fu">grep</span> <span class="st">&quot;^PARAM_&quot;</span> <span class="kw">|</span> <span class="fu">sort</span> <span class="kw">|</span> <span class="cf">while</span> <span class="va">IFS</span><span class="op">=</span><span class="st">&#39;=&#39;</span> <span class="bu">read</span> <span class="at">-r</span> <span class="va">key</span> <span class="va">value</span><span class="kw">;</span> <span class="cf">do</span></span>
-<span id="cb1-319"><a href="#cb1-319" aria-hidden="true" tabindex="-1"></a>        <span class="va">key</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{key#PARAM_}&quot;</span></span>
-<span id="cb1-320"><a href="#cb1-320" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;  </span><span class="dt">\$</span><span class="st">key = </span><span class="dt">\$</span><span class="st">value&quot;</span></span>
-<span id="cb1-321"><a href="#cb1-321" aria-hidden="true" tabindex="-1"></a>    <span class="cf">done</span></span>
-<span id="cb1-322"><a href="#cb1-322" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
-<span id="cb1-323"><a href="#cb1-323" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-324"><a href="#cb1-324" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
-<span id="cb1-325"><a href="#cb1-325" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: validate_restart_file</span></span>
-<span id="cb1-326"><a href="#cb1-326" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-327"><a href="#cb1-327" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
-<span id="cb1-328"><a href="#cb1-328" aria-hidden="true" tabindex="-1"></a><span class="co">#   Validate a restart file exists, is non-empty, and is readable.</span></span>
-<span id="cb1-329"><a href="#cb1-329" aria-hidden="true" tabindex="-1"></a><span class="co">#   Provides clear error messages for each failure case.</span></span>
-<span id="cb1-330"><a href="#cb1-330" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-331"><a href="#cb1-331" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
-<span id="cb1-332"><a href="#cb1-332" aria-hidden="true" tabindex="-1"></a><span class="co">#   \$1 - Path to restart file (optional, defaults to &quot;restart&quot;)</span></span>
-<span id="cb1-333"><a href="#cb1-333" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-334"><a href="#cb1-334" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
-<span id="cb1-335"><a href="#cb1-335" aria-hidden="true" tabindex="-1"></a><span class="co">#   0 if valid, 1 if invalid</span></span>
-<span id="cb1-336"><a href="#cb1-336" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
-<span id="cb1-337"><a href="#cb1-337" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
-<span id="cb1-338"><a href="#cb1-338" aria-hidden="true" tabindex="-1"></a><span class="co">#   if ! validate_restart_file &quot;restart&quot;; then</span></span>
-<span id="cb1-339"><a href="#cb1-339" aria-hidden="true" tabindex="-1"></a><span class="co">#       echo &quot;Cannot proceed without valid restart file&quot;</span></span>
-<span id="cb1-340"><a href="#cb1-340" aria-hidden="true" tabindex="-1"></a><span class="co">#       exit 1</span></span>
-<span id="cb1-341"><a href="#cb1-341" aria-hidden="true" tabindex="-1"></a><span class="co">#   fi</span></span>
-<span id="cb1-342"><a href="#cb1-342" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
-<span id="cb1-343"><a href="#cb1-343" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_restart_file()</span> <span class="kw">{</span></span>
-<span id="cb1-344"><a href="#cb1-344" aria-hidden="true" tabindex="-1"></a>    <span class="bu">local</span> <span class="va">restart_file</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{1:-restart}&quot;</span></span>
-<span id="cb1-345"><a href="#cb1-345" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-346"><a href="#cb1-346" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-f</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-347"><a href="#cb1-347" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file not found: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
-<span id="cb1-348"><a href="#cb1-348" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
-<span id="cb1-349"><a href="#cb1-349" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
-<span id="cb1-350"><a href="#cb1-350" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-351"><a href="#cb1-351" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-s</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-352"><a href="#cb1-352" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file is empty: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
-<span id="cb1-353"><a href="#cb1-353" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
-<span id="cb1-354"><a href="#cb1-354" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
-<span id="cb1-355"><a href="#cb1-355" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-356"><a href="#cb1-356" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-r</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
-<span id="cb1-357"><a href="#cb1-357" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file not readable: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
-<span id="cb1-358"><a href="#cb1-358" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
-<span id="cb1-359"><a href="#cb1-359" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
-<span id="cb1-360"><a href="#cb1-360" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-361"><a href="#cb1-361" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span></span>
-<span id="cb1-362"><a href="#cb1-362" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span></code></pre></div></div>
+<span id="cb1-233"><a href="#cb1-233" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="bu">[</span> <span class="ot">-n</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">output_dir&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-234"><a href="#cb1-234" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="fu">grep</span> <span class="at">-q</span> <span class="st">&quot;^output_dir=&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-235"><a href="#cb1-235" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">sed</span> <span class="at">-i</span><span class="st">&#39;.bak&#39;</span> <span class="st">&quot;s|^output_dir=.*|output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}|&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
+<span id="cb1-236"><a href="#cb1-236" aria-hidden="true" tabindex="-1"></a>                <span class="cf">else</span></span>
+<span id="cb1-237"><a href="#cb1-237" aria-hidden="true" tabindex="-1"></a>                    <span class="bu">echo</span> <span class="st">&quot;output_dir=</span><span class="dt">\$</span><span class="st">{output_dir}&quot;</span> <span class="op">&gt;&gt;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">case_file&quot;</span></span>
+<span id="cb1-238"><a href="#cb1-238" aria-hidden="true" tabindex="-1"></a>                <span class="cf">fi</span></span>
+<span id="cb1-239"><a href="#cb1-239" aria-hidden="true" tabindex="-1"></a>            <span class="cf">fi</span></span>
+<span id="cb1-240"><a href="#cb1-240" aria-hidden="true" tabindex="-1"></a>            <span class="fu">rm</span> <span class="at">-f</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{case_file}.bak&quot;</span></span>
+<span id="cb1-241"><a href="#cb1-241" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-242"><a href="#cb1-242" aria-hidden="true" tabindex="-1"></a>            <span class="kw">((</span><span class="va">case_num</span><span class="op">++</span><span class="kw">))</span></span>
+<span id="cb1-243"><a href="#cb1-243" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb1-244"><a href="#cb1-244" aria-hidden="true" tabindex="-1"></a>        <span class="cf">fi</span></span>
+<span id="cb1-245"><a href="#cb1-245" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-246"><a href="#cb1-246" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Recursive case: iterate through values for current variable</span></span>
+<span id="cb1-247"><a href="#cb1-247" aria-hidden="true" tabindex="-1"></a>        <span class="bu">local</span> <span class="va">values</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{sweep_values[</span><span class="dt">\$</span><span class="st">depth]}&quot;</span></span>
+<span id="cb1-248"><a href="#cb1-248" aria-hidden="true" tabindex="-1"></a>        <span class="va">IFS</span><span class="op">=</span><span class="st">&#39;,&#39;</span> <span class="bu">read</span> <span class="at">-ra</span> <span class="va">value_array</span> <span class="op">&lt;&lt;&lt;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">values&quot;</span></span>
+<span id="cb1-249"><a href="#cb1-249" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-250"><a href="#cb1-250" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> val <span class="kw">in</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{value_array[@]}&quot;</span><span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb1-251"><a href="#cb1-251" aria-hidden="true" tabindex="-1"></a>            <span class="va">val</span><span class="op">=</span><span class="dt">\$</span><span class="kw">(</span><span class="bu">echo</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">val&quot;</span> <span class="kw">|</span> <span class="fu">xargs</span><span class="kw">)</span>  <span class="co"># Trim whitespace</span></span>
+<span id="cb1-252"><a href="#cb1-252" aria-hidden="true" tabindex="-1"></a>            <span class="ex">generate_recursive</span> <span class="dt">\$</span><span class="er">(</span><span class="kw">(</span><span class="ex">depth</span> + 1<span class="kw">))</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{current_values[@]}&quot;</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">val&quot;</span></span>
+<span id="cb1-253"><a href="#cb1-253" aria-hidden="true" tabindex="-1"></a>        <span class="cf">done</span></span>
+<span id="cb1-254"><a href="#cb1-254" aria-hidden="true" tabindex="-1"></a>    <span class="kw">}</span></span>
+<span id="cb1-255"><a href="#cb1-255" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-256"><a href="#cb1-256" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Start recursion with depth 0 and no accumulated values</span></span>
+<span id="cb1-257"><a href="#cb1-257" aria-hidden="true" tabindex="-1"></a>    <span class="ex">generate_recursive</span> 0</span>
+<span id="cb1-258"><a href="#cb1-258" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-259"><a href="#cb1-259" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">temp_dir&quot;</span></span>
+<span id="cb1-260"><a href="#cb1-260" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span></span>
+<span id="cb1-261"><a href="#cb1-261" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
+<span id="cb1-262"><a href="#cb1-262" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-263"><a href="#cb1-263" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-264"><a href="#cb1-264" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: validate_required_params</span></span>
+<span id="cb1-265"><a href="#cb1-265" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-266"><a href="#cb1-266" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
+<span id="cb1-267"><a href="#cb1-267" aria-hidden="true" tabindex="-1"></a><span class="co">#   Check that all required parameters have been loaded. Prints error messages</span></span>
+<span id="cb1-268"><a href="#cb1-268" aria-hidden="true" tabindex="-1"></a><span class="co">#   for any missing parameters.</span></span>
+<span id="cb1-269"><a href="#cb1-269" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-270"><a href="#cb1-270" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
+<span id="cb1-271"><a href="#cb1-271" aria-hidden="true" tabindex="-1"></a><span class="co">#   \$@ - List of required parameter names (without PARAM_ prefix)</span></span>
+<span id="cb1-272"><a href="#cb1-272" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-273"><a href="#cb1-273" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
+<span id="cb1-274"><a href="#cb1-274" aria-hidden="true" tabindex="-1"></a><span class="co">#   0 if all parameters are present, 1 if any are missing</span></span>
+<span id="cb1-275"><a href="#cb1-275" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-276"><a href="#cb1-276" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
+<span id="cb1-277"><a href="#cb1-277" aria-hidden="true" tabindex="-1"></a><span class="co">#   if ! validate_required_params OhOut RhoIn MAXlevel tmax; then</span></span>
+<span id="cb1-278"><a href="#cb1-278" aria-hidden="true" tabindex="-1"></a><span class="co">#       echo &quot;Missing required parameters, exiting&quot;</span></span>
+<span id="cb1-279"><a href="#cb1-279" aria-hidden="true" tabindex="-1"></a><span class="co">#       exit 1</span></span>
+<span id="cb1-280"><a href="#cb1-280" aria-hidden="true" tabindex="-1"></a><span class="co">#   fi</span></span>
+<span id="cb1-281"><a href="#cb1-281" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-282"><a href="#cb1-282" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_required_params()</span> <span class="kw">{</span></span>
+<span id="cb1-283"><a href="#cb1-283" aria-hidden="true" tabindex="-1"></a>    <span class="bu">local</span> <span class="va">missing</span><span class="op">=</span>0</span>
+<span id="cb1-284"><a href="#cb1-284" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-285"><a href="#cb1-285" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> param <span class="kw">in</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">@&quot;</span><span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb1-286"><a href="#cb1-286" aria-hidden="true" tabindex="-1"></a>        <span class="bu">local</span> <span class="va">var_name</span><span class="op">=</span><span class="st">&quot;PARAM_</span><span class="dt">\$</span><span class="st">{param}&quot;</span></span>
+<span id="cb1-287"><a href="#cb1-287" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">[</span> <span class="ot">-z</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">{!var_name}&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-288"><a href="#cb1-288" aria-hidden="true" tabindex="-1"></a>            <span class="bu">echo</span> <span class="st">&quot;ERROR: Required parameter &#39;</span><span class="dt">\$</span><span class="st">param&#39; not found&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-289"><a href="#cb1-289" aria-hidden="true" tabindex="-1"></a>            <span class="va">missing</span><span class="op">=</span>1</span>
+<span id="cb1-290"><a href="#cb1-290" aria-hidden="true" tabindex="-1"></a>        <span class="cf">fi</span></span>
+<span id="cb1-291"><a href="#cb1-291" aria-hidden="true" tabindex="-1"></a>    <span class="cf">done</span></span>
+<span id="cb1-292"><a href="#cb1-292" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-293"><a href="#cb1-293" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ex">\$missing</span></span>
+<span id="cb1-294"><a href="#cb1-294" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
+<span id="cb1-295"><a href="#cb1-295" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-296"><a href="#cb1-296" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-297"><a href="#cb1-297" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: print_params</span></span>
+<span id="cb1-298"><a href="#cb1-298" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-299"><a href="#cb1-299" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
+<span id="cb1-300"><a href="#cb1-300" aria-hidden="true" tabindex="-1"></a><span class="co">#   Print all currently loaded parameters for debugging purposes.</span></span>
+<span id="cb1-301"><a href="#cb1-301" aria-hidden="true" tabindex="-1"></a><span class="co">#   Lists all environment variables with the PARAM_ prefix.</span></span>
+<span id="cb1-302"><a href="#cb1-302" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-303"><a href="#cb1-303" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
+<span id="cb1-304"><a href="#cb1-304" aria-hidden="true" tabindex="-1"></a><span class="co">#   None</span></span>
+<span id="cb1-305"><a href="#cb1-305" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-306"><a href="#cb1-306" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
+<span id="cb1-307"><a href="#cb1-307" aria-hidden="true" tabindex="-1"></a><span class="co">#   Prints formatted parameter list to stdout</span></span>
+<span id="cb1-308"><a href="#cb1-308" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-309"><a href="#cb1-309" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
+<span id="cb1-310"><a href="#cb1-310" aria-hidden="true" tabindex="-1"></a><span class="co">#   parse_param_file &quot;default.params&quot;</span></span>
+<span id="cb1-311"><a href="#cb1-311" aria-hidden="true" tabindex="-1"></a><span class="co">#   print_params</span></span>
+<span id="cb1-312"><a href="#cb1-312" aria-hidden="true" tabindex="-1"></a><span class="co">#   # Output:</span></span>
+<span id="cb1-313"><a href="#cb1-313" aria-hidden="true" tabindex="-1"></a><span class="co">#   # Loaded parameters:</span></span>
+<span id="cb1-314"><a href="#cb1-314" aria-hidden="true" tabindex="-1"></a><span class="co">#   #   MAXlevel = 12</span></span>
+<span id="cb1-315"><a href="#cb1-315" aria-hidden="true" tabindex="-1"></a><span class="co">#   #   OhOut = 1e-2</span></span>
+<span id="cb1-316"><a href="#cb1-316" aria-hidden="true" tabindex="-1"></a><span class="co">#   #   ...</span></span>
+<span id="cb1-317"><a href="#cb1-317" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-318"><a href="#cb1-318" aria-hidden="true" tabindex="-1"></a><span class="fu">print_params()</span> <span class="kw">{</span></span>
+<span id="cb1-319"><a href="#cb1-319" aria-hidden="true" tabindex="-1"></a>    <span class="bu">echo</span> <span class="st">&quot;Loaded parameters:&quot;</span></span>
+<span id="cb1-320"><a href="#cb1-320" aria-hidden="true" tabindex="-1"></a>    <span class="fu">env</span> <span class="kw">|</span> <span class="fu">grep</span> <span class="st">&quot;^PARAM_&quot;</span> <span class="kw">|</span> <span class="fu">sort</span> <span class="kw">|</span> <span class="cf">while</span> <span class="va">IFS</span><span class="op">=</span><span class="st">&#39;=&#39;</span> <span class="bu">read</span> <span class="at">-r</span> <span class="va">key</span> <span class="va">value</span><span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb1-321"><a href="#cb1-321" aria-hidden="true" tabindex="-1"></a>        <span class="va">key</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{key#PARAM_}&quot;</span></span>
+<span id="cb1-322"><a href="#cb1-322" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;  </span><span class="dt">\$</span><span class="st">key = </span><span class="dt">\$</span><span class="st">value&quot;</span></span>
+<span id="cb1-323"><a href="#cb1-323" aria-hidden="true" tabindex="-1"></a>    <span class="cf">done</span></span>
+<span id="cb1-324"><a href="#cb1-324" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span>
+<span id="cb1-325"><a href="#cb1-325" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-326"><a href="#cb1-326" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-327"><a href="#cb1-327" aria-hidden="true" tabindex="-1"></a><span class="co"># Function: validate_restart_file</span></span>
+<span id="cb1-328"><a href="#cb1-328" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-329"><a href="#cb1-329" aria-hidden="true" tabindex="-1"></a><span class="co"># Description:</span></span>
+<span id="cb1-330"><a href="#cb1-330" aria-hidden="true" tabindex="-1"></a><span class="co">#   Validate a restart file exists, is non-empty, and is readable.</span></span>
+<span id="cb1-331"><a href="#cb1-331" aria-hidden="true" tabindex="-1"></a><span class="co">#   Provides clear error messages for each failure case.</span></span>
+<span id="cb1-332"><a href="#cb1-332" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-333"><a href="#cb1-333" aria-hidden="true" tabindex="-1"></a><span class="co"># Parameters:</span></span>
+<span id="cb1-334"><a href="#cb1-334" aria-hidden="true" tabindex="-1"></a><span class="co">#   \$1 - Path to restart file (optional, defaults to &quot;restart&quot;)</span></span>
+<span id="cb1-335"><a href="#cb1-335" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-336"><a href="#cb1-336" aria-hidden="true" tabindex="-1"></a><span class="co"># Returns:</span></span>
+<span id="cb1-337"><a href="#cb1-337" aria-hidden="true" tabindex="-1"></a><span class="co">#   0 if valid, 1 if invalid</span></span>
+<span id="cb1-338"><a href="#cb1-338" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb1-339"><a href="#cb1-339" aria-hidden="true" tabindex="-1"></a><span class="co"># Example:</span></span>
+<span id="cb1-340"><a href="#cb1-340" aria-hidden="true" tabindex="-1"></a><span class="co">#   if ! validate_restart_file &quot;restart&quot;; then</span></span>
+<span id="cb1-341"><a href="#cb1-341" aria-hidden="true" tabindex="-1"></a><span class="co">#       echo &quot;Cannot proceed without valid restart file&quot;</span></span>
+<span id="cb1-342"><a href="#cb1-342" aria-hidden="true" tabindex="-1"></a><span class="co">#       exit 1</span></span>
+<span id="cb1-343"><a href="#cb1-343" aria-hidden="true" tabindex="-1"></a><span class="co">#   fi</span></span>
+<span id="cb1-344"><a href="#cb1-344" aria-hidden="true" tabindex="-1"></a><span class="co"># ==============================================================================</span></span>
+<span id="cb1-345"><a href="#cb1-345" aria-hidden="true" tabindex="-1"></a><span class="fu">validate_restart_file()</span> <span class="kw">{</span></span>
+<span id="cb1-346"><a href="#cb1-346" aria-hidden="true" tabindex="-1"></a>    <span class="bu">local</span> <span class="va">restart_file</span><span class="op">=</span><span class="st">&quot;</span><span class="dt">\$</span><span class="st">{1:-restart}&quot;</span></span>
+<span id="cb1-347"><a href="#cb1-347" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-348"><a href="#cb1-348" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-f</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-349"><a href="#cb1-349" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file not found: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-350"><a href="#cb1-350" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
+<span id="cb1-351"><a href="#cb1-351" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
+<span id="cb1-352"><a href="#cb1-352" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-353"><a href="#cb1-353" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-s</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-354"><a href="#cb1-354" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file is empty: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-355"><a href="#cb1-355" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
+<span id="cb1-356"><a href="#cb1-356" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
+<span id="cb1-357"><a href="#cb1-357" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-358"><a href="#cb1-358" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">[</span> <span class="ot">!</span> <span class="ot">-r</span> <span class="st">&quot;</span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="bu">]</span><span class="kw">;</span> <span class="cf">then</span></span>
+<span id="cb1-359"><a href="#cb1-359" aria-hidden="true" tabindex="-1"></a>        <span class="bu">echo</span> <span class="st">&quot;ERROR: Restart file not readable: </span><span class="dt">\$</span><span class="st">restart_file&quot;</span> <span class="op">&gt;&amp;</span><span class="dv">2</span></span>
+<span id="cb1-360"><a href="#cb1-360" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">1</span></span>
+<span id="cb1-361"><a href="#cb1-361" aria-hidden="true" tabindex="-1"></a>    <span class="cf">fi</span></span>
+<span id="cb1-362"><a href="#cb1-362" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-363"><a href="#cb1-363" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span></span>
+<span id="cb1-364"><a href="#cb1-364" aria-hidden="true" tabindex="-1"></a><span class="kw">}</span></span></code></pre></div></div>
             </div>
         </main>
 

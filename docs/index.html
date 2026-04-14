@@ -599,9 +599,9 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 <p><strong>C Helper Tools</strong> (must be compiled
                 before running):</p>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> postProcess/getFacet.c <span class="at">-o</span> postProcess/getFacet <span class="at">-lm</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> postProcess/getData-generic.c <span class="at">-o</span> postProcess/getData-generic <span class="at">-lm</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> postProcess/getCOM.c <span class="at">-o</span> postProcess/getCOM <span class="at">-lm</span></span></code></pre></div></div>
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> postProcess/getFacet.c <span class="at">-o</span> postProcess/getFacet <span class="at">-lm</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> postProcess/getData-generic.c <span class="at">-o</span> postProcess/getData-generic <span class="at">-lm</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> postProcess/getCOM.c <span class="at">-o</span> postProcess/getCOM <span class="at">-lm</span></span></code></pre></div></div>
                 <ul>
                 <li><code>getFacet</code>: Extracts interface facets
                 using PLIC reconstruction</li>
@@ -639,14 +639,16 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 <li>Using the vanilla basilisk method:</li>
                 </ol>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> </span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span></span></code></pre></div></div>
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulationCases</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-I..</span>/src-local <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span> 1e-2 1e-3 1.00 12 1.5 0.05</span></code></pre></div></div>
                 <ol start="2" type="1">
                 <li>Using the makefile (can be interactively run using
                 bview browser):</li>
                 </ol>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="va">CFLAGS</span><span class="op">=</span>-DDISPLAY=-1 <span class="fu">make</span> coalescenceBubble.tst</span></code></pre></div></div>
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulationCases</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="va">CFLAGS</span><span class="op">=</span>-DDISPLAY=-1 <span class="fu">make</span> coalescenceBubble.tst</span></code></pre></div></div>
                 <p>Check the localhost on
                 coalescenceBubble/display.html. something like: <a
                 href="https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100">https://basilisk.fr/three.js/editor/index.html?ws://localhost:7100</a>
@@ -655,9 +657,10 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 id="to-run-using-openmp-please-use-the-flag--fopenmp">To
                 run using openMP, please use the flag -fopenmp</h3>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> <span class="at">-fopenmp</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">OMP_NUM_THREADS</span><span class="op">=</span>8</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span></span></code></pre></div></div>
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulationCases</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-I..</span>/src-local <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> <span class="at">-fopenmp</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">OMP_NUM_THREADS</span><span class="op">=</span>8</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span> 1e-2 1e-3 1.00 12 1.5 0.05</span></code></pre></div></div>
                 <p><strong>Note:</strong> The code will not directly
                 work with openmpi (with -D_MPI flag and mpirun). To do
                 that, please follow the procedure we use:</p>
@@ -666,17 +669,19 @@ window.baseDomain = "https://comphy-lab.org/Asymmetries-in-coalescence";
                 tmax=1e-2 or so)</li>
                 </ol>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> <span class="at">-fopenmp</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">OMP_NUM_THREADS</span><span class="op">=</span>8</span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span></span></code></pre></div></div>
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulationCases</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="ex">qcc</span> <span class="at">-I..</span>/src-local <span class="at">-O2</span> <span class="at">-Wall</span> <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span> <span class="at">-fopenmp</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">OMP_NUM_THREADS</span><span class="op">=</span>8</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="ex">./coalescenceBubble</span> 1e-2 1e-3 1.00 12 1e-2 0.05</span></code></pre></div></div>
                 <p>This will generate a “restart” file</p>
                 <ol start="2" type="1">
                 <li>Do not delete the restart file. Now you can use
                 mpirun, like:</li>
                 </ol>
                 <div class="code-block-container"><div class="code-block-container"><pre
-                class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="va">CC99</span><span class="op">=</span><span class="st">&#39;mpicc -std=c99&#39;</span> <span class="ex">qcc</span> <span class="at">-Wall</span> <span class="at">-O2</span> <span class="at">-D_MPI</span><span class="op">=</span>1 <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="ex">mpirun</span> <span class="at">-np</span> 8 coalescenceBubble</span></code></pre></div></div>
+                class="sourceCode bash"><code class="sourceCode bash"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulationCases</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="va">CC99</span><span class="op">=</span><span class="st">&#39;mpicc -std=c99&#39;</span> <span class="ex">qcc</span> <span class="at">-I..</span>/src-local <span class="at">-Wall</span> <span class="at">-O2</span> <span class="at">-D_MPI</span><span class="op">=</span>1 <span class="at">-disable-dimensions</span> coalescenceBubble.c <span class="at">-o</span> coalescenceBubble <span class="at">-lm</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="ex">mpirun</span> <span class="at">-np</span> 8 ./coalescenceBubble 1e-2 1e-3 1.00 12 1.5 0.05</span></code></pre></div></div>
                 <h2 id="generated-documentation">Generated
                 Documentation</h2>
                 <h3 id="root-directory">Root Directory</h3>

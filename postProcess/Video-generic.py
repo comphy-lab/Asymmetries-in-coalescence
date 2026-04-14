@@ -34,6 +34,7 @@ Last updated: Jan 2026
 
 import argparse
 import csv
+import math
 import multiprocessing as mp
 import os
 import subprocess as sp
@@ -182,28 +183,24 @@ def log_status(message: str, *, level: str = "INFO") -> None:
 
 
 def parse_arguments() -> RuntimeConfig:
-    """Parse command-line arguments and construct runtime configuration.
+    """
+    Parse CLI arguments and package them into an immutable runtime config.
 
-    The returned dataclass is immutable and can be safely shared across
-    multiprocessing workers without coordination overhead. This design
-    makes future CLI additions trivial.
+    The returned dataclass can be shared safely across multiprocessing
+    workers. Domain bounds default to values derived from `Rr`, but each bound
+    can be overridden explicitly from the command line.
 
-    Returns:
-        RuntimeConfig: Configuration object containing:
-            - cpus: Number of parallel workers (default: 4)
-            - n_snapshots: Total frames to process (default: 4000)
-            - grids_per_r: Radial mesh resolution (default: 64)
-            - tsnap: Time interval between snapshots (default: 0.01)
-            - Domain bounds (zmin, zmax, rmax) - auto-calculated from Rr
-            - I/O paths (case_dir, output_dir)
-            - rr: Radius ratio for domain calculation
+    #### Returns
 
-    Examples:
-        >>> config = parse_arguments()
-        >>> config.cpus
-        4
-        >>> config.bounds
-        DomainBounds(rmin=-2.5, rmax=2.5, zmin=-2.0, zmax=3.0)
+    - `RuntimeConfig`: Parsed execution settings for the full rendering run.
+
+    #### Example
+
+    ```python
+    config = parse_arguments()
+    print(config.cpus)
+    print(config.bounds)
+    ```
     """
     parser = argparse.ArgumentParser(description="Generate snapshot videos for coalescence.")
     parser.add_argument("--CPUs", type=int, default=4, help="Number of CPUs to use")
@@ -271,8 +268,9 @@ def ensure_directory(path: str) -> None:
     """
     Create an output directory if it does not exist.
 
-    Parameters:
-        path: Directory to create (including parents).
+    #### Args
+
+    - `path`: Directory to create, including any missing parents.
     """
     if not os.path.isdir(path):
         os.makedirs(path, exist_ok=True)
@@ -285,11 +283,17 @@ def run_helper(command: Sequence[str]) -> Sequence[str]:
     The compiled helpers deliberately emit their payload to stderr, so stdout is
     ignored (it is typically empty) and we bubble up informative stderr content.
 
-    Parameters:
-        command: Command list passed to subprocess.
+    #### Args
 
-    Returns:
-        list[str]: Decoded stderr lines produced by the helper.
+    - `command`: Command vector passed to `subprocess`.
+
+    #### Returns
+
+    - `Sequence[str]`: Decoded stderr lines produced by the helper.
+
+    #### Raises
+
+    - `RuntimeError`: If the helper exits with a non-zero return code.
     """
     process = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
     _, stderr = process.communicate()
@@ -302,7 +306,8 @@ def run_helper(command: Sequence[str]) -> Sequence[str]:
 
 
 def get_facets(filename: str):
-    """Collect interface facets from getFacet helper with axisymmetric mirroring.
+    """
+    Collect interface facets from `getFacet` and mirror them about the axis.
 
     Shells out to the compiled ``getFacet`` executable, which extracts the
     volume-of-fluid (VOF) interface as a sequence of line segments. Since
@@ -310,18 +315,19 @@ def get_facets(filename: str):
     half is computed. This function mirrors each segment about r=0 to create
     the full visualization.
 
-    Args:
-        filename: Path to Basilisk snapshot file (e.g., 'snapshot-0.0100')
+    #### Args
 
-    Returns:
-        list[tuple]: Sequence of line segments, each as ((r1, z1), (r2, z2)).
-            Each physical segment appears twice: once at +r and once at -r
-            for the mirrored visualization. Empty list if fewer than 100
-            output lines (likely indicates no interface present).
+    - `filename`: Path to a Basilisk snapshot file.
 
-    Note:
-        The getFacet helper outputs space-separated (z, r) pairs. This
-        function swaps to (r, z) convention for matplotlib plotting.
+    #### Returns
+
+    - `list[tuple]`: Mirrored line segments stored as
+      `((r1, z1), (r2, z2))` pairs.
+
+    #### Notes
+
+    - `getFacet` emits coordinates as `(z, r)` pairs.
+    - This function swaps them to `(r, z)` to match the plotting pipeline.
     """
     temp2 = run_helper(["postProcess/getFacet", filename])
     segs = []
@@ -343,17 +349,20 @@ def get_facets(filename: str):
 
 
 def get_com(filename: str) -> Optional[COMData]:
-    """Extract center of mass data from getCOM helper.
+    """
+    Extract center-of-mass data from the `getCOM` helper.
 
     Shells out to the compiled ``getCOM`` executable, which computes the
     volume-weighted center of mass position and velocity.
 
-    Args:
-        filename: Path to Basilisk snapshot file (e.g., 'snapshot-0.0100')
+    #### Args
 
-    Returns:
-        COMData: Contains time, z_com (position), u_com (velocity)
-        None: If extraction fails
+    - `filename`: Path to a Basilisk snapshot file.
+
+    #### Returns
+
+    - `COMData | None`: Time, axial position, and axial velocity when
+      extraction succeeds, otherwise `None`.
     """
     try:
         temp2 = run_helper(["postProcess/getCOM", filename])
@@ -371,27 +380,34 @@ def get_com(filename: str) -> Optional[COMData]:
 
 
 def get_field(filename: str, zmin: float, zmax: float, rmax: float, nr: int) -> FieldData:
-    """Read field arrays for a single snapshot from getData-generic helper.
+    """
+    Sample structured field arrays for a single snapshot.
 
     Shells out to the compiled ``getData-generic`` executable, which samples
     the velocity and strain-rate fields on a structured grid. Returns a
-    FieldData struct with reshaped 2D arrays, abstracting away the flattening
-    scheme used by the helper.
+    `FieldData` object with reshaped 2D arrays, abstracting away the flattened
+    helper output.
 
-    Args:
-        filename: Path to Basilisk snapshot file (e.g., 'snapshot-0.0100')
-        zmin: Minimum axial coordinate for sampling domain
-        zmax: Maximum axial coordinate for sampling domain
-        rmax: Maximum radial coordinate (positive branch only)
-        nr: Number of grid points in radial direction
+    #### Args
 
-    Returns:
-        FieldData: Structured container with reshaped 2D arrays:
-            - R, Z: Meshgrid coordinates (nz x nr)
-            - strain_rate: Second invariant of rate-of-strain tensor
-            - velocity: Velocity magnitude field
-            - nz: Number of grid points in axial direction (computed)
+    - `filename`: Path to a Basilisk snapshot file.
+    - `zmin`: Minimum axial coordinate in the sampling window.
+    - `zmax`: Maximum axial coordinate in the sampling window.
+    - `rmax`: Maximum radial coordinate on the positive branch.
+    - `nr`: Number of radial samples.
+
+    #### Returns
+
+    - `FieldData`: Reshaped coordinate, strain-rate, and velocity arrays.
+
+    #### Raises
+
+    - `ValueError`: If `nr` is invalid or helper output cannot be reshaped
+      into a regular `(nz, nr)` grid.
     """
+    if nr <= 0:
+        raise ValueError(f"nr must be positive, got {nr}")
+
     temp2 = run_helper(
         [
             "postProcess/getData-generic",
@@ -418,6 +434,14 @@ def get_field(filename: str, zmin: float, zmax: float, rmax: float, nr: int) -> 
     Z = np.asarray(Ztemp)
     D2 = np.asarray(D2temp)
     vel = np.asarray(veltemp)
+
+    if len(Z) == 0:
+        raise ValueError(f"No field samples were returned for {filename}")
+    if len(Z) % nr != 0:
+        raise ValueError(
+            f"Field sample count {len(Z)} is not divisible by nr={nr} for {filename}"
+        )
+
     nz = int(len(Z) / nr)
 
     log_status(f"{os.path.basename(filename)}: nz = {nz}")
@@ -434,12 +458,14 @@ def build_snapshot_info(index: int, config: RuntimeConfig) -> SnapshotInfo:
     """
     Construct file paths for a given timestep index.
 
-    Parameters:
-        index: Integer index used with ``tsnap`` to recover time.
-        config: RuntimeConfig providing directories and stride.
+    #### Args
 
-    Returns:
-        SnapshotInfo: Pre-computed metadata for the worker.
+    - `index`: Timestep index used with `tsnap` to recover physical time.
+    - `config`: Shared runtime configuration.
+
+    #### Returns
+
+    - `SnapshotInfo`: Input and output paths plus the recovered snapshot time.
     """
     time = config.tsnap * index
     # Note: coalescence uses intermediate/ directly (no results/ subdir)
@@ -452,10 +478,11 @@ def draw_domain_outline(ax, bounds: DomainBounds, style: PlotStyle) -> None:
     """
     Outline computational domain and symmetry line.
 
-    Parameters:
-        ax: Matplotlib axis used for plotting.
-        bounds: Domain extents in both directions.
-        style: Colour/width styling information.
+    #### Args
+
+    - `ax`: Matplotlib axes used for plotting.
+    - `bounds`: Domain extents in radial and axial directions.
+    - `style`: Plotting style parameters.
     """
     ax.plot(
         [0, 0],
@@ -501,16 +528,18 @@ def add_colorbar(fig, ax, mappable, *, align: str, label: str, style: PlotStyle)
     Using manual axes lets us keep the main axis square while still showing two
     distinct colour scales.
 
-    Parameters:
-        fig: Figure hosting the axes.
-        ax: Primary axes sharing its bounding box.
-        mappable: The image/artist the colorbar describes.
-        align: 'left' or 'right' relative to the plotting axis.
-        label: Axis label to display.
-        style: PlotStyle values for spacing and typography.
+    #### Args
 
-    Returns:
-        matplotlib.colorbar.Colorbar: The constructed colorbar.
+    - `fig`: Figure hosting the axes.
+    - `ax`: Primary axes used to anchor the colorbar.
+    - `mappable`: Image or artist represented by the color scale.
+    - `align`: Either `'left'` or `'right'`.
+    - `label`: Colorbar label.
+    - `style`: Plot styling parameters.
+
+    #### Returns
+
+    - `matplotlib.colorbar.Colorbar`: The constructed colorbar object.
     """
     l, b, w, h = ax.get_position().bounds
     if align == "left":
@@ -542,13 +571,14 @@ def plot_snapshot(
     All artist construction lives here so multiprocessing workers only need to
     fetch data and call this function.
 
-    Parameters:
-        field_data: Structured arrays for strain-rate and velocity.
-        facets: Line segments representing the interface.
-        com_data: Center of mass position and velocity (optional).
-        bounds: Domain extents that keep axes square.
-        snapshot: Metadata describing time and output file.
-        style: Plotting choices centralised in PlotStyle.
+    #### Args
+
+    - `field_data`: Structured strain-rate and velocity arrays.
+    - `facets`: Interface line segments returned by `get_facets()`.
+    - `com_data`: Optional center-of-mass diagnostics.
+    - `bounds`: Domain extents used to keep the plot square.
+    - `snapshot`: Snapshot metadata, including output path.
+    - `style`: Shared plotting style.
     """
     fig, ax = plt.subplots()
     fig.set_size_inches(*style.figure_size)
@@ -620,13 +650,16 @@ def process_timestep(index: int, config: RuntimeConfig, style: PlotStyle) -> Opt
 
     Performs availability checks, loads helper outputs, and calls plot_snapshot.
 
-    Parameters:
-        index: Integer timestep index relative to tsnap.
-        config: Runtime configuration shared across workers.
-        style: Plotting style shared by all frames.
+    #### Args
 
-    Returns:
-        COMData if successfully extracted, None otherwise.
+    - `index`: Timestep index relative to `tsnap`.
+    - `config`: Shared runtime configuration.
+    - `style`: Shared plotting style.
+
+    #### Returns
+
+    - `COMData | None`: Extracted COM diagnostics, or `None` when the
+      snapshot is missing.
     """
     snapshot = build_snapshot_info(index, config)
     if not os.path.exists(snapshot.source):
@@ -645,7 +678,7 @@ def process_timestep(index: int, config: RuntimeConfig, style: PlotStyle) -> Opt
     try:
         facets = get_facets(snapshot.source)
         com_data = get_com(snapshot.source)
-        nr = int(config.grids_per_r * config.rmax)
+        nr = max(1, math.ceil(config.grids_per_r * config.rmax))
         field_data = get_field(
             snapshot.source, config.zmin, config.zmax, config.rmax, nr
         )
@@ -669,9 +702,10 @@ def write_com_data(com_data_list: list, config: RuntimeConfig) -> None:
     """
     Write collected COM data to CSV file.
 
-    Parameters:
-        com_data_list: List of COMData objects (may contain None entries).
-        config: Runtime configuration for path information.
+    #### Args
+
+    - `com_data_list`: Sequence of `COMData` entries, with optional `None`s.
+    - `config`: Runtime configuration providing output paths.
     """
     # Extract case number from path
     case_no = os.path.basename(config.case_dir)
@@ -697,11 +731,13 @@ def encode_video(config: RuntimeConfig) -> None:
     The output video is saved in the case directory with the case number
     as filename (e.g., simulationCases/3000/3000.mp4).
 
-    Parameters:
-        config: Runtime configuration containing paths and encoding settings.
+    #### Args
 
-    Raises:
-        RuntimeError: If ffmpeg fails to encode the video.
+    - `config`: Runtime configuration containing paths and encoding settings.
+
+    #### Raises
+
+    - `RuntimeError`: If `ffmpeg` fails to encode the final video.
     """
     # Extract case number from path
     case_no = os.path.basename(config.case_dir)
@@ -732,7 +768,14 @@ def encode_video(config: RuntimeConfig) -> None:
 
 def main():
     """
-    Entry point used by the documentation tooling and CLI.
+    Entry point used by the CLI and documentation tooling.
+
+    #### Workflow
+
+    1. Parse arguments into `RuntimeConfig`.
+    2. Render all requested snapshots in parallel.
+    3. Write COM diagnostics to CSV.
+    4. Optionally encode frames into an MP4.
     """
     config = parse_arguments()
     ensure_directory(config.output_dir)

@@ -16,7 +16,7 @@ CASE_START=4000
 
 # Ending case number (inclusive)
 # Number of combinations should equal CASE_END - CASE_START + 1
-# For this sweep: 4 Rr × 4 OhOut = 16 combinations, so CASE_END = 2015
+# For this sweep: 2 Rr × 8 OhOut × 1 zWall = 16 combinations, so CASE_END = 4015
 CASE_END=4015
 
 # ============================================================
