@@ -28,14 +28,20 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 │   ├── getData-generic.c           Field extraction on structured grids
 │   ├── getFacet.c                  Interface geometry extraction
 │   ├── getCOM.c                    Center of mass extraction
-│   └── Video-generic.py            Frame-by-frame visualization pipeline
+│   ├── Video-generic.py            Frame-by-frame visualization pipeline
+│   └── render_contour_pulse.py     Render lightweight live contour interfaces
+├── contourWorkflow/                 Bayesian contour campaign state machine
+│   ├── contour_campaign.py         Propose, submit, collect, and gate iterations
+│   ├── materialize_cases.py        Validate proposals against initial shapes
+│   └── run_one_contour_case.sh     Run and classify one OpenMP case
 ├── runSimulation.sh                 Single case runner (OpenMP/MPI)
 ├── runParameterSweep.sh             Parameter sweep runner
 ├── runPostProcess-Ncases.sh         Batch post-processing runner
 ├── default.params                   Single-case configuration
 ├── sweep.params                     Sweep configuration template
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
-└── runSweepHamilton.sbatch          SLURM script for Hamilton HPC
+├── runSweepHamilton.sbatch          Legacy sequential MPI runner
+└── runContourHamilton.sbatch        Packed 16-case OpenMP contour runner
 ```
 
 ## Simulation Files
@@ -103,6 +109,55 @@ The `coalescenceBubble-tag.c` file additionally uses `tag.h` for tracking shape 
 ```bash
 # Submit parameter sweep to SLURM
 sbatch runSweepSnellius.sbatch
+```
+
+### Bayesian contour campaign on Hamilton
+
+The rearmable contour workflow uses batches of 16 simulations on one Hamilton
+node. Each case receives eight OpenMP threads. The simulation detects detached
+liquid components during runtime, writes `classification.status`, and stops
+after a drop of radius 0.0078125 persists for three checks. This one physical
+threshold is resolved by at least two finest cells even in the largest domain,
+so the classifier does not change with radius ratio.
+
+The campaign controller requires a Bayesian Contour Predictor checkout with
+the `--x-candidates` interface (AnjaliML/Bayesian-Contour-Predictor PR #3 or a
+later release). Initialise from a canonical seed and exclude any known
+configuration-confounded column before proposing:
+
+```bash
+module load python/3.10.8
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /nobackup/$USER/drop-injection-confined \
+  --project-root "$PWD" \
+  --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
+  init --seed NumConfinementSweep-0.csv --exclude-x 8
+
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /nobackup/$USER/drop-injection-confined \
+  --project-root "$PWD" \
+  --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
+  advance --submit
+```
+
+`advance --submit` is idempotent. It collects only complete 16-row result
+tables, submits the next batch, stops for manual selection after iteration 8,
+and stops permanently after iteration 16. Radius-ratio proposals are confined
+to `simulationCases/DataFiles/`; post-hoc rounding is rejected because it
+changes acquisition scores.
+
+At the iteration-8 checkpoint, generate (but do not approve) the review file
+with `propose-manual-batch`, edit it only for an explicit physics or
+information-gain reason, then install it with `approve-manual-batch`. A failed
+or timed-out allocation remains unresolved; after inspection, `retry --submit`
+creates a clean `attempt-NN` directory without overwriting earlier evidence.
+
+For a full-node launch test, override the production header without editing
+the file:
+
+```bash
+sbatch -p test --time=00:15:00 runContourHamilton.sbatch \
+  /path/to/campaign/iterations/iteration-01
 ```
 
 ### Post-Processing
