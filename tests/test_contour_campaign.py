@@ -173,6 +173,40 @@ class ContourCampaignTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     CAMPAIGN_MODULE.validate_proposal(self.campaign, invalid)
 
+    def test_proposal_uses_configured_mix_and_noncolliding_case_ids(self) -> None:
+        self.create_layout()
+        (self.campaign.root / "campaign-config.json").write_text(
+            json.dumps(
+                {
+                    "allowed_x_values": [1.0, 2.0, 4.0],
+                    "case_id_start": 6000,
+                    "n_new": 14,
+                    "n_repeats": 2,
+                    "posterior_samples": 64,
+                }
+            )
+            + "\n"
+        )
+        self.mark_completed_through(0)
+        output = self.campaign.proposals / "Sweep-1_proposed.csv"
+
+        def predictor(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            building = Path(command[command.index("--outfile") + 1])
+            self.write_rows(building, self.valid_proposal())
+            return subprocess.CompletedProcess(command, 0, "proposed\n", "")
+
+        with mock.patch.object(CAMPAIGN_MODULE, "run", side_effect=predictor) as run:
+            CAMPAIGN_MODULE.proposal_for(self.campaign, 1, output=output)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--n-simulations") + 1], "16")
+        self.assertEqual(command[command.index("--n-new") + 1], "14")
+        self.assertEqual(command[command.index("--n-repeats") + 1], "2")
+        self.assertEqual(command[command.index("--posterior-samples") + 1], "64")
+        rows = CAMPAIGN_MODULE.read_rows(output)
+        self.assertEqual(rows[0]["caseId"], "6000")
+        self.assertEqual(rows[-1]["caseId"], "6015")
+
     def test_manual_candidate_and_advance_require_iteration_eight(self) -> None:
         self.create_layout()
         self.mark_completed_through(7)
@@ -230,6 +264,30 @@ class ContourCampaignTests(unittest.TestCase):
         submit.assert_not_called()
         state = json.loads((self.campaign.root / "campaign-state.json").read_text())
         self.assertEqual(state, {"state": "complete", "last_completed_iteration": 16})
+
+    def test_unattended_config_skips_checkpoint_and_runs_to_twenty(self) -> None:
+        self.create_layout()
+        (self.campaign.root / "campaign-config.json").write_text(
+            json.dumps(
+                {
+                    "allowed_x_values": [1.0, 2.0, 4.0],
+                    "manual_checkpoint_after": None,
+                    "final_iteration": 20,
+                }
+            )
+            + "\n"
+        )
+        self.mark_completed_through(8)
+        proposal = self.campaign.proposals / "Sweep-9_proposed.csv"
+        with (
+            mock.patch.object(
+                CAMPAIGN_MODULE, "proposal_for", return_value=proposal
+            ) as propose,
+            mock.patch.object(CAMPAIGN_MODULE, "submit") as submit,
+        ):
+            CAMPAIGN_MODULE.advance(self.campaign, submit_jobs=True)
+        propose.assert_called_once_with(self.campaign, 9, output=proposal)
+        submit.assert_called_once_with(self.campaign, 9, proposal)
 
     def test_manual_approval_is_gated_canonical_and_non_destructive(self) -> None:
         self.create_layout()
@@ -321,6 +379,20 @@ class ContourCampaignTests(unittest.TestCase):
 
     def test_local_submit_uses_bounded_systemd_runner(self) -> None:
         self.create_layout()
+        (self.campaign.root / "campaign-config.json").write_text(
+            json.dumps(
+                {
+                    "allowed_x_values": [1.0, 2.0, 4.0],
+                    "unit_prefix": "dropinj-l11",
+                    "max_level": 11,
+                    "drop_radius_min": 0.015625,
+                    "workers": 3,
+                    "threads_per_case": 8,
+                    "max_threads": 48,
+                }
+            )
+            + "\n"
+        )
         campaign = CAMPAIGN_MODULE.Campaign(
             root=self.campaign.root,
             project_root=self.campaign.project_root,
@@ -334,10 +406,15 @@ class ContourCampaignTests(unittest.TestCase):
         with mock.patch.object(CAMPAIGN_MODULE, "run", return_value=launched) as run:
             job_id = CAMPAIGN_MODULE.submit(campaign, 1, proposal)
 
-        self.assertEqual(job_id, "local:dropinj-i01-a01.service")
+        self.assertEqual(job_id, "local:dropinj-l11-i01-a01.service")
         command = run.call_args.args[0]
-        self.assertEqual(command[:4], ["systemd-run", "--user", "--unit", "dropinj-i01-a01"])
+        self.assertEqual(command[:4], ["systemd-run", "--user", "--unit", "dropinj-l11-i01-a01"])
         self.assertIn("Nice=10", command)
+        self.assertIn("CONTOUR_MAXLEVEL=11", command)
+        self.assertIn("CONTOUR_DROP_RADIUS_MIN=0.015625", command)
+        self.assertIn("CONTOUR_WORKERS=3", command)
+        self.assertIn("CONTOUR_THREADS_PER_CASE=8", command)
+        self.assertIn("CONTOUR_MAX_THREADS=48", command)
         self.assertIn(str(campaign.project_root / "runContourLocal.sh"), command)
         current = json.loads(
             (campaign.iterations / "iteration-01" / "current-attempt.json").read_text()
@@ -440,6 +517,13 @@ class ContourCampaignTests(unittest.TestCase):
             [str(index % 2) for index in range(CAMPAIGN_MODULE.BATCH_SIZE)],
         )
         assess.assert_called_once()
+        measurements = CAMPAIGN_MODULE.read_rows(
+            self.campaign.measurements / "Sweep-1_measurements.csv"
+        )
+        self.assertEqual(len(measurements), CAMPAIGN_MODULE.BATCH_SIZE)
+        self.assertTrue(all(row["iteration"] == "1" for row in measurements))
+        self.assertEqual(measurements[0]["source_attempt"], "2")
+        self.assertEqual(measurements[3]["source_attempt"], "1")
 
     def test_quality_fail_and_exact_quarantine_are_excluded_from_merge(self) -> None:
         self.create_layout()

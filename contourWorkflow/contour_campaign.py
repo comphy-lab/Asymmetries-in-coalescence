@@ -30,9 +30,9 @@ except ModuleNotFoundError:
 
 
 BATCH_SIZE = 16
-PHASE_ONE_END = 8
-FINAL_ITERATION = 16
-CASE_ID_START = 5000
+DEFAULT_PHASE_ONE_END = 8
+DEFAULT_FINAL_ITERATION = 16
+DEFAULT_CASE_ID_START = 5000
 Y_MIN = 0.01
 Y_MAX = 0.075
 DROP_RADIUS_MIN = 0.0078125
@@ -74,6 +74,15 @@ class Campaign:
     @property
     def iterations(self) -> Path:
         return self.root / "iterations"
+
+    @property
+    def measurements(self) -> Path:
+        return self.root / "measurements"
+
+
+def campaign_config(campaign: Campaign) -> dict[str, object]:
+    """Read the immutable campaign configuration."""
+    return json.loads((campaign.root / "campaign-config.json").read_text())
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -131,7 +140,25 @@ def available_x_values(project_root: Path) -> list[float]:
     return sorted(set(values))
 
 
-def initialise(campaign: Campaign, seed: Path, exclude_x: Sequence[float]) -> None:
+def initialise(
+    campaign: Campaign,
+    seed: Path,
+    exclude_x: Sequence[float],
+    *,
+    final_iteration: int = DEFAULT_FINAL_ITERATION,
+    manual_checkpoint_after: int | None = DEFAULT_PHASE_ONE_END,
+    case_id_start: int = DEFAULT_CASE_ID_START,
+    n_new: int = BATCH_SIZE,
+    n_repeats: int = 0,
+    max_level: int = 12,
+    drop_radius_min: float = DROP_RADIUS_MIN,
+    workers: int = 3,
+    threads_per_case: int = 8,
+    max_threads: int = 48,
+    unit_prefix: str = "dropinj",
+    allow_unbracketed_edges: bool = False,
+    posterior_samples: int = 8,
+) -> None:
     """Convert the physical seed table to canonical predictor columns."""
     predictor_help = run(
         [sys.executable, str(campaign.predictor_root / "propose_next_sweep.py"), "--help"]
@@ -166,16 +193,49 @@ def initialise(campaign: Campaign, seed: Path, exclude_x: Sequence[float]) -> No
         ["git", "rev-parse", "HEAD"], cwd=campaign.predictor_root,
         text=True, capture_output=True, check=False
     ).stdout.strip()
+    if final_iteration < 1:
+        raise ValueError("final_iteration must be positive")
+    if (
+        manual_checkpoint_after is not None
+        and not 1 <= manual_checkpoint_after < final_iteration
+    ):
+        raise ValueError("manual checkpoint must lie before final_iteration")
+    if n_new < 0 or n_repeats < 0 or n_new + n_repeats != BATCH_SIZE:
+        raise ValueError(f"n_new + n_repeats must equal {BATCH_SIZE}")
+    if max_level < 1 or workers < 1 or threads_per_case < 1:
+        raise ValueError("max_level, workers and threads_per_case must be positive")
+    if posterior_samples < 8:
+        raise ValueError("posterior_samples must be at least 8")
+    if max_threads > 48 or workers * threads_per_case > max_threads:
+        raise ValueError("local concurrency exceeds the 48-thread workstation ceiling")
+    if case_id_start <= max(int(row["caseId"]) for row in canonical):
+        raise ValueError("case_id_start must exceed every numeric seed caseId")
+    if not unit_prefix or any(
+        character not in "abcdefghijklmnopqrstuvwxyz0123456789-"
+        for character in unit_prefix
+    ):
+        raise ValueError("unit_prefix must contain only lowercase letters, digits and hyphens")
+
     config = {
         "batch_size": BATCH_SIZE,
-        "phase_one_end": PHASE_ONE_END,
-        "final_iteration": FINAL_ITERATION,
+        "manual_checkpoint_after": manual_checkpoint_after,
+        "final_iteration": final_iteration,
+        "case_id_start": case_id_start,
+        "n_new": n_new,
+        "n_repeats": n_repeats,
+        "max_level": max_level,
+        "workers": workers,
+        "threads_per_case": threads_per_case,
+        "max_threads": max_threads,
+        "unit_prefix": unit_prefix,
+        "allow_unbracketed_edges": allow_unbracketed_edges,
+        "posterior_samples": posterior_samples,
         "x_bounds": [1.0, 16.0],
         "y_bounds": [Y_MIN, Y_MAX],
         "allowed_x_values": allowed,
         "excluded_seed_x_values": list(exclude_x),
         "excluded_seed_rows": len(excluded),
-        "drop_radius_min": DROP_RADIUS_MIN,
+        "drop_radius_min": drop_radius_min,
         "drop_radius_resolution": "2*max(Ldomain)/2^MAXlevel",
         "drop_persistence": 3,
         "snapshot_interval": 0.05,
@@ -209,6 +269,7 @@ def initialise(campaign: Campaign, seed: Path, exclude_x: Sequence[float]) -> No
         campaign.proposals,
         campaign.contours,
         campaign.iterations,
+        campaign.measurements,
     ):
         directory.mkdir(exist_ok=True)
     write_rows(destination, canonical, ("caseId", "x", "y", "id"))
@@ -245,8 +306,9 @@ def last_completed_iteration(campaign: Campaign) -> int:
     return completed[-1]
 
 
-def model_args() -> list[str]:
+def model_args(campaign: Campaign) -> list[str]:
     """Return the pinned production model configuration."""
+    config = campaign_config(campaign)
     return [
         "--mode", "monotone-y",
         "--monotone-direction", "decreasing",
@@ -258,7 +320,7 @@ def model_args() -> list[str]:
         "--y-min", "0.01",
         "--y-max", "0.075",
         "--grid-size", "21",
-        "--posterior-samples", "8",
+        "--posterior-samples", str(config.get("posterior_samples", 8)),
         "--transition-width", "0.04",
         "--label-noise", "0.005",
         "--length-scale-x", "0.18",
@@ -297,8 +359,10 @@ def assess(campaign: Campaign, iteration: int, candidate: Path) -> None:
         str(state_pending),
         "--iteration",
         str(iteration),
-        *model_args(),
+        *model_args(campaign),
     ]
+    if campaign_config(campaign).get("allow_unbracketed_edges", False):
+        command.append("--allow-unbracketed-edges")
     try:
         result = run(command)
         if not contour_pending.exists() or not state_pending.exists():
@@ -316,12 +380,7 @@ def validate_proposal(campaign: Campaign, rows: Sequence[dict[str, str]]) -> Non
     """Enforce the immutable 16-point simulation-domain contract."""
     if len(rows) != BATCH_SIZE:
         raise ValueError(f"proposal has {len(rows)} rows, expected {BATCH_SIZE}")
-    allowed = set(
-        float(value)
-        for value in json.loads((campaign.root / "campaign-config.json").read_text())[
-            "allowed_x_values"
-        ]
-    )
+    allowed = set(float(value) for value in campaign_config(campaign)["allowed_x_values"])
     seen_ids: set[str] = set()
     seen_points: set[tuple[float, float]] = set()
     for row in rows:
@@ -350,7 +409,7 @@ def proposal_for(
     campaign: Campaign, iteration: int, *, output: Path | None = None
 ) -> Path:
     """Generate a constrained 16-point proposal for one iteration."""
-    config = json.loads((campaign.root / "campaign-config.json").read_text())
+    config = campaign_config(campaign)
     allowed = ",".join(f"{value:g}" for value in config["allowed_x_values"])
     output = output or campaign.proposals / f"Sweep-{iteration}_proposed.csv"
     if output.exists():
@@ -367,20 +426,24 @@ def proposal_for(
         "--n-simulations",
         str(BATCH_SIZE),
         "--n-new",
-        str(BATCH_SIZE),
+        str(config.get("n_new", BATCH_SIZE)),
         "--n-repeats",
-        "0",
+        str(config.get("n_repeats", 0)),
         "--seed",
         str(12 + iteration),
         "--x-candidates",
         allowed,
-        *model_args(),
+        *model_args(campaign),
     ]
     try:
         result = run(command)
         rows = read_rows(building)
         for index, row in enumerate(rows):
-            row["caseId"] = str(CASE_ID_START + (iteration - 1) * BATCH_SIZE + index)
+            row["caseId"] = str(
+                int(config.get("case_id_start", DEFAULT_CASE_ID_START))
+                + (iteration - 1) * BATCH_SIZE
+                + index
+            )
         validate_proposal(campaign, rows)
         fields = tuple(rows[0].keys())
         write_rows(building, rows, fields)
@@ -481,13 +544,15 @@ def merged_resolved_results(
                 continue
             if row.get("id") not in {"0", "1"} or row.get("runner_state") != "complete":
                 continue
+            candidate = dict(row)
+            candidate["source_attempt"] = str(attempt)
             previous = resolved.get(row["caseId"])
             if previous and previous["id"] != row["id"]:
                 raise ValueError(
                     f"conflicting resolved labels for case {row['caseId']}: "
                     f"{previous['id']} and {row['id']}"
                 )
-            resolved.setdefault(row["caseId"], row)
+            resolved.setdefault(row["caseId"], candidate)
     return resolved
 
 
@@ -562,7 +627,8 @@ def submit(
             raise RuntimeError(f"could not parse sbatch output: {result.stdout!r}")
         job_id = words[-1]
     elif campaign.backend == "local":
-        unit = f"dropinj-i{iteration:02d}-a{attempt:02d}"
+        config = campaign_config(campaign)
+        unit = f"{config.get('unit_prefix', 'dropinj')}-i{iteration:02d}-a{attempt:02d}"
         run(
             [
                 "systemd-run", "--user", "--unit", unit,
@@ -570,6 +636,11 @@ def submit(
                 "--property", "IOSchedulingClass=best-effort",
                 "--property", "IOSchedulingPriority=7",
                 "--setenv", f"SYSTEMD_UNIT={unit}.service",
+                "--setenv", f"CONTOUR_MAXLEVEL={int(config.get('max_level', 12))}",
+                "--setenv", f"CONTOUR_DROP_RADIUS_MIN={float(config.get('drop_radius_min', DROP_RADIUS_MIN)):g}",
+                "--setenv", f"CONTOUR_WORKERS={int(config.get('workers', 3))}",
+                "--setenv", f"CONTOUR_THREADS_PER_CASE={int(config.get('threads_per_case', 8))}",
+                "--setenv", f"CONTOUR_MAX_THREADS={int(config.get('max_threads', 48))}",
                 str(campaign.project_root / "runContourLocal.sh"),
                 str(attempt_root),
             ],
@@ -663,7 +734,7 @@ def execution_state(job_id: str) -> str:
 
 
 def collect(campaign: Campaign, iteration: int, attempt: int) -> Path:
-    """Merge attempts and promote one complete 16-case result table."""
+    """Merge attempts and promote labels plus their measured drop sizes."""
     iteration_root = iteration_dir(campaign, iteration)
     expected = read_rows(iteration_root / "cases.csv")
     resolved = merged_resolved_results(campaign, iteration, attempt)
@@ -672,6 +743,7 @@ def collect(campaign: Campaign, iteration: int, attempt: int) -> Path:
             f"iteration {iteration} has {len(resolved)}/{BATCH_SIZE} resolved labels"
         )
     destination = campaign.completed / f"Sweep-{iteration}_completed.csv"
+    measurements = campaign.measurements / f"Sweep-{iteration}_measurements.csv"
     canonical = [
         {
             "caseId": row["caseId"],
@@ -681,24 +753,48 @@ def collect(campaign: Campaign, iteration: int, attempt: int) -> Path:
         }
         for row in expected
     ]
+    measurement_fields = (
+        "iteration", "source_attempt", "caseId", "x", "y", "id",
+        "drop_volume", "drop_radius", "reason", "t", "runner_state",
+        "exit_code", "max_ke", "facet_lines", "quality_state", "quality_reason",
+    )
+    measurement_rows = [
+        {**resolved[row["caseId"]], "iteration": str(iteration)}
+        for row in expected
+    ]
+    canonical_measurements = [
+        {field: row.get(field, "") for field in measurement_fields}
+        for row in measurement_rows
+    ]
     if destination.exists() and read_rows(destination) != canonical:
         raise FileExistsError(f"refusing to replace {destination}")
+    if measurements.exists() and read_rows(measurements) != canonical_measurements:
+        raise FileExistsError(f"refusing to replace {measurements}")
     if destination.exists():
         return destination
     pending = destination.with_name(f".{destination.name}.pending")
+    measurements_pending = measurements.with_name(f".{measurements.name}.pending")
     try:
         write_rows(pending, canonical, ("caseId", "x", "y", "id"))
+        write_rows(measurements_pending, measurement_rows, measurement_fields)
         assess(campaign, iteration, pending)
         pending.replace(destination)
+        measurements_pending.replace(measurements)
     finally:
         pending.unlink(missing_ok=True)
+        measurements_pending.unlink(missing_ok=True)
     return destination
 
 
 def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
     """Collect a finished batch and, when permitted, launch the next one."""
+    config = campaign_config(campaign)
+    final_iteration = int(config.get("final_iteration", DEFAULT_FINAL_ITERATION))
+    manual_checkpoint_after = config.get(
+        "manual_checkpoint_after", DEFAULT_PHASE_ONE_END
+    )
     last_completed = last_completed_iteration(campaign)
-    if last_completed >= FINAL_ITERATION:
+    if last_completed >= final_iteration:
         atomic_write(
             campaign.root / "campaign-state.json",
             json.dumps({"state": "complete", "last_completed_iteration": last_completed}, indent=2) + "\n",
@@ -742,7 +838,7 @@ def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
             print(f"needs attention: {error}")
             return
         last_completed = current_iteration
-        if last_completed >= FINAL_ITERATION:
+        if last_completed >= final_iteration:
             atomic_write(
                 campaign.root / "campaign-state.json",
                 json.dumps(
@@ -754,7 +850,10 @@ def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
             print(f"campaign complete at iteration {last_completed}")
             return
 
-    if last_completed == PHASE_ONE_END:
+    if (
+        manual_checkpoint_after is not None
+        and last_completed == int(manual_checkpoint_after)
+    ):
         manual = campaign.proposals / "Sweep-9_manual-approved.csv"
         if not manual.exists():
             atomic_write(
@@ -762,7 +861,7 @@ def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
                 json.dumps(
                     {
                         "state": "manual_checkpoint",
-                        "last_completed_iteration": PHASE_ONE_END,
+                        "last_completed_iteration": int(manual_checkpoint_after),
                         "next_required": "human reviews a proposed Sweep 9 and approves exactly 16 cases",
                     },
                     indent=2,
@@ -787,7 +886,10 @@ def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
 
 def propose_manual_batch(campaign: Campaign) -> Path:
     """Generate, but never approve, the iteration-9 review candidate."""
-    if last_completed_iteration(campaign) != PHASE_ONE_END:
+    checkpoint = campaign_config(campaign).get(
+        "manual_checkpoint_after", DEFAULT_PHASE_ONE_END
+    )
+    if checkpoint is None or last_completed_iteration(campaign) != int(checkpoint):
         raise ValueError("manual iteration-9 proposal is valid only after iteration 8")
     destination = campaign.proposals / "Sweep-9_manual-candidate.csv"
     proposal_for(campaign, 9, output=destination)
@@ -824,13 +926,19 @@ def retry_current_iteration(campaign: Campaign, *, submit_job: bool) -> str:
 
 def approve_manual_batch(campaign: Campaign, source: Path) -> None:
     """Install Taylor's reviewed iteration-9 batch at the phase boundary."""
-    if last_completed_iteration(campaign) != PHASE_ONE_END:
+    config = campaign_config(campaign)
+    checkpoint = config.get("manual_checkpoint_after", DEFAULT_PHASE_ONE_END)
+    if checkpoint is None or last_completed_iteration(campaign) != int(checkpoint):
         raise ValueError("manual iteration-9 approval is valid only after iteration 8")
     rows = read_rows(source)
     if len(rows) != BATCH_SIZE:
         raise ValueError(f"manual batch needs {BATCH_SIZE} rows")
     for index, row in enumerate(rows):
-        row["caseId"] = str(CASE_ID_START + 8 * BATCH_SIZE + index)
+        row["caseId"] = str(
+            int(config.get("case_id_start", DEFAULT_CASE_ID_START))
+            + 8 * BATCH_SIZE
+            + index
+        )
         row["x"] = row.get("x", row.get("Rr", ""))
         row["y"] = row.get("y", row.get("Oh", ""))
         row["id"] = row.get("id", "-1")
@@ -867,6 +975,19 @@ def main() -> int:
     init_parser = subparsers.add_parser("init")
     init_parser.add_argument("--seed", required=True, type=Path)
     init_parser.add_argument("--exclude-x", action="append", type=float, default=[])
+    init_parser.add_argument("--final-iteration", type=int, default=DEFAULT_FINAL_ITERATION)
+    init_parser.add_argument("--no-manual-checkpoint", action="store_true")
+    init_parser.add_argument("--case-id-start", type=int, default=DEFAULT_CASE_ID_START)
+    init_parser.add_argument("--n-new", type=int, default=BATCH_SIZE)
+    init_parser.add_argument("--n-repeats", type=int, default=0)
+    init_parser.add_argument("--max-level", type=int, default=12)
+    init_parser.add_argument("--drop-radius-min", type=float, default=DROP_RADIUS_MIN)
+    init_parser.add_argument("--workers", type=int, default=3)
+    init_parser.add_argument("--threads-per-case", type=int, default=8)
+    init_parser.add_argument("--max-threads", type=int, default=48)
+    init_parser.add_argument("--unit-prefix", default="dropinj")
+    init_parser.add_argument("--allow-unbracketed-edges", action="store_true")
+    init_parser.add_argument("--posterior-samples", type=int, default=8)
     advance_parser = subparsers.add_parser("advance")
     advance_parser.add_argument("--submit", action="store_true")
     retry_parser = subparsers.add_parser("retry")
@@ -880,7 +1001,26 @@ def main() -> int:
 
     with campaign_lock(campaign.root):
         if args.command == "init":
-            initialise(campaign, args.seed, args.exclude_x)
+            initialise(
+                campaign,
+                args.seed,
+                args.exclude_x,
+                final_iteration=args.final_iteration,
+                manual_checkpoint_after=(
+                    None if args.no_manual_checkpoint else DEFAULT_PHASE_ONE_END
+                ),
+                case_id_start=args.case_id_start,
+                n_new=args.n_new,
+                n_repeats=args.n_repeats,
+                max_level=args.max_level,
+                drop_radius_min=args.drop_radius_min,
+                workers=args.workers,
+                threads_per_case=args.threads_per_case,
+                max_threads=args.max_threads,
+                unit_prefix=args.unit_prefix,
+                allow_unbracketed_edges=args.allow_unbracketed_edges,
+                posterior_samples=args.posterior_samples,
+            )
         elif args.command == "advance":
             advance(campaign, submit_jobs=args.submit)
         elif args.command == "retry":

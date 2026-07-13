@@ -175,6 +175,33 @@ creates a clean `attempt-NN` directory containing only unresolved cases.
 Collection merges resolved labels across attempts in the original 16-case order
 without overwriting earlier evidence.
 
+For a bounded unattended workstation campaign, initialise a fresh campaign
+with explicit numerical and acquisition settings, then run the shell driver:
+
+```bash
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /path/to/confined-l11 \
+  --project-root "$PWD" \
+  --predictor-root /path/to/Bayesian-Contour-Predictor \
+  --backend local init \
+  --seed /path/to/resolved-seed.csv \
+  --final-iteration 20 --no-manual-checkpoint \
+  --case-id-start 6000 --n-new 14 --n-repeats 2 \
+  --max-level 11 --drop-radius-min 0.015625 \
+  --workers 3 --threads-per-case 8 --max-threads 48 \
+  --unit-prefix dropinj-l11 --allow-unbracketed-edges \
+  --posterior-samples 64
+
+./runContourCampaignLoop.sh \
+  /path/to/confined-l11 \
+  /path/to/Bayesian-Contour-Predictor
+```
+
+The driver permits one selective retry of unresolved cases, then stops with
+`needs_attention`. It never reruns resolved cases. Full per-batch measurements,
+including first-persistent-detachment radius and volume, are retained under
+`measurements/`; the four-column `completed/` tables remain predictor input.
+
 New Hamilton result rows include `max_ke`, `facet_lines`, `quality_state`, and
 `quality_reason`. A row fails the conservative corruption gate when its maximum
 kinetic energy exceeds 1000, its latest interface has more than 8000 nonblank
