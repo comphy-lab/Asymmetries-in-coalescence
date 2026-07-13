@@ -4,7 +4,7 @@
 
 Drive a 16-case-per-iteration Bayesian contour campaign without keeping an
 interactive agent alive. The state machine is idempotent: scheduled monitors
-may call `advance` repeatedly, and a new Slurm job is submitted only after the
+may call `advance` repeatedly, and a new batch is submitted only after the
 previous batch has produced 16 resolved classifications.
 """
 
@@ -47,6 +47,7 @@ TERMINAL_SLURM_STATES = {
     "PREEMPTED",
     "TIMEOUT",
 }
+TERMINAL_EXECUTION_STATES = TERMINAL_SLURM_STATES | {"SUCCESS"}
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class Campaign:
     root: Path
     project_root: Path
     predictor_root: Path
+    backend: str = "slurm"
 
     @property
     def completed(self) -> Path:
@@ -520,7 +522,7 @@ def submit(
     new_attempt: bool = False,
     attempt_rows: Sequence[dict[str, str]] | None = None,
 ) -> str:
-    """Submit one isolated Hamilton attempt, idempotently by default."""
+    """Submit one isolated attempt, idempotently by default."""
     target_dir = stage_proposal(campaign, iteration, proposal)
     current_file = target_dir / "current-attempt.json"
     current = json.loads(current_file.read_text()) if current_file.exists() else None
@@ -546,22 +548,46 @@ def submit(
         raise FileExistsError(f"attempt {attempt} contains a different cases.csv")
     if not attempt_cases.exists():
         write_rows(attempt_cases, attempt_rows, fields)
-    job_file = attempt_root / "slurm-job.json"
+    job_file = attempt_root / f"{campaign.backend}-job.json"
     if job_file.exists():
         raise FileExistsError(f"refusing to replace attempt record {job_file}")
 
-    result = run(
-        ["sbatch", "runContourHamilton.sbatch", str(attempt_root)],
-        cwd=campaign.project_root,
-    )
-    words = result.stdout.strip().split()
-    if len(words) < 4 or not words[-1].isdigit():
-        raise RuntimeError(f"could not parse sbatch output: {result.stdout!r}")
-    job_id = words[-1]
+    if campaign.backend == "slurm":
+        result = run(
+            ["sbatch", "runContourHamilton.sbatch", str(attempt_root)],
+            cwd=campaign.project_root,
+        )
+        words = result.stdout.strip().split()
+        if len(words) < 4 or not words[-1].isdigit():
+            raise RuntimeError(f"could not parse sbatch output: {result.stdout!r}")
+        job_id = words[-1]
+    elif campaign.backend == "local":
+        unit = f"dropinj-i{iteration:02d}-a{attempt:02d}"
+        run(
+            [
+                "systemd-run", "--user", "--unit", unit,
+                "--property", "Nice=10",
+                "--property", "IOSchedulingClass=best-effort",
+                "--property", "IOSchedulingPriority=7",
+                "--setenv", f"SYSTEMD_UNIT={unit}.service",
+                str(campaign.project_root / "runContourLocal.sh"),
+                str(attempt_root),
+            ],
+            cwd=campaign.project_root,
+        )
+        job_id = f"local:{unit}.service"
+    else:
+        raise ValueError(f"unsupported execution backend: {campaign.backend}")
     atomic_write(
         job_file,
         json.dumps(
-            {"job_id": job_id, "iteration": iteration, "attempt": attempt}, indent=2
+            {
+                "job_id": job_id,
+                "iteration": iteration,
+                "attempt": attempt,
+                "backend": campaign.backend,
+            },
+            indent=2,
         )
         + "\n",
     )
@@ -600,6 +626,40 @@ def slurm_state(job_id: str) -> str:
         check=False,
     ).stdout.strip()
     return accounted.splitlines()[0].split()[0].split("+")[0].upper() if accounted else "UNKNOWN"
+
+
+def local_state(job_id: str) -> str:
+    """Read the state of one user-systemd workstation batch."""
+    unit = job_id.removeprefix("local:")
+    result = subprocess.run(
+        [
+            "systemctl", "--user", "show", unit,
+            "--property=LoadState", "--property=ActiveState", "--property=Result",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    fields = dict(
+        line.split("=", 1)
+        for line in result.stdout.splitlines()
+        if "=" in line
+    )
+    if fields.get("LoadState") == "not-found":
+        return "UNKNOWN"
+    active = fields.get("ActiveState", "unknown")
+    if active in {"active", "activating", "deactivating"}:
+        return "RUNNING"
+    if active == "failed" or fields.get("Result") not in {"", "success"}:
+        return "FAILED"
+    if active == "inactive" and fields.get("Result") == "success":
+        return "COMPLETED"
+    return "UNKNOWN"
+
+
+def execution_state(job_id: str) -> str:
+    """Read a Slurm or local-systemd execution state from its stable job ID."""
+    return local_state(job_id) if job_id.startswith("local:") else slurm_state(job_id)
 
 
 def collect(campaign: Campaign, iteration: int, attempt: int) -> Path:
@@ -653,12 +713,12 @@ def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
         current = json.loads(current_file.read_text())
         job_id = str(current["job_id"])
         attempt = int(current["attempt"])
-        state = slurm_state(job_id)
+        state = execution_state(job_id)
         print(
             f"iteration={current_iteration} attempt={attempt} "
-            f"job={job_id} slurm_state={state}"
+            f"job={job_id} execution_state={state}"
         )
-        if state not in TERMINAL_SLURM_STATES:
+        if state not in TERMINAL_EXECUTION_STATES:
             return
         try:
             collect(campaign, current_iteration, attempt)
@@ -671,7 +731,7 @@ def advance(campaign: Campaign, *, submit_jobs: bool) -> None:
                         "iteration": current_iteration,
                         "attempt": attempt,
                         "job_id": job_id,
-                        "slurm_state": state,
+                        "execution_state": state,
                         "reason": str(error),
                         "recovery": "inspect evidence, then run retry --submit only if simulations are unresolved",
                     },
@@ -743,8 +803,8 @@ def retry_current_iteration(campaign: Campaign, *, submit_job: bool) -> str:
     if not current_file.exists():
         raise ValueError(f"iteration {iteration} has no submitted attempt")
     current = json.loads(current_file.read_text())
-    state = slurm_state(str(current["job_id"]))
-    if state not in TERMINAL_SLURM_STATES:
+    state = execution_state(str(current["job_id"]))
+    if state not in TERMINAL_EXECUTION_STATES:
         raise ValueError(f"job {current['job_id']} is still {state}; refusing retry")
     attempt = int(current["attempt"])
     remaining = unresolved_cases(campaign, iteration, attempt)
@@ -792,6 +852,7 @@ def build_campaign(args: argparse.Namespace) -> Campaign:
         root=args.campaign_root.resolve(),
         project_root=args.project_root.resolve(),
         predictor_root=args.predictor_root.resolve(),
+        backend=args.backend,
     )
 
 
@@ -801,6 +862,7 @@ def main() -> int:
     parser.add_argument("--campaign-root", required=True, type=Path)
     parser.add_argument("--project-root", default=Path.cwd(), type=Path)
     parser.add_argument("--predictor-root", required=True, type=Path)
+    parser.add_argument("--backend", choices=("slurm", "local"), default="slurm")
     subparsers = parser.add_subparsers(dest="command", required=True)
     init_parser = subparsers.add_parser("init")
     init_parser.add_argument("--seed", required=True, type=Path)

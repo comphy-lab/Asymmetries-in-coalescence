@@ -42,7 +42,8 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 ├── sweep.params                     Sweep configuration template
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
 ├── runSweepHamilton.sbatch          Legacy sequential MPI runner
-└── runContourHamilton.sbatch        Packed 16-case OpenMP contour runner
+├── runContourHamilton.sbatch        Packed 16-case Hamilton runner
+└── runContourLocal.sh               Bounded local-systemd/OpenMP runner
 ```
 
 ## Simulation Files
@@ -112,10 +113,14 @@ The `coalescenceBubble-tag.c` file additionally uses `tag.h` for tracking shape 
 sbatch runSweepSnellius.sbatch
 ```
 
-### Bayesian contour campaign on Hamilton
+### Bayesian contour campaign
 
-The rearmable contour workflow uses batches of 16 simulations on one Hamilton
-node. Each case receives eight OpenMP threads. The simulation detects detached
+The rearmable contour workflow uses batches of 16 simulations. Hamilton runs
+one 16-case Slurm allocation; the local backend launches a user-systemd unit
+and executes three cases at a time by default. Each case receives eight OpenMP
+threads, so the workstation default is 24 concurrent threads. The local runner
+enforces a hard 48-thread ceiling through `CONTOUR_MAX_THREADS` and uses no MPI.
+The simulation detects detached
 liquid components during runtime, writes `classification.status`, and stops
 after a drop of radius 0.0078125 persists for three checks. This one physical
 threshold is resolved by at least two finest cells even in the largest domain,
@@ -140,6 +145,21 @@ python3 contourWorkflow/contour_campaign.py \
   --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
   advance --submit
 ```
+
+On a controlled Linux workstation, select the local backend explicitly:
+
+```bash
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /path/to/drop-injection-confined \
+  --project-root "$PWD" \
+  --predictor-root /path/to/Bayesian-Contour-Predictor \
+  --backend local \
+  advance --submit
+```
+
+`runContourLocal.sh` compiles against the ref-locked Basilisk sources under the
+project and uses a host-built `qcc`. Set `CONTOUR_QCC` only when `qcc` is not on
+the non-interactive `PATH`.
 
 `advance --submit` is idempotent. It collects only complete 16-row result
 tables, submits the next batch, stops for manual selection after iteration 8,

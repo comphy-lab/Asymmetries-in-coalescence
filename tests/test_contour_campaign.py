@@ -309,7 +309,58 @@ class ContourCampaignTests(unittest.TestCase):
                 / "current-attempt.json"
             ).read_text()
         )
-        self.assertEqual(current, {"job_id": "202", "iteration": 1, "attempt": 2})
+        self.assertEqual(
+            current,
+            {
+                "job_id": "202",
+                "iteration": 1,
+                "attempt": 2,
+                "backend": "slurm",
+            },
+        )
+
+    def test_local_submit_uses_bounded_systemd_runner(self) -> None:
+        self.create_layout()
+        campaign = CAMPAIGN_MODULE.Campaign(
+            root=self.campaign.root,
+            project_root=self.campaign.project_root,
+            predictor_root=self.campaign.predictor_root,
+            backend="local",
+        )
+        proposal = campaign.proposals / "Sweep-1_proposed.csv"
+        self.write_rows(proposal, self.valid_proposal())
+        launched = subprocess.CompletedProcess([], 0, "Running as unit\n", "")
+
+        with mock.patch.object(CAMPAIGN_MODULE, "run", return_value=launched) as run:
+            job_id = CAMPAIGN_MODULE.submit(campaign, 1, proposal)
+
+        self.assertEqual(job_id, "local:dropinj-i01-a01.service")
+        command = run.call_args.args[0]
+        self.assertEqual(command[:4], ["systemd-run", "--user", "--unit", "dropinj-i01-a01"])
+        self.assertIn("Nice=10", command)
+        self.assertIn(str(campaign.project_root / "runContourLocal.sh"), command)
+        current = json.loads(
+            (campaign.iterations / "iteration-01" / "current-attempt.json").read_text()
+        )
+        self.assertEqual(current["backend"], "local")
+
+    def test_local_state_maps_systemd_results(self) -> None:
+        states = (
+            ("LoadState=loaded\nActiveState=active\nResult=success\n", "RUNNING"),
+            ("LoadState=loaded\nActiveState=inactive\nResult=success\n", "COMPLETED"),
+            ("LoadState=loaded\nActiveState=failed\nResult=exit-code\n", "FAILED"),
+            ("LoadState=not-found\nActiveState=inactive\nResult=success\n", "UNKNOWN"),
+        )
+        for stdout, expected in states:
+            with self.subTest(expected=expected), mock.patch.object(
+                CAMPAIGN_MODULE.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 0, stdout, ""),
+            ):
+                self.assertEqual(
+                    CAMPAIGN_MODULE.local_state("local:dropinj-i01-a01.service"),
+                    expected,
+                )
 
     def test_retry_submits_only_cases_unresolved_across_prior_attempts(self) -> None:
         self.create_layout()
