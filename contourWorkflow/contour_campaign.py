@@ -793,7 +793,8 @@ def collect(campaign: Campaign, iteration: int, attempt: int) -> Path:
     ]
     measurement_fields = (
         "iteration", "source_attempt", "caseId", "x", "y", "id",
-        "drop_volume", "drop_radius", "reason", "t", "runner_state",
+        "drop_volume", "drop_radius", "drop_axial_position",
+        "drop_axial_velocity", "reason", "t", "runner_state",
         "exit_code", "max_ke", "facet_lines", "quality_state", "quality_reason",
     )
     measurement_rows = [

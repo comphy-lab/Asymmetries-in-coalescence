@@ -96,6 +96,12 @@ class MaterializeCasesTests(unittest.TestCase):
             (self.case_root / "case-5015" / "case.params").read_text().splitlines()[2:],
         )
 
+    def test_uses_end_pinchoff_observation_horizon(self) -> None:
+        result = self.run_materializer(self.rows)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        params = (self.case_root / "case-5000" / "case.params").read_text()
+        self.assertIn("tmax=1.0\n", params)
+
     def test_reuses_byte_identical_cases_with_runtime_outputs(self) -> None:
         first = self.run_materializer(self.rows)
         self.assertEqual(first.returncode, 0, first.stderr)

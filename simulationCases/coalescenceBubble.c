@@ -18,7 +18,9 @@ jet and droplet pinch-off into the parent bubble.
 1. First contact creates a neck that expands rapidly.
 2. The neck launches capillary waves over the small bubble.
 3. Waves focus at the small bubble's south pole.
-4. A Worthington jet forms and breaks up, injecting droplets into the gas.
+4. The leading jet tip end-pinches; it counts as injection only when the
+   detached component is still moving into the larger bubble. Later
+   Rayleigh--Plateau breakup of the jet is not the classified event.
 
 ## Physical Setup
 
@@ -152,6 +154,8 @@ bool dropDetected = false;
 bool simulationInitialised = false;
 double largestDetachedVolume = 0.;
 double largestDetachedRadius = 0.;
+double detachedAxialPosition = 0.;
+double detachedAxialVelocity = 0.;
 char nameOut[80], dumpFile[80];
 
 /**
@@ -172,20 +176,24 @@ static void write_classification_status (int id, const char * reason)
     fprintf (ferr, "Could not write classification.status.tmp\n");
     return;
   }
-  fprintf (fp, "id,reason,t,drop_volume,drop_radius,threshold,consecutive\n");
-  fprintf (fp, "%d,%s,%.8g,%.8g,%.8g,%.8g,%d\n", id, reason, t,
-           largestDetachedVolume, largestDetachedRadius, dropRadiusMin,
+  fprintf (fp, "id,reason,t,drop_volume,drop_radius,drop_axial_position,"
+           "drop_axial_velocity,threshold,consecutive\n");
+  fprintf (fp, "%d,%s,%.8g,%.8g,%.8g,%.8g,%.8g,%.8g,%d\n", id,
+           reason, t, largestDetachedVolume, largestDetachedRadius,
+           detachedAxialPosition, detachedAxialVelocity, dropRadiusMin,
            dropConsecutive);
   fclose (fp);
   rename ("classification.status.tmp", "classification.status");
 }
 
 /**
-### detached_liquid_volume()
+### detached_tip_component()
 
 Tag connected liquid regions, identify the exterior liquid as the largest
-component, and return the volume of the largest remaining component. In this
-axisymmetric bubble problem, that component is the candidate injected drop.
+component, and return the leading detached component above the radius cutoff.
+The leading component is the operational end-pinchoff candidate. Smaller
+downstream fragments are ignored so generic Rayleigh--Plateau breakup does not
+define the regime-map label.
 
 The component accumulation is deliberately serial. `tag()` already performs
 the connected-component labelling, while a serial accumulation avoids an
@@ -193,35 +201,61 @@ OpenMP race on the dynamically sized component-volume array. `dv()` supplies
 the axisymmetric metric without the azimuthal $2\pi$ factor, which is restored
 explicitly below.
 */
-static double detached_liquid_volume (void)
+typedef struct {
+  double volume;
+  double radius;
+  double axial_position;
+  double axial_velocity;
+} DetachedComponent;
+
+static DetachedComponent detached_tip_component (void)
 {
+  DetachedComponent candidate = {0., 0., 0., 0.};
   scalar liquid[];
   foreach()
     liquid[] = (1. - f[]) > 1e-4;
 
   int n = tag (liquid);
   if (n < 2)
-    return 0.;
+    return candidate;
 
-  double volumes[n];
-  for (int j = 0; j < n; j++)
+  double volumes[n], axial_moments[n], velocity_moments[n];
+  for (int j = 0; j < n; j++) {
     volumes[j] = 0.;
+    axial_moments[j] = 0.;
+    velocity_moments[j] = 0.;
+  }
 
-  foreach (serial)
-    if (liquid[] > 0.)
-      volumes[(int) liquid[] - 1] +=
-        2.*pi*clamp (1. - f[], 0., 1.)*dv();
+  foreach (serial) {
+    if (liquid[] > 0.) {
+      int label = (int) liquid[] - 1;
+      double weight = 2.*pi*clamp (1. - f[], 0., 1.)*dv();
+      volumes[label] += weight;
+      axial_moments[label] += x*weight;
+      velocity_moments[label] += u.x[]*weight;
+    }
+  }
 
   int exterior = 0;
   for (int j = 1; j < n; j++)
     if (volumes[j] > volumes[exterior])
       exterior = j;
 
-  double detached = 0.;
-  for (int j = 0; j < n; j++)
-    if (j != exterior && volumes[j] > detached)
-      detached = volumes[j];
-  return detached;
+  double leading_position = -1e30;
+  for (int j = 0; j < n; j++) {
+    if (j == exterior || volumes[j] <= 0.)
+      continue;
+    double radius = cbrt (3.*volumes[j]/(4.*pi));
+    double axial_position = axial_moments[j]/volumes[j];
+    if (radius >= dropRadiusMin && axial_position > leading_position) {
+      leading_position = axial_position;
+      candidate.volume = volumes[j];
+      candidate.radius = radius;
+      candidate.axial_position = axial_position;
+      candidate.axial_velocity = velocity_moments[j]/volumes[j];
+    }
+  }
+  return candidate;
 }
 
 /**
@@ -405,12 +439,14 @@ event contourCheckpoint (t = 0.5; t += 0.5; t < tmax) {
 }
 
 /**
-## Contour-Campaign Drop Detection
+## Contour-Campaign End-Pinchoff Detection
 
 When `dropRadiusMin >= 0`, inspect connected liquid components every 0.02 time
-units. A candidate must exceed the equivalent spherical radius threshold on
-`dropPersistence` consecutive checks. This persistence gate prevents a single
-under-resolved VOF fragment from terminating a case.
+units. The leading detached component must exceed the equivalent spherical
+radius threshold on `dropPersistence` consecutive checks. It is a drop only
+when its volume-weighted axial velocity is positive at confirmed pinch-off.
+A zero or negative velocity is a resolved no-drop event; later
+Rayleigh--Plateau fragments do not define injection.
 */
 static void write_contour_pulse (void)
 {
@@ -436,9 +472,11 @@ event detectDetachedDrop (t = 0.05; t += 2.*tsnap; t <= tmax + tsnap) {
   if (dropRadiusMin < 0.)
     return 0;
 
-  largestDetachedVolume = detached_liquid_volume();
-  largestDetachedRadius = largestDetachedVolume > 0. ?
-    cbrt (3.*largestDetachedVolume/(4.*pi)) : 0.;
+  DetachedComponent candidate = detached_tip_component();
+  largestDetachedVolume = candidate.volume;
+  largestDetachedRadius = candidate.radius;
+  detachedAxialPosition = candidate.axial_position;
+  detachedAxialVelocity = candidate.axial_velocity;
 
   if (largestDetachedRadius >= dropRadiusMin)
     dropConsecutive++;
@@ -450,11 +488,14 @@ event detectDetachedDrop (t = 0.05; t += 2.*tsnap; t <= tmax + tsnap) {
     dropDetected = true;
     dump (file = dumpFile);
     write_contour_pulse();
-    write_classification_status (1, "persistent_detached_drop");
-    fprintf (ferr, "Detached drop detected at t=%g: volume=%g, radius=%g "
-             "(threshold=%g, consecutive=%d). Stopping.\n", t,
-             largestDetachedVolume, largestDetachedRadius, dropRadiusMin,
-             dropConsecutive);
+    int injected = detachedAxialVelocity > 0.;
+    write_classification_status (injected,
+      injected ? "ejected_end_pinchoff_drop" : "end_pinchoff_not_ejected");
+    fprintf (ferr, "End pinch-off classified at t=%g: id=%d, volume=%g, "
+             "radius=%g, x=%g, ux=%g (threshold=%g, consecutive=%d). "
+             "Stopping.\n", t, injected, largestDetachedVolume,
+             largestDetachedRadius, detachedAxialPosition,
+             detachedAxialVelocity, dropRadiusMin, dropConsecutive);
     return 1;
   }
   return 0;

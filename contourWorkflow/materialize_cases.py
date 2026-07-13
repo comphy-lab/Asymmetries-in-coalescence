@@ -21,7 +21,7 @@ from pathlib import Path
 DEFAULTS = {
     "RhoIn": "1e-3",
     "MAXlevel": "12",
-    "tmax": "1.5",
+    "tmax": "1.0",
     "zWall": "0.05",
     # One physical threshold across the map: two finest cells in the largest
     # (Ldomain=16, MAXlevel=12) campaign domain.

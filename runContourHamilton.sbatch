@@ -191,6 +191,8 @@ for item in manifest:
         "t": status.get("t", ""),
         "drop_volume": status.get("drop_volume", ""),
         "drop_radius": status.get("drop_radius", ""),
+        "drop_axial_position": status.get("drop_axial_position", ""),
+        "drop_axial_velocity": status.get("drop_axial_velocity", ""),
         **case_quality(case_dir),
     })
 destination = root / "results.csv"

@@ -120,11 +120,13 @@ one 16-case Slurm allocation; the local backend launches a user-systemd unit
 and executes three cases at a time by default. Each case receives eight OpenMP
 threads, so the workstation default is 24 concurrent threads. The local runner
 enforces a hard 48-thread ceiling through `CONTOUR_MAX_THREADS` and uses no MPI.
-The simulation detects detached
-liquid components during runtime, writes `classification.status`, and stops
-after a drop of radius 0.0078125 persists for three checks. This one physical
-threshold is resolved by at least two finest cells even in the largest domain,
-so the classifier does not change with radius ratio.
+The simulation detects the first persistent leading-tip detachment during
+runtime, writes `classification.status`, and stops after a component above the
+configured radius cutoff persists for three checks. It is labelled as an
+injected drop only when its volume-weighted axial velocity is positive at
+pinch-off. A zero or negative velocity is no-drop; later Rayleigh--Plateau
+breakup along the jet is deliberately excluded. The contour-case observation
+horizon is `t=1.0` by default.
 
 The campaign controller requires a Bayesian Contour Predictor checkout with
 the `--x-candidates` interface (AnjaliML/Bayesian-Contour-Predictor PR #3 or a
