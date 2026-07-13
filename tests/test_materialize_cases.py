@@ -69,12 +69,11 @@ class MaterializeCasesTests(unittest.TestCase):
         self.assertIn("does not exactly match", result.stderr)
         self.assertFalse(self.case_root.exists())
 
-    def test_rejects_invalid_oh_and_duplicate_coordinates(self) -> None:
+    def test_rejects_invalid_oh_and_duplicate_case_ids(self) -> None:
         for change, expected in (
             ((15, "y", "nan"), "must be finite"),
             ((15, "y", "0.009"), "must be finite"),
             ((15, "caseId", "5000"), "duplicate caseId"),
-            ((15, "y", self.rows[0]["y"]), "duplicate proposed point"),
         ):
             with self.subTest(change=change):
                 rows = deepcopy(self.rows)
@@ -84,6 +83,18 @@ class MaterializeCasesTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(expected, result.stderr)
                 self.assertFalse(self.case_root.exists())
+
+    def test_materialises_intentional_repeat_coordinates(self) -> None:
+        rows = deepcopy(self.rows)
+        rows[-1]["y"] = rows[0]["y"]
+        result = self.run_materializer(rows)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.case_root / "case-5000").exists())
+        self.assertTrue((self.case_root / "case-5015").exists())
+        self.assertEqual(
+            (self.case_root / "case-5000" / "case.params").read_text().splitlines()[2:],
+            (self.case_root / "case-5015" / "case.params").read_text().splitlines()[2:],
+        )
 
     def test_reuses_byte_identical_cases_with_runtime_outputs(self) -> None:
         first = self.run_materializer(self.rows)

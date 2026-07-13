@@ -162,7 +162,6 @@ def main() -> int:
     source_bytes = args.source.read_bytes()
     data_dir = args.data_dir.resolve()
     seen_ids: set[str] = set()
-    seen_points: set[tuple[str, str]] = set()
     prepared = []
 
     # Validate the complete proposal before creating any case directories. This
@@ -180,10 +179,7 @@ def main() -> int:
         oh_key = f"{oh:.12g}"
         if case_id in seen_ids:
             parser.error(f"duplicate caseId {case_id}")
-        if (rr_key, oh_key) in seen_points:
-            parser.error(f"duplicate proposed point Rr={rr_key}, Oh={oh_key}")
         seen_ids.add(case_id)
-        seen_points.add((rr_key, oh_key))
         values = {
             "CaseNo": case_id,
             "OhOut": oh_key,
