@@ -165,17 +165,37 @@ the non-interactive `PATH`.
 
 `advance --submit` is idempotent. It collects only complete 16-row result
 tables, submits the next batch, stops for manual selection after iteration 8,
-and stops permanently after iteration 16. Radius-ratio proposals are confined
-to `simulationCases/DataFiles/`; post-hoc rounding is rejected because it
-changes acquisition scores.
+and stops permanently at the configured final iteration. Radius-ratio
+proposals are confined to `simulationCases/DataFiles/`; post-hoc rounding is
+rejected because it changes acquisition scores.
 
 At the iteration-8 checkpoint, generate (but do not approve) the review file
 with `propose-manual-batch`, edit it only for an explicit physics or
 information-gain reason, then install it with `approve-manual-batch`. A failed
 or timed-out allocation remains unresolved; after inspection, `retry --submit`
-creates a clean `attempt-NN` directory containing only unresolved cases.
+creates a clean `attempt-NN` directory containing only unresolved cases at
+adjacent, non-colliding Oh values (1% steps by default). Every replacement is
+recorded in `replacements.csv`; superseded evidence stays auditable but can
+never be promoted under the new coordinate.
 Collection merges resolved labels across attempts in the original 16-case order
 without overwriting earlier evidence.
+
+Contour runs can enable the feature-driven drill with
+`CONTOUR_DRILL_AMR=1`. The controller begins at a configured lower level and
+uses persistent target-region curvature demand to arm. A configurable
+fixed-Lmax bootstrap protects the freshly joined neck before any coarsening.
+Arming does not release Lmax through the singular focus: regional Lmax fires
+only after the leading near-axis tip advances persistently. Full resolution is
+then confined to the physical end-pinchoff band while the parent-bubble
+exterior remains capped one level lower. The public defaults are conservative;
+the drill is off unless a campaign explicitly enables it. Calibrate labels and first-drop radii against
+fixed-level references before production. Rayleigh--Plateau component counts
+are not drill triggers.
+
+`CONTOUR_DRILL_REGIONAL_ONLY=1` is the conservative mode: the complete
+wave/focus/jet band remains at `MAXlevel` for the whole run and only the parent
+bubble exterior is capped. Use this when dynamic pre-jet coarsening changes a
+boundary label or first-drop size.
 
 For a bounded unattended workstation campaign, initialise a fresh campaign
 with explicit numerical and acquisition settings, then run the shell driver:

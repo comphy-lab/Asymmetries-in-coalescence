@@ -44,7 +44,11 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
 
 ```
 ./coalescenceBubble <OhOut> <RhoIn> <Rr> <MAXlevel> <tmax> <zWall> \
-  [dropRadiusMin] [dropPersistence] [snapshotInterval]
+  [dropRadiusMin] [dropPersistence] [snapshotInterval] [drillAMR] \
+  [drillMaxlevelStart] [drillMaxlevelFocus] [drillNcells] \
+  [drillRegionMinX] [drillArmSteps] [drillArmTime] [drillCoarsenTime] \
+  [drillRegionMaxX] [drillRegionRadius] [drillFireX] [drillTipRadius] \
+  [drillRegionalOnly]
 ```
 
 ### Command-line Parameters
@@ -65,6 +69,9 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
 - `snapshotInterval`: Legacy full-snapshot interval (default: 0.01). Contour
   campaigns suppress the full time series, checkpoint every 0.5 time units,
   and publish lightweight facets every 0.05.
+- `drillAMR`: Enable feature-driven regional refinement (`0` by default).
+  The drill ramps from `drillMaxlevelStart`, arms on persistent target-region
+  curvature demand, then gives full `MAXlevel` only to the end-pinchoff side.
 
 ## Nondimensional Mapping Used in This Code
 
@@ -96,6 +103,7 @@ Last updated: Jan 2026
 #include "navier-stokes/conserving.h"
 #include "tension.h"
 #include "tag.h"
+#include "adapt_wavelet_limited.h"
 
 #if !_MPI
 #include "distance.h"
@@ -109,7 +117,7 @@ Last updated: Jan 2026
 - `tsnap2`: Time interval for logging diagnostics (0.0001)
 */
 
-int MAXlevel;
+int MAXlevel, maxlevelLocal;
 
 #define tsnap (1e-2)
 #define tsnap2 (1e-4)
@@ -156,6 +164,23 @@ double largestDetachedVolume = 0.;
 double largestDetachedRadius = 0.;
 double detachedAxialPosition = 0.;
 double detachedAxialVelocity = 0.;
+int drillAMR = 0;
+int drillMaxlevelStart = -1;
+int drillMaxlevelFocus = -1;
+int drillArmSteps = 5;
+int drillDemandSteps = 0;
+int drillTipSteps = 0;
+bool drillArmed = false;
+bool drillFired = false;
+int drillRegionalOnly = 0;
+double drillNcells = 5.;
+double drillRegionMinX = -2.1;
+double drillRegionMaxX = 3.;
+double drillRegionRadius = 1.5;
+double drillArmTime = 0.;
+double drillCoarsenTime = 0.;
+double drillFireX = 0.25;
+double drillTipRadius = 0.25;
 char nameOut[80], dumpFile[80];
 
 /**
@@ -286,11 +311,58 @@ int main(int argc, char const *argv[]) {
     dropPersistence = atoi(argv[8]);
   if (argc > 9)
     snapshotInterval = atof(argv[9]);
+  if (argc > 10)
+    drillAMR = atoi(argv[10]);
+  if (argc > 11)
+    drillMaxlevelStart = atoi(argv[11]);
+  if (argc > 12)
+    drillMaxlevelFocus = atoi(argv[12]);
+  if (argc > 13)
+    drillNcells = atof(argv[13]);
+  if (argc > 14)
+    drillRegionMinX = atof(argv[14]);
+  if (argc > 15)
+    drillArmSteps = atoi(argv[15]);
+  if (argc > 16)
+    drillArmTime = atof(argv[16]);
+  if (argc > 17)
+    drillCoarsenTime = atof(argv[17]);
+  if (argc > 18)
+    drillRegionMaxX = atof(argv[18]);
+  if (argc > 19)
+    drillRegionRadius = atof(argv[19]);
+  if (argc > 20)
+    drillFireX = atof(argv[20]);
+  if (argc > 21)
+    drillTipRadius = atof(argv[21]);
+  if (argc > 22)
+    drillRegionalOnly = atoi(argv[22]);
 
-  if (dropPersistence < 1 || snapshotInterval <= 0.) {
+  if (drillMaxlevelStart < 0)
+    drillMaxlevelStart = max (MAXlevel - 2, 1);
+  if (drillMaxlevelFocus < 0)
+    drillMaxlevelFocus = max (MAXlevel - 1, drillMaxlevelStart);
+  if (dropPersistence < 1 || snapshotInterval <= 0. ||
+      drillMaxlevelStart < 1 || drillMaxlevelStart > drillMaxlevelFocus ||
+      drillMaxlevelFocus > MAXlevel || drillNcells <= 0. ||
+      drillArmSteps < 1 || drillArmTime < 0. || drillCoarsenTime < 0. ||
+      drillCoarsenTime > drillArmTime || drillRegionMinX >= drillRegionMaxX ||
+      drillRegionRadius <= 0. || drillFireX <= drillRegionMinX ||
+      drillFireX >= drillRegionMaxX || drillTipRadius <= 0. ||
+      drillTipRadius > drillRegionRadius ||
+      (drillRegionalOnly != 0 && drillRegionalOnly != 1)) {
     fprintf (ferr, "Invalid contour controls: dropRadiusMin=%g, "
-             "dropPersistence=%d, snapshotInterval=%g\n",
-             dropRadiusMin, dropPersistence, snapshotInterval);
+             "dropPersistence=%d, snapshotInterval=%g, drillAMR=%d, "
+             "drillStart=%d, drillFocus=%d, drillNcells=%g, "
+             "drillRegionMinX=%g, drillArmSteps=%d, drillArmTime=%g, "
+             "drillCoarsenTime=%g, drillRegionMaxX=%g, "
+             "drillRegionRadius=%g, drillFireX=%g, drillTipRadius=%g, "
+             "drillRegionalOnly=%d\n",
+             dropRadiusMin, dropPersistence, snapshotInterval, drillAMR,
+             drillMaxlevelStart, drillMaxlevelFocus, drillNcells,
+             drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime,
+             drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius,
+             drillRegionalOnly);
     return 1;
   }
 
@@ -301,8 +373,11 @@ int main(int argc, char const *argv[]) {
   Ldomain = fmin(zWall+2.+2.*Rr+4.0, 16.);
   if (argc > 7 && dropRadiusMin == 0.)
     dropRadiusMin = 2.*Ldomain/(1 << MAXlevel);
+  // Preserve the fully resolved initial neck. The drill may coarsen only after
+  // drillCoarsenTime, mirroring the validated two-stage drill protocol.
+  maxlevelLocal = MAXlevel;
 
-  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, dropRadiusMin, dropPersistence, snapshotInterval);
+  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly);
 
   /**
   Configure domain and fluid properties: */
@@ -407,10 +482,79 @@ Refinement ranges from `MAXlevel-6` (coarse, far from interface) to
 `MAXlevel` (fine, near interface and in high-gradient regions).
 */
 
+int drill_level_at (double x, double y, double z) {
+  (void) z;
+  if (x >= drillRegionMinX && x <= drillRegionMaxX &&
+      y <= drillRegionRadius)
+    return maxlevelLocal;
+  return min (drillMaxlevelFocus, maxlevelLocal);
+}
+
 event adapt(i++){
-  adapt_wavelet ((scalar *){f, u.x, u.y},
-     (double[]){fErr, VelErr, VelErr},
-      MAXlevel, MAXlevel-6);
+  if (drillAMR && (drillRegionalOnly || drillFired))
+    adapt_wavelet_limited ((scalar *){f, u.x, u.y},
+      (double[]){fErr, VelErr, VelErr}, drill_level_at, MAXlevel-6);
+  else
+    adapt_wavelet ((scalar *){f, u.x, u.y},
+      (double[]){fErr, VelErr, VelErr}, maxlevelLocal, MAXlevel-6);
+}
+
+/**
+Feature-driven arm/fire drill controller. Curvature demand arms the controller
+after the bootstrap, but does not release Lmax through the singular focus.
+Regional Lmax fires only after the near-axis leading tip advances beyond
+`drillFireX` persistently; the parent-bubble exterior stays capped.
+*/
+event drillProbe(i++) {
+  if (!drillAMR)
+    return 0;
+  if (drillRegionalOnly) {
+    maxlevelLocal = MAXlevel;
+    return 0;
+  }
+  scalar KAPPA[];
+  curvature (f, KAPPA);
+  double kmax = -1., tipx = -HUGE;
+  foreach (reduction(max:kmax) reduction(max:tipx)) {
+    if (x >= drillRegionMinX && x <= drillRegionMaxX &&
+        y <= drillRegionRadius && f[] > 1e-6 && f[] < 1. - 1e-6 &&
+        KAPPA[] != nodata && fabs(KAPPA[]) > kmax)
+      kmax = fabs(KAPPA[]);
+    if (x >= drillRegionMinX && x <= drillRegionMaxX &&
+        y <= drillTipRadius && f[] > 1e-6 && f[] < 1. - 1e-6 && x > tipx)
+      tipx = x;
+  }
+
+  int demanded = drillMaxlevelStart;
+  if (kmax > 0.) {
+    double need = drillNcells*Ldomain*kmax;
+    while (demanded < MAXlevel && (double)(1 << demanded) < need)
+      demanded++;
+  }
+  drillDemandSteps = t >= drillArmTime && demanded >= MAXlevel ?
+    drillDemandSteps + 1 : 0;
+  if (!drillArmed && drillDemandSteps >= drillArmSteps) {
+    drillArmed = true;
+    fprintf (ferr, "DRILL armed at t=%g after %d curvature-demand steps\n",
+             t, drillDemandSteps);
+  }
+  if (t >= drillArmTime && tipx >= drillFireX)
+    drillArmed = true; // self-heal a restart that already contains the jet
+  drillTipSteps = drillArmed && tipx >= drillFireX ? drillTipSteps + 1 : 0;
+  if (!drillFired && drillTipSteps >= drillArmSteps) {
+    drillFired = true;
+    fprintf (ferr, "DRILL fired at t=%g: tipx=%g persisted for %d steps; "
+             "regional L%d enabled for x=[%g,%g], y<=%g\n", t, tipx,
+             drillTipSteps, MAXlevel, drillRegionMinX, drillRegionMaxX,
+             drillRegionRadius);
+  }
+  int target = t < drillCoarsenTime || drillFired ? MAXlevel :
+    min (demanded, drillMaxlevelFocus);
+  if (target > maxlevelLocal)
+    maxlevelLocal = target;
+  else if (target < maxlevelLocal)
+    maxlevelLocal--;
+  return 0;
 }
 
 /**
@@ -570,18 +714,21 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
 
   if (pid() == 0) {
     if (i == 0) {
-      fprintf (ferr, "i dt t ke Xc Vcm\n");
+      fprintf (ferr, "i dt t ke Xc Vcm maxlevel drillArmed drillFired\n");
       fp = fopen ("log", "w");
       fprintf(fp, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
-      fprintf (fp, "i dt t ke Xc Vcm\n");
-      fprintf (fp, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
+      fprintf (fp, "i dt t ke Xc Vcm maxlevel drillArmed drillFired\n");
+      fprintf (fp, "%d %g %g %g %g %g %d %d %d\n", i, dt, t, ke,
+               xCOM, Vcm/wt, maxlevelLocal, drillArmed, drillFired);
       fclose(fp);
     } else {
       fp = fopen ("log", "a");
-      fprintf (fp, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
+      fprintf (fp, "%d %g %g %g %g %g %d %d %d\n", i, dt, t, ke,
+               xCOM, Vcm/wt, maxlevelLocal, drillArmed, drillFired);
       fclose(fp);
     }
-    fprintf (ferr, "%d %g %g %g %g %g\n", i, dt, t, ke, xCOM, Vcm/wt);
+    fprintf (ferr, "%d %g %g %g %g %g %d %d %d\n", i, dt, t, ke,
+             xCOM, Vcm/wt, maxlevelLocal, drillArmed, drillFired);
   }
 
   assert(ke > -1e-10);

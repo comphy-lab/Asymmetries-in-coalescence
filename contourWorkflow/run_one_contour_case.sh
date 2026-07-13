@@ -31,6 +31,19 @@ zWall=$(get_param zWall)
 dropRadiusMin=$(get_param dropRadiusMin)
 dropPersistence=$(get_param dropPersistence)
 snapshotInterval=$(get_param snapshotInterval)
+drillAMR=$(get_param drillAMR)
+drillMaxlevelStart=$(get_param drillMaxlevelStart)
+drillMaxlevelFocus=$(get_param drillMaxlevelFocus)
+drillNcells=$(get_param drillNcells)
+drillRegionMinX=$(get_param drillRegionMinX)
+drillArmSteps=$(get_param drillArmSteps)
+drillArmTime=$(get_param drillArmTime)
+drillCoarsenTime=$(get_param drillCoarsenTime)
+drillRegionMaxX=$(get_param drillRegionMaxX)
+drillRegionRadius=$(get_param drillRegionRadius)
+drillFireX=$(get_param drillFireX)
+drillTipRadius=$(get_param drillTipRadius)
+drillRegionalOnly=$(get_param drillRegionalOnly)
 
 cd "$case_dir"
 rm -f classification.status classification.status.tmp runner.status runner.status.tmp
@@ -45,7 +58,11 @@ mv "$tmp_status" "$final_status"
 set +e
 ./coalescenceBubbleContour \
   "$OhOut" "$RhoIn" "$Rr" "$MAXlevel" "$tmax" "$zWall" \
-  "$dropRadiusMin" "$dropPersistence" "$snapshotInterval"
+  "$dropRadiusMin" "$dropPersistence" "$snapshotInterval" "$drillAMR" \
+  "$drillMaxlevelStart" "$drillMaxlevelFocus" "$drillNcells" \
+  "$drillRegionMinX" "$drillArmSteps" "$drillArmTime" "$drillCoarsenTime" \
+  "$drillRegionMaxX" "$drillRegionRadius" "$drillFireX" "$drillTipRadius" \
+  "$drillRegionalOnly"
 rc=$?
 set -e
 

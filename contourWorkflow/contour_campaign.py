@@ -37,6 +37,7 @@ DEFAULT_CASE_ID_START = 5000
 Y_MIN = 0.01
 Y_MAX = 0.075
 DROP_RADIUS_MIN = 0.0078125
+DEFAULT_ADJACENT_OH_FRACTION = 0.01
 TERMINAL_SLURM_STATES = {
     "BOOT_FAIL",
     "CANCELLED",
@@ -519,6 +520,12 @@ def merged_resolved_results(
     if len(canonical_by_id) != len(canonical):
         raise ValueError(f"iteration {iteration} canonical cases contain duplicate caseIds")
 
+    replacements_path = root / "replacements.csv"
+    superseded: set[tuple[str, float, float]] = set()
+    if replacements_path.exists():
+        for row in read_rows(replacements_path):
+            superseded.add((row["caseId"], float(row["x"]), float(row["old_y"])))
+
     quarantine = quarantined_evidence(campaign)
     resolved: dict[str, dict[str, str]] = {}
     for attempt in range(1, through_attempt + 1):
@@ -532,7 +539,7 @@ def merged_resolved_results(
         if not attempt_cases or len(set(attempt_ids)) != len(attempt_ids):
             raise ValueError(f"iteration {iteration} attempt {attempt} has invalid cases.csv")
         for key in attempt_keys:
-            if canonical_by_id.get(key[0]) != key:
+            if canonical_by_id.get(key[0]) != key and key not in superseded:
                 raise ValueError(
                     f"iteration {iteration} attempt {attempt} contains non-canonical case {key[0]}"
                 )
@@ -546,6 +553,10 @@ def merged_resolved_results(
                 f"iteration {iteration} attempt {attempt} results do not match its cases.csv"
             )
         for row in rows:
+            # Failed coordinates remain immutable evidence, but once replaced
+            # they must never be promoted under the adjacent coordinate.
+            if case_key(row) != canonical_by_id[row["caseId"]]:
+                continue
             if (iteration, attempt, row["caseId"]) in quarantine:
                 continue
             if effective_quality_state(row, attempt_root) == "fail":
@@ -572,6 +583,81 @@ def unresolved_cases(
     canonical = read_rows(root / "cases.csv")
     resolved = merged_resolved_results(campaign, iteration, through_attempt)
     return [row for row in canonical if row["caseId"] not in resolved]
+
+
+def replace_unresolved_oh(
+    campaign: Campaign,
+    iteration: int,
+    through_attempt: int,
+    rows: Sequence[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Move terminal unresolved cases to deterministic adjacent Oh values."""
+    root = iteration_dir(campaign, iteration)
+    canonical_path = root / "cases.csv"
+    canonical = read_rows(canonical_path)
+    by_id = {row["caseId"]: row for row in canonical}
+    requested = {row["caseId"] for row in rows}
+    if requested - by_id.keys():
+        raise ValueError(f"unknown replacement caseIds: {sorted(requested - by_id.keys())}")
+
+    ledger_path = root / "replacements.csv"
+    ledger = read_rows(ledger_path) if ledger_path.exists() else []
+    prior_count: dict[str, int] = {}
+    occupied = {(float(row["x"]), float(row["y"])) for row in canonical}
+    for row in ledger:
+        prior_count[row["caseId"]] = prior_count.get(row["caseId"], 0) + 1
+        occupied.add((float(row["x"]), float(row["old_y"])))
+        occupied.add((float(row["x"]), float(row["new_y"])))
+
+    fraction = float(
+        campaign_config(campaign).get(
+            "adjacent_oh_fraction", DEFAULT_ADJACENT_OH_FRACTION
+        )
+    )
+    if not 0. < fraction <= 0.1:
+        raise ValueError(f"adjacent_oh_fraction must lie in (0, 0.1], got {fraction}")
+
+    replacements: list[dict[str, str]] = []
+    for case_id in sorted(
+        requested,
+        key=lambda value: (0, int(value)) if value.isdigit() else (1, value),
+    ):
+        row = by_id[case_id]
+        x = float(row["x"])
+        old_y = float(row["y"])
+        start = prior_count.get(case_id, 0)
+        new_y = None
+        for offset_index in range(start, start + 200):
+            magnitude = offset_index // 2 + 1
+            direction = 1. if offset_index % 2 == 0 else -1.
+            candidate = old_y * (1. + direction * magnitude * fraction)
+            if Y_MIN <= candidate <= Y_MAX and (x, candidate) not in occupied:
+                new_y = candidate
+                break
+        if new_y is None:
+            raise ValueError(f"could not find an adjacent Oh for case {case_id}")
+        row["y"] = f"{new_y:.12g}"
+        occupied.add((x, new_y))
+        replacement = {
+            "iteration": str(iteration),
+            "attempt": str(through_attempt + 1),
+            "caseId": case_id,
+            "x": row["x"],
+            "old_y": f"{old_y:.12g}",
+            "new_y": row["y"],
+            "relative_offset": f"{(new_y / old_y - 1.):.12g}",
+            "reason": "unresolved_after_terminal_attempt",
+        }
+        ledger.append(replacement)
+        replacements.append(dict(row))
+
+    write_rows(canonical_path, canonical, tuple(canonical[0]))
+    fields = (
+        "iteration", "attempt", "caseId", "x", "old_y", "new_y",
+        "relative_offset", "reason",
+    )
+    write_rows(ledger_path, ledger, fields)
+    return replacements
 
 
 def stage_proposal(campaign: Campaign, iteration: int, proposal: Path) -> Path:
@@ -650,6 +736,19 @@ def submit(
                 "--setenv", f"CONTOUR_WORKERS={int(config.get('workers', 3))}",
                 "--setenv", f"CONTOUR_THREADS_PER_CASE={int(config.get('threads_per_case', 8))}",
                 "--setenv", f"CONTOUR_MAX_THREADS={int(config.get('max_threads', 48))}",
+                "--setenv", f"CONTOUR_DRILL_AMR={int(config.get('drill_amr', 0))}",
+                "--setenv", f"CONTOUR_DRILL_START={int(config.get('drill_start', 9))}",
+                "--setenv", f"CONTOUR_DRILL_FOCUS={int(config.get('drill_focus', 10))}",
+                "--setenv", f"CONTOUR_DRILL_NCELLS={float(config.get('drill_ncells', 5)):g}",
+                "--setenv", f"CONTOUR_DRILL_REGION_MIN_X={float(config.get('drill_region_min_x', -2.1)):g}",
+                "--setenv", f"CONTOUR_DRILL_ARM_STEPS={int(config.get('drill_arm_steps', 5))}",
+                "--setenv", f"CONTOUR_DRILL_ARM_TIME={float(config.get('drill_arm_time', 0)):g}",
+                "--setenv", f"CONTOUR_DRILL_COARSEN_TIME={float(config.get('drill_coarsen_time', 0)):g}",
+                "--setenv", f"CONTOUR_DRILL_REGION_MAX_X={float(config.get('drill_region_max_x', 3)):g}",
+                "--setenv", f"CONTOUR_DRILL_REGION_RADIUS={float(config.get('drill_region_radius', 1.5)):g}",
+                "--setenv", f"CONTOUR_DRILL_FIRE_X={float(config.get('drill_fire_x', 0.25)):g}",
+                "--setenv", f"CONTOUR_DRILL_TIP_RADIUS={float(config.get('drill_tip_radius', 0.25)):g}",
+                "--setenv", f"CONTOUR_DRILL_REGIONAL_ONLY={int(config.get('drill_regional_only', 0))}",
                 str(campaign.project_root / "runContourLocal.sh"),
                 str(attempt_root),
             ],
@@ -669,6 +768,19 @@ def submit(
                     int(config.get("threads_per_case", 8))
                 ),
                 "CONTOUR_MAX_THREADS": str(int(config.get("max_threads", 48))),
+                "CONTOUR_DRILL_AMR": str(int(config.get("drill_amr", 0))),
+                "CONTOUR_DRILL_START": str(int(config.get("drill_start", 9))),
+                "CONTOUR_DRILL_FOCUS": str(int(config.get("drill_focus", 10))),
+                "CONTOUR_DRILL_NCELLS": f"{float(config.get('drill_ncells', 5)):g}",
+                "CONTOUR_DRILL_REGION_MIN_X": f"{float(config.get('drill_region_min_x', -2.1)):g}",
+                "CONTOUR_DRILL_ARM_STEPS": str(int(config.get("drill_arm_steps", 5))),
+                "CONTOUR_DRILL_ARM_TIME": f"{float(config.get('drill_arm_time', 0)):g}",
+                "CONTOUR_DRILL_COARSEN_TIME": f"{float(config.get('drill_coarsen_time', 0)):g}",
+                "CONTOUR_DRILL_REGION_MAX_X": f"{float(config.get('drill_region_max_x', 3)):g}",
+                "CONTOUR_DRILL_REGION_RADIUS": f"{float(config.get('drill_region_radius', 1.5)):g}",
+                "CONTOUR_DRILL_FIRE_X": f"{float(config.get('drill_fire_x', 0.25)):g}",
+                "CONTOUR_DRILL_TIP_RADIUS": f"{float(config.get('drill_tip_radius', 0.25)):g}",
+                "CONTOUR_DRILL_REGIONAL_ONLY": str(int(config.get("drill_regional_only", 0))),
             }
         )
         execution_result = subprocess.run(
@@ -953,6 +1065,7 @@ def retry_current_iteration(campaign: Campaign, *, submit_job: bool) -> str:
         raise ValueError("all simulations are resolved; repair collection and run advance")
     if not submit_job:
         raise ValueError("retry is explicit: pass --submit after inspecting the failed attempt")
+    remaining = replace_unresolved_oh(campaign, iteration, attempt, remaining)
     proposal = root / "cases.csv"
     return submit(
         campaign,

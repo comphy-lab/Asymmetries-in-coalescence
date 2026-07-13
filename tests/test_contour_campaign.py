@@ -398,6 +398,17 @@ class ContourCampaignTests(unittest.TestCase):
                     "workers": 3,
                     "threads_per_case": 8,
                     "max_threads": 48,
+                    "drill_amr": 1,
+                    "drill_start": 9,
+                    "drill_focus": 10,
+                    "drill_ncells": 5,
+                    "drill_region_min_x": -2.1,
+                    "drill_region_max_x": 3,
+                    "drill_region_radius": 1.5,
+                    "drill_arm_steps": 5,
+                    "drill_arm_time": 0.45,
+                    "drill_coarsen_time": 0.1,
+                    "drill_regional_only": 1,
                 }
             )
             + "\n"
@@ -424,6 +435,10 @@ class ContourCampaignTests(unittest.TestCase):
         self.assertIn("CONTOUR_WORKERS=3", command)
         self.assertIn("CONTOUR_THREADS_PER_CASE=8", command)
         self.assertIn("CONTOUR_MAX_THREADS=48", command)
+        self.assertIn("CONTOUR_DRILL_AMR=1", command)
+        self.assertIn("CONTOUR_DRILL_ARM_TIME=0.45", command)
+        self.assertIn("CONTOUR_DRILL_COARSEN_TIME=0.1", command)
+        self.assertIn("CONTOUR_DRILL_REGIONAL_ONLY=1", command)
         self.assertIn(str(campaign.project_root / "runContourLocal.sh"), command)
         current = json.loads(
             (campaign.iterations / "iteration-01" / "current-attempt.json").read_text()
@@ -533,6 +548,45 @@ class ContourCampaignTests(unittest.TestCase):
             [row["caseId"] for row in retry_rows],
             ["5000", "5001", "5012"],
         )
+        old_by_id = {row["caseId"]: float(row["y"]) for row in cases}
+        for row in retry_rows:
+            self.assertAlmostEqual(
+                float(row["y"]), old_by_id[row["caseId"]] * 1.01
+            )
+        ledger = CAMPAIGN_MODULE.read_rows(
+            self.campaign.iterations
+            / "iteration-01"
+            / "replacements.csv"
+        )
+        self.assertEqual(
+            [row["caseId"] for row in ledger], ["5000", "5001", "5012"]
+        )
+        self.assertTrue(
+            all(
+                row["reason"] == "unresolved_after_terminal_attempt"
+                for row in ledger
+            )
+        )
+
+        # A late complete row at the superseded coordinate remains provenance,
+        # but cannot be promoted as if it described the adjacent Oh value.
+        stale = self.result_rows([cases[0]])[0]
+        rows = CAMPAIGN_MODULE.read_rows(
+            self.campaign.iterations
+            / "iteration-01"
+            / "attempt-01"
+            / "results.csv"
+        )
+        rows[0] = stale
+        self.write_rows(
+            self.campaign.iterations
+            / "iteration-01"
+            / "attempt-01"
+            / "results.csv",
+            rows,
+        )
+        resolved = CAMPAIGN_MODULE.merged_resolved_results(self.campaign, 1, 1)
+        self.assertNotIn("5000", resolved)
 
     def test_collect_merges_attempts_in_canonical_order(self) -> None:
         self.create_layout()

@@ -18,6 +18,19 @@ workers=${CONTOUR_WORKERS:-3}
 max_threads=${CONTOUR_MAX_THREADS:-48}
 max_level=${CONTOUR_MAXLEVEL:-}
 drop_radius_min=${CONTOUR_DROP_RADIUS_MIN:-}
+drill_amr=${CONTOUR_DRILL_AMR:-0}
+drill_start=${CONTOUR_DRILL_START:-9}
+drill_focus=${CONTOUR_DRILL_FOCUS:-10}
+drill_ncells=${CONTOUR_DRILL_NCELLS:-5}
+drill_region_min_x=${CONTOUR_DRILL_REGION_MIN_X:--2.1}
+drill_arm_steps=${CONTOUR_DRILL_ARM_STEPS:-5}
+drill_arm_time=${CONTOUR_DRILL_ARM_TIME:-0}
+drill_coarsen_time=${CONTOUR_DRILL_COARSEN_TIME:-0}
+drill_region_max_x=${CONTOUR_DRILL_REGION_MAX_X:-3}
+drill_region_radius=${CONTOUR_DRILL_REGION_RADIUS:-1.5}
+drill_fire_x=${CONTOUR_DRILL_FIRE_X:-0.25}
+drill_tip_radius=${CONTOUR_DRILL_TIP_RADIUS:-0.25}
+drill_regional_only=${CONTOUR_DRILL_REGIONAL_ONLY:-0}
 
 for value_name in threads workers max_threads; do
   value=${!value_name}
@@ -80,7 +93,7 @@ echo "host=$(hostname) iteration_dir=${iteration_dir} cases=${case_count}"
 echo "workers=${workers} threads_per_case=${threads} concurrent_threads=$((workers * threads)) ceiling=${max_threads}"
 "$qcc_command" --version
 
-python3 - "$iteration_dir" "$project_root" "$basilisk_ref" "$case_count" "$workers" "$threads" "$max_threads" "$max_level" "$drop_radius_min" "$qcc_command" <<'PY'
+python3 - "$iteration_dir" "$project_root" "$basilisk_ref" "$case_count" "$workers" "$threads" "$max_threads" "$max_level" "$drop_radius_min" "$qcc_command" "$drill_amr" "$drill_start" "$drill_focus" "$drill_ncells" "$drill_region_min_x" "$drill_arm_steps" "$drill_arm_time" "$drill_coarsen_time" "$drill_region_max_x" "$drill_region_radius" "$drill_fire_x" "$drill_tip_radius" "$drill_regional_only" <<'PY'
 import json
 import os
 import socket
@@ -109,6 +122,19 @@ metadata = {
     "max_level_override": sys.argv[8] or None,
     "drop_radius_min_override": sys.argv[9] or None,
     "qcc": sys.argv[10],
+    "drill_amr": int(sys.argv[11]),
+    "drill_start": int(sys.argv[12]),
+    "drill_focus": int(sys.argv[13]),
+    "drill_ncells": float(sys.argv[14]),
+    "drill_region_min_x": float(sys.argv[15]),
+    "drill_arm_steps": int(sys.argv[16]),
+    "drill_arm_time": float(sys.argv[17]),
+    "drill_coarsen_time": float(sys.argv[18]),
+    "drill_region_max_x": float(sys.argv[19]),
+    "drill_region_radius": float(sys.argv[20]),
+    "drill_fire_x": float(sys.argv[21]),
+    "drill_tip_radius": float(sys.argv[22]),
+    "drill_regional_only": int(sys.argv[23]),
     "systemd_unit": os.environ.get("SYSTEMD_UNIT"),
 }
 path = iteration_dir / "run-metadata.json"
@@ -123,6 +149,19 @@ materialize=(
   --data-dir "${project_root}/simulationCases/DataFiles"
   --source "${project_root}/simulationCases/coalescenceBubble.c"
   --expected "$case_count"
+  --drillAMR "$drill_amr"
+  --drillMaxlevelStart "$drill_start"
+  --drillMaxlevelFocus "$drill_focus"
+  --drillNcells "$drill_ncells"
+  --drillRegionMinX "$drill_region_min_x"
+  --drillArmSteps "$drill_arm_steps"
+  --drillArmTime "$drill_arm_time"
+  --drillCoarsenTime "$drill_coarsen_time"
+  --drillRegionMaxX "$drill_region_max_x"
+  --drillRegionRadius "$drill_region_radius"
+  --drillFireX "$drill_fire_x"
+  --drillTipRadius "$drill_tip_radius"
+  --drillRegionalOnly "$drill_regional_only"
 )
 if [[ -n "$max_level" ]]; then
   materialize+=(--MAXlevel "$max_level")
@@ -175,61 +214,6 @@ for ((batch_start = 0; batch_start < case_count; batch_start += workers)); do
   done
 done
 
-python3 - "$iteration_dir" "$project_root" <<'PY'
-import csv
-import json
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path.insert(0, str(Path(sys.argv[2]) / "contourWorkflow"))
-from result_quality import case_quality
-
-manifest = json.loads((root / "case-manifest.json").read_text())
-rows = []
-for item in manifest:
-    case_dir = Path(item["case_dir"])
-    status = {}
-    runner = {}
-    status_path = case_dir / "classification.status"
-    if status_path.exists():
-        with status_path.open(newline="") as stream:
-            parsed = list(csv.DictReader(stream))
-        if parsed:
-            status = parsed[-1]
-    runner_path = case_dir / "runner.status"
-    if runner_path.exists():
-        runner = dict(
-            line.split("=", 1)
-            for line in runner_path.read_text().splitlines()
-            if "=" in line
-        )
-    rows.append({
-        "caseId": item["CaseNo"],
-        "x": item["Rr"],
-        "y": item["OhOut"],
-        "id": status.get("id", "-1"),
-        "runner_state": runner.get("state", "missing"),
-        "exit_code": runner.get("exit_code", ""),
-        "reason": status.get("reason", "missing_classification"),
-        "t": status.get("t", ""),
-        "drop_volume": status.get("drop_volume", ""),
-        "drop_radius": status.get("drop_radius", ""),
-        "drop_axial_position": status.get("drop_axial_position", ""),
-        "drop_axial_velocity": status.get("drop_axial_velocity", ""),
-        **case_quality(case_dir),
-    })
-destination = root / "results.csv"
-temporary = destination.with_suffix(".csv.tmp")
-with temporary.open("w", newline="") as stream:
-    writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
-    writer.writeheader()
-    writer.writerows(rows)
-temporary.replace(destination)
-print(
-    f"results={destination} "
-    f"resolved={sum(row['id'] in ('0', '1') and row['runner_state'] == 'complete' for row in rows)}/{len(rows)}"
-)
-PY
+python3 "${project_root}/contourWorkflow/collect_attempt_results.py" "$iteration_dir"
 
 exit "$rc"
