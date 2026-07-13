@@ -384,6 +384,7 @@ def validate_proposal(campaign: Campaign, rows: Sequence[dict[str, str]]) -> Non
     allowed = set(float(value) for value in campaign_config(campaign)["allowed_x_values"])
     seen_ids: set[str] = set()
     seen_points: set[tuple[float, float]] = set()
+    repeated_points = 0
     for row in rows:
         case_id = row.get("caseId", "").strip()
         try:
@@ -401,9 +402,15 @@ def validate_proposal(campaign: Campaign, rows: Sequence[dict[str, str]]) -> Non
             raise ValueError("unrun proposal rows must have id=-1")
         point = (x, y)
         if point in seen_points:
-            raise ValueError(f"duplicate proposal point Rr={x}, Oh={y}")
+            repeated_points += 1
         seen_ids.add(case_id)
         seen_points.add(point)
+    repeat_quota = int(campaign_config(campaign).get("n_repeats", 0))
+    if repeated_points > repeat_quota:
+        raise ValueError(
+            f"proposal contains {repeated_points} repeated points, "
+            f"exceeding configured repeat quota {repeat_quota}"
+        )
 
 
 def proposal_for(

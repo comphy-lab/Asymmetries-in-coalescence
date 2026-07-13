@@ -157,7 +157,7 @@ class ContourCampaignTests(unittest.TestCase):
         duplicate_point = copy.deepcopy(rows)
         duplicate_point[-1]["x"] = duplicate_point[0]["x"]
         duplicate_point[-1]["y"] = duplicate_point[0]["y"]
-        failures.append((duplicate_point, "duplicate proposal point"))
+        failures.append((duplicate_point, "exceeding configured repeat quota"))
         unavailable_x = copy.deepcopy(rows)
         unavailable_x[-1]["x"] = "3"
         failures.append((unavailable_x, "unavailable Rr"))
@@ -172,6 +172,15 @@ class ContourCampaignTests(unittest.TestCase):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, message):
                     CAMPAIGN_MODULE.validate_proposal(self.campaign, invalid)
+
+        config = json.loads(
+            (self.campaign.root / "campaign-config.json").read_text()
+        )
+        config["n_repeats"] = 1
+        (self.campaign.root / "campaign-config.json").write_text(
+            json.dumps(config) + "\n"
+        )
+        CAMPAIGN_MODULE.validate_proposal(self.campaign, duplicate_point)
 
     def test_proposal_uses_configured_mix_and_noncolliding_case_ids(self) -> None:
         self.create_layout()
