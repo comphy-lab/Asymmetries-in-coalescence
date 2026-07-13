@@ -439,6 +439,46 @@ class ContourCampaignTests(unittest.TestCase):
                     expected,
                 )
 
+    def test_inline_submit_runs_with_scoped_numerical_environment(self) -> None:
+        self.create_layout()
+        (self.campaign.root / "campaign-config.json").write_text(
+            json.dumps(
+                {
+                    "allowed_x_values": [1.0, 2.0, 4.0],
+                    "unit_prefix": "dropinj-l11",
+                    "max_level": 11,
+                    "drop_radius_min": 0.015625,
+                    "workers": 3,
+                    "threads_per_case": 8,
+                    "max_threads": 48,
+                }
+            )
+            + "\n"
+        )
+        campaign = CAMPAIGN_MODULE.Campaign(
+            root=self.campaign.root,
+            project_root=self.campaign.project_root,
+            predictor_root=self.campaign.predictor_root,
+            backend="inline",
+        )
+        proposal = campaign.proposals / "Sweep-1_proposed.csv"
+        self.write_rows(proposal, self.valid_proposal())
+        completed = subprocess.CompletedProcess([], 0, "resolved=16/16\n", "")
+
+        with mock.patch.object(
+            CAMPAIGN_MODULE.subprocess, "run", return_value=completed
+        ) as run:
+            job_id = CAMPAIGN_MODULE.submit(campaign, 1, proposal)
+
+        self.assertEqual(job_id, "inline:dropinj-l11-i01-a01")
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(environment["CONTOUR_MAXLEVEL"], "11")
+        self.assertEqual(environment["CONTOUR_DROP_RADIUS_MIN"], "0.015625")
+        self.assertEqual(environment["CONTOUR_WORKERS"], "3")
+        self.assertEqual(environment["CONTOUR_THREADS_PER_CASE"], "8")
+        self.assertEqual(environment["CONTOUR_MAX_THREADS"], "48")
+        self.assertEqual(CAMPAIGN_MODULE.execution_state(job_id), "COMPLETED")
+
     def test_retry_submits_only_cases_unresolved_across_prior_attempts(self) -> None:
         self.create_layout()
         proposal = self.campaign.proposals / "Sweep-1_proposed.csv"

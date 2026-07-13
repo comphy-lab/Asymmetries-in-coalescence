@@ -183,7 +183,7 @@ python3 contourWorkflow/contour_campaign.py \
   --campaign-root /path/to/confined-l11 \
   --project-root "$PWD" \
   --predictor-root /path/to/Bayesian-Contour-Predictor \
-  --backend local init \
+  --backend inline init \
   --seed /path/to/resolved-seed.csv \
   --final-iteration 20 --no-manual-checkpoint \
   --case-id-start 6000 --n-new 14 --n-repeats 2 \
@@ -197,7 +197,9 @@ python3 contourWorkflow/contour_campaign.py \
   /path/to/Bayesian-Contour-Predictor
 ```
 
-The driver permits one selective retry of unresolved cases, then stops with
+Run the driver in a detached `tmux` session. Its inline backend avoids depending
+on login-session-scoped user-systemd services. The driver permits one selective
+retry of unresolved cases, then stops with
 `needs_attention`. It never reruns resolved cases. Full per-batch measurements,
 including first-persistent-detachment radius and volume, are retained under
 `measurements/`; the four-column `completed/` tables remain predictor input.

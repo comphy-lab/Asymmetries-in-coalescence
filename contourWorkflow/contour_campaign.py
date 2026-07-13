@@ -15,6 +15,7 @@ import csv
 import fcntl
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -617,6 +618,7 @@ def submit(
     if job_file.exists():
         raise FileExistsError(f"refusing to replace attempt record {job_file}")
 
+    execution_result: subprocess.CompletedProcess[str] | None = None
     if campaign.backend == "slurm":
         result = run(
             ["sbatch", "runContourHamilton.sbatch", str(attempt_root)],
@@ -647,6 +649,33 @@ def submit(
             cwd=campaign.project_root,
         )
         job_id = f"local:{unit}.service"
+    elif campaign.backend == "inline":
+        config = campaign_config(campaign)
+        job_id = f"inline:{config.get('unit_prefix', 'dropinj')}-i{iteration:02d}-a{attempt:02d}"
+        environment = dict(os.environ)
+        environment.update(
+            {
+                "CONTOUR_MAXLEVEL": str(int(config.get("max_level", 12))),
+                "CONTOUR_DROP_RADIUS_MIN": f"{float(config.get('drop_radius_min', DROP_RADIUS_MIN)):g}",
+                "CONTOUR_WORKERS": str(int(config.get("workers", 3))),
+                "CONTOUR_THREADS_PER_CASE": str(
+                    int(config.get("threads_per_case", 8))
+                ),
+                "CONTOUR_MAX_THREADS": str(int(config.get("max_threads", 48))),
+            }
+        )
+        execution_result = subprocess.run(
+            [str(campaign.project_root / "runContourLocal.sh"), str(attempt_root)],
+            cwd=campaign.project_root,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if execution_result.stdout:
+            print(execution_result.stdout.strip())
+        if execution_result.stderr:
+            print(execution_result.stderr.strip(), file=sys.stderr)
     else:
         raise ValueError(f"unsupported execution backend: {campaign.backend}")
     atomic_write(
@@ -730,6 +759,8 @@ def local_state(job_id: str) -> str:
 
 def execution_state(job_id: str) -> str:
     """Read a Slurm or local-systemd execution state from its stable job ID."""
+    if job_id.startswith("inline:"):
+        return "COMPLETED"
     return local_state(job_id) if job_id.startswith("local:") else slurm_state(job_id)
 
 
@@ -970,7 +1001,9 @@ def main() -> int:
     parser.add_argument("--campaign-root", required=True, type=Path)
     parser.add_argument("--project-root", default=Path.cwd(), type=Path)
     parser.add_argument("--predictor-root", required=True, type=Path)
-    parser.add_argument("--backend", choices=("slurm", "local"), default="slurm")
+    parser.add_argument(
+        "--backend", choices=("slurm", "local", "inline"), default="slurm"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     init_parser = subparsers.add_parser("init")
     init_parser.add_argument("--seed", required=True, type=Path)

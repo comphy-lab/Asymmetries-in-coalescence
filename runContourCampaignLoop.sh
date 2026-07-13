@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # Drive a fully local Bayesian contour campaign without an interactive agent.
-# The controller owns proposals and collection; simulations run as bounded
-# user-systemd OpenMP units. One selective retry is allowed per iteration.
+# The controller owns proposals and collection; simulations run synchronously
+# as bounded OpenMP batches inside this detached supervisor. One selective retry
+# is allowed per iteration.
 
 set -euo pipefail
 
@@ -29,7 +30,7 @@ command=(
   --campaign-root "$campaign_root"
   --project-root "$project_root"
   --predictor-root "$predictor_root"
-  --backend local
+  --backend inline
 )
 
 write_heartbeat() {
