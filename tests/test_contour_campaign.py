@@ -72,6 +72,27 @@ class ContourCampaignTests(unittest.TestCase):
             for index in range(CAMPAIGN_MODULE.BATCH_SIZE)
         ]
 
+    @staticmethod
+    def result_rows(
+        cases: list[dict[str, str]], unresolved: set[str] | None = None
+    ) -> list[dict[str, str]]:
+        unresolved = unresolved or set()
+        return [
+            {
+                "caseId": row["caseId"],
+                "x": row["x"],
+                "y": row["y"],
+                "id": (
+                    "-1"
+                    if row["caseId"] in unresolved
+                    else str((int(row["caseId"]) - 5000) % 2)
+                ),
+                "runner_state": "failed" if row["caseId"] in unresolved else "complete",
+                "exit_code": "1" if row["caseId"] in unresolved else "0",
+            }
+            for row in cases
+        ]
+
     def mark_completed_through(self, iteration: int) -> None:
         self.campaign.completed.mkdir(parents=True, exist_ok=True)
         for value in range(iteration + 1):
@@ -289,6 +310,85 @@ class ContourCampaignTests(unittest.TestCase):
             ).read_text()
         )
         self.assertEqual(current, {"job_id": "202", "iteration": 1, "attempt": 2})
+
+    def test_retry_submits_only_cases_unresolved_across_prior_attempts(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        cases = self.valid_proposal()
+        self.write_rows(proposal, cases)
+        with mock.patch.object(
+            CAMPAIGN_MODULE,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                [], 0, "Submitted batch job 101\n", ""
+            ),
+        ):
+            CAMPAIGN_MODULE.submit(self.campaign, 1, proposal)
+
+        unresolved = {"5000", "5001", "5012"}
+        attempt_one = self.campaign.iterations / "iteration-01" / "attempt-01"
+        self.write_rows(attempt_one / "results.csv", self.result_rows(cases, unresolved))
+
+        with (
+            mock.patch.object(CAMPAIGN_MODULE, "slurm_state", return_value="COMPLETED"),
+            mock.patch.object(
+                CAMPAIGN_MODULE,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    [], 0, "Submitted batch job 202\n", ""
+                ),
+            ),
+        ):
+            self.assertEqual(
+                CAMPAIGN_MODULE.retry_current_iteration(
+                    self.campaign, submit_job=True
+                ),
+                "202",
+            )
+
+        retry_rows = CAMPAIGN_MODULE.read_rows(
+            self.campaign.iterations
+            / "iteration-01"
+            / "attempt-02"
+            / "cases.csv"
+        )
+        self.assertEqual(
+            [row["caseId"] for row in retry_rows],
+            ["5000", "5001", "5012"],
+        )
+
+    def test_collect_merges_attempts_in_canonical_order(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        cases = self.valid_proposal()
+        self.write_rows(proposal, cases)
+        iteration = CAMPAIGN_MODULE.stage_proposal(self.campaign, 1, proposal)
+        unresolved = {"5000", "5001", "5012"}
+
+        attempt_one = iteration / "attempt-01"
+        attempt_one.mkdir()
+        self.write_rows(attempt_one / "cases.csv", cases)
+        self.write_rows(attempt_one / "results.csv", self.result_rows(cases, unresolved))
+
+        retry_cases = [row for row in cases if row["caseId"] in unresolved]
+        attempt_two = iteration / "attempt-02"
+        attempt_two.mkdir()
+        self.write_rows(attempt_two / "cases.csv", retry_cases)
+        self.write_rows(attempt_two / "results.csv", self.result_rows(retry_cases))
+
+        with mock.patch.object(CAMPAIGN_MODULE, "assess") as assess:
+            destination = CAMPAIGN_MODULE.collect(self.campaign, 1, 2)
+
+        completed = CAMPAIGN_MODULE.read_rows(destination)
+        self.assertEqual(
+            [row["caseId"] for row in completed],
+            [row["caseId"] for row in cases],
+        )
+        self.assertEqual(
+            [row["id"] for row in completed],
+            [str(index % 2) for index in range(CAMPAIGN_MODULE.BATCH_SIZE)],
+        )
+        assess.assert_called_once()
 
 
 if __name__ == "__main__":

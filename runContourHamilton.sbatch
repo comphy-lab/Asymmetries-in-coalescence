@@ -39,12 +39,25 @@ cd "$project_root"
 
 echo "Drop-injection contour batch"
 echo "job=${SLURM_JOB_ID} node=$(hostname) iteration_dir=${iteration_dir}"
-echo "tasks=${SLURM_NTASKS} cpus_per_task=${SLURM_CPUS_PER_TASK}"
+echo "allocated_tasks=${SLURM_NTASKS} cpus_per_task=${SLURM_CPUS_PER_TASK}"
 
 module purge
 module load gcc/11.2
 module load python/3.10.8
 python3 --version
+
+case_count=$(python3 - "$cases_csv" <<'PY'
+import csv
+import sys
+
+with open(sys.argv[1], newline="") as stream:
+    count = sum(1 for _ in csv.DictReader(stream))
+if not 1 <= count <= 16:
+    raise SystemExit(f"cases.csv must contain 1..16 rows, found {count}")
+print(count)
+PY
+)
+echo "launched_cases=${case_count}"
 
 source "${project_root}/src-local/basilisk_version.sh"
 lock_file="${project_root}/basilisk/.comphy-lock"
@@ -65,7 +78,7 @@ if [[ "$actual_ref" != "$BASILISK_REF" ]]; then
 fi
 qcc --version
 
-python3 - "$iteration_dir" "$project_root" "$BASILISK_REF" <<'PY'
+python3 - "$iteration_dir" "$project_root" "$BASILISK_REF" "$case_count" <<'PY'
 import json
 import subprocess
 import sys
@@ -82,7 +95,7 @@ metadata = {
     "source_commit": commit or "unavailable",
     "basilisk_ref": sys.argv[3],
     "node": __import__("socket").gethostname(),
-    "cases": 16,
+    "cases": int(sys.argv[4]),
     "threads_per_case": int(__import__("os").environ["SLURM_CPUS_PER_TASK"]),
 }
 path = iteration_dir / "run-metadata.json"
@@ -94,7 +107,8 @@ PY
 python3 "${project_root}/contourWorkflow/materialize_cases.py" \
   "$cases_csv" "$case_root" \
   --data-dir "${project_root}/simulationCases/DataFiles" \
-  --source "${project_root}/simulationCases/coalescenceBubble.c"
+  --source "${project_root}/simulationCases/coalescenceBubble.c" \
+  --expected "$case_count"
 
 build_dir="${iteration_dir}/build"
 mkdir -p "$build_dir" "${iteration_dir}/logs"
@@ -109,8 +123,8 @@ mapfile -t case_dirs < <(
   python3 -c 'import json,sys; print("\n".join(row["case_dir"] for row in json.load(open(sys.argv[1]))))' \
     "${iteration_dir}/case-manifest.json"
 )
-if [[ ${#case_dirs[@]} -ne 16 ]]; then
-  echo "Expected 16 materialised cases, got ${#case_dirs[@]}" >&2
+if [[ ${#case_dirs[@]} -ne $case_count ]]; then
+  echo "Expected ${case_count} materialised cases, got ${#case_dirs[@]}" >&2
   exit 2
 fi
 
@@ -184,7 +198,7 @@ with temporary.open("w", newline="") as stream:
 temporary.replace(destination)
 print(
     f"results={destination} "
-    f"resolved={sum(row['id'] in ('0', '1') and row['runner_state'] == 'complete' for row in rows)}/16"
+    f"resolved={sum(row['id'] in ('0', '1') and row['runner_state'] == 'complete' for row in rows)}/{len(rows)}"
 )
 PY
 

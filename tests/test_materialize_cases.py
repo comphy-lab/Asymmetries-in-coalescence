@@ -36,7 +36,9 @@ class MaterializeCasesTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def run_materializer(self, rows: list[dict[str, str]]) -> subprocess.CompletedProcess[str]:
+    def run_materializer(
+        self, rows: list[dict[str, str]], *, expected: int = 16
+    ) -> subprocess.CompletedProcess[str]:
         with self.proposal.open("w", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=("caseId", "x", "y", "id"))
             writer.writeheader()
@@ -51,6 +53,8 @@ class MaterializeCasesTests(unittest.TestCase):
                 str(self.data_dir),
                 "--source",
                 str(self.source),
+                "--expected",
+                str(expected),
             ],
             text=True,
             capture_output=True,
@@ -107,6 +111,18 @@ class MaterializeCasesTests(unittest.TestCase):
         second = self.run_materializer(self.rows)
         self.assertNotEqual(second.returncode, 0)
         self.assertIn("different parameters", second.stderr)
+
+    def test_materialises_selective_retry_subset(self) -> None:
+        rows = [self.rows[index] for index in (0, 1, 12)]
+        result = self.run_materializer(rows, expected=3)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("materialised=3 reused=0", result.stdout)
+        manifest = self.case_root.parent / "case-manifest.json"
+        self.assertTrue(manifest.exists())
+        self.assertEqual(
+            sorted(path.name for path in self.case_root.iterdir()),
+            ["case-5000", "case-5001", "case-5012"],
+        )
 
 
 if __name__ == "__main__":

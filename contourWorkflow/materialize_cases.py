@@ -2,9 +2,9 @@
 """
 # Materialise a Drop-Injection Contour Batch
 
-Validate one 16-point Bayesian proposal and create collision-safe Hamilton case
-directories. Radius ratios are restricted to initial-shape files that actually
-exist in `simulationCases/DataFiles`.
+Validate one Bayesian proposal or selective-retry subset and create
+collision-safe Hamilton case directories. Radius ratios are restricted to
+initial-shape files that actually exist in `simulationCases/DataFiles`.
 """
 
 from __future__ import annotations
@@ -136,7 +136,7 @@ def validate_existing_case(
 
 
 def main() -> int:
-    """Validate a proposal and create its 16 case directories."""
+    """Validate a bounded batch and create its case directories."""
     parser = argparse.ArgumentParser()
     parser.add_argument("cases_csv", type=Path)
     parser.add_argument("case_root", type=Path)
@@ -146,6 +146,9 @@ def main() -> int:
     for key, value in DEFAULTS.items():
         parser.add_argument(f"--{key}", default=value)
     args = parser.parse_args()
+
+    if not 1 <= args.expected <= 16:
+        parser.error(f"expected row count must be in [1, 16], got {args.expected}")
 
     with args.cases_csv.open(newline="") as stream:
         raw_rows = list(csv.DictReader(stream))

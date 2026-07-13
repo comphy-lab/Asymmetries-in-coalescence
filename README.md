@@ -150,7 +150,9 @@ At the iteration-8 checkpoint, generate (but do not approve) the review file
 with `propose-manual-batch`, edit it only for an explicit physics or
 information-gain reason, then install it with `approve-manual-batch`. A failed
 or timed-out allocation remains unresolved; after inspection, `retry --submit`
-creates a clean `attempt-NN` directory without overwriting earlier evidence.
+creates a clean `attempt-NN` directory containing only unresolved cases.
+Collection merges resolved labels across attempts in the original 16-case order
+without overwriting earlier evidence.
 
 For a full-node launch test, override the production header without editing
 the file:

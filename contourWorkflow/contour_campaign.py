@@ -390,6 +390,72 @@ def iteration_dir(campaign: Campaign, iteration: int) -> Path:
     return campaign.iterations / f"iteration-{iteration:02d}"
 
 
+def case_key(row: dict[str, str]) -> tuple[str, float, float]:
+    """Return the immutable identity of one proposed or result row."""
+    try:
+        return (row["caseId"], float(row["x"]), float(row["y"]))
+    except (KeyError, ValueError) as error:
+        raise ValueError(f"invalid case row: {row}") from error
+
+
+def merged_resolved_results(
+    campaign: Campaign, iteration: int, through_attempt: int
+) -> dict[str, dict[str, str]]:
+    """Merge valid resolved labels across attempts, rejecting stale evidence."""
+    root = iteration_dir(campaign, iteration)
+    canonical = read_rows(root / "cases.csv")
+    canonical_by_id = {row["caseId"]: case_key(row) for row in canonical}
+    if len(canonical_by_id) != len(canonical):
+        raise ValueError(f"iteration {iteration} canonical cases contain duplicate caseIds")
+
+    resolved: dict[str, dict[str, str]] = {}
+    for attempt in range(1, through_attempt + 1):
+        attempt_root = root / f"attempt-{attempt:02d}"
+        attempt_cases_path = attempt_root / "cases.csv"
+        if not attempt_cases_path.exists():
+            raise FileNotFoundError(attempt_cases_path)
+        attempt_cases = read_rows(attempt_cases_path)
+        attempt_keys = [case_key(row) for row in attempt_cases]
+        attempt_ids = [key[0] for key in attempt_keys]
+        if not attempt_cases or len(set(attempt_ids)) != len(attempt_ids):
+            raise ValueError(f"iteration {iteration} attempt {attempt} has invalid cases.csv")
+        for key in attempt_keys:
+            if canonical_by_id.get(key[0]) != key:
+                raise ValueError(
+                    f"iteration {iteration} attempt {attempt} contains non-canonical case {key[0]}"
+                )
+
+        results_path = attempt_root / "results.csv"
+        if not results_path.exists():
+            continue
+        rows = read_rows(results_path)
+        if [case_key(row) for row in rows] != attempt_keys:
+            raise ValueError(
+                f"iteration {iteration} attempt {attempt} results do not match its cases.csv"
+            )
+        for row in rows:
+            if row.get("id") not in {"0", "1"} or row.get("runner_state") != "complete":
+                continue
+            previous = resolved.get(row["caseId"])
+            if previous and previous["id"] != row["id"]:
+                raise ValueError(
+                    f"conflicting resolved labels for case {row['caseId']}: "
+                    f"{previous['id']} and {row['id']}"
+                )
+            resolved.setdefault(row["caseId"], row)
+    return resolved
+
+
+def unresolved_cases(
+    campaign: Campaign, iteration: int, through_attempt: int
+) -> list[dict[str, str]]:
+    """Return canonical cases without a valid result in any completed attempt."""
+    root = iteration_dir(campaign, iteration)
+    canonical = read_rows(root / "cases.csv")
+    resolved = merged_resolved_results(campaign, iteration, through_attempt)
+    return [row for row in canonical if row["caseId"] not in resolved]
+
+
 def stage_proposal(campaign: Campaign, iteration: int, proposal: Path) -> Path:
     """Copy an approved proposal into its immutable run directory."""
     validate_proposal(campaign, read_rows(proposal))
@@ -409,6 +475,7 @@ def submit(
     proposal: Path,
     *,
     new_attempt: bool = False,
+    attempt_rows: Sequence[dict[str, str]] | None = None,
 ) -> str:
     """Submit one isolated Hamilton attempt, idempotently by default."""
     target_dir = stage_proposal(campaign, iteration, proposal)
@@ -420,14 +487,22 @@ def submit(
         raise ValueError(f"iteration {iteration} has no prior attempt to retry")
 
     attempt = int(current["attempt"]) + 1 if current else 1
+    if attempt_rows is None:
+        if current:
+            attempt_rows = unresolved_cases(campaign, iteration, int(current["attempt"]))
+        else:
+            attempt_rows = read_rows(target_dir / "cases.csv")
+    if not attempt_rows:
+        raise ValueError("all simulations are resolved; repair collection and run advance")
+
     attempt_root = target_dir / f"attempt-{attempt:02d}"
     attempt_root.mkdir(parents=True, exist_ok=True)
     attempt_cases = attempt_root / "cases.csv"
-    canonical_cases = target_dir / "cases.csv"
-    if attempt_cases.exists() and attempt_cases.read_text() != canonical_cases.read_text():
+    fields = tuple(attempt_rows[0].keys())
+    if attempt_cases.exists() and read_rows(attempt_cases) != list(attempt_rows):
         raise FileExistsError(f"attempt {attempt} contains a different cases.csv")
     if not attempt_cases.exists():
-        shutil.copy2(canonical_cases, attempt_cases)
+        write_rows(attempt_cases, attempt_rows, fields)
     job_file = attempt_root / "slurm-job.json"
     if job_file.exists():
         raise FileExistsError(f"refusing to replace attempt record {job_file}")
@@ -485,34 +560,23 @@ def slurm_state(job_id: str) -> str:
 
 
 def collect(campaign: Campaign, iteration: int, attempt: int) -> Path:
-    """Validate and promote one complete 16-case result table."""
+    """Merge attempts and promote one complete 16-case result table."""
     iteration_root = iteration_dir(campaign, iteration)
-    source = iteration_root / f"attempt-{attempt:02d}" / "results.csv"
-    if not source.exists():
-        raise FileNotFoundError(source)
-    rows = read_rows(source)
-    if len(rows) != BATCH_SIZE or any(
-        row.get("id") not in {"0", "1"} or row.get("runner_state") != "complete"
-        for row in rows
-    ):
-        resolved = sum(
-            row.get("id") in {"0", "1"} and row.get("runner_state") == "complete"
-            for row in rows
-        )
-        raise ValueError(f"iteration {iteration} has {resolved}/{BATCH_SIZE} resolved labels")
     expected = read_rows(iteration_root / "cases.csv")
-    expected_keys = [
-        (row["caseId"], float(row["x"]), float(row["y"])) for row in expected
-    ]
-    result_keys = [
-        (row["caseId"], float(row["x"]), float(row["y"])) for row in rows
-    ]
-    if result_keys != expected_keys:
-        raise ValueError(f"iteration {iteration} results do not match immutable cases.csv")
+    resolved = merged_resolved_results(campaign, iteration, attempt)
+    if len(resolved) != BATCH_SIZE:
+        raise ValueError(
+            f"iteration {iteration} has {len(resolved)}/{BATCH_SIZE} resolved labels"
+        )
     destination = campaign.completed / f"Sweep-{iteration}_completed.csv"
     canonical = [
-        {"caseId": row["caseId"], "x": row["x"], "y": row["y"], "id": row["id"]}
-        for row in rows
+        {
+            "caseId": row["caseId"],
+            "x": row["x"],
+            "y": row["y"],
+            "id": resolved[row["caseId"]]["id"],
+        }
+        for row in expected
     ]
     if destination.exists() and read_rows(destination) != canonical:
         raise FileExistsError(f"refusing to replace {destination}")
@@ -639,18 +703,20 @@ def retry_current_iteration(campaign: Campaign, *, submit_job: bool) -> str:
     state = slurm_state(str(current["job_id"]))
     if state not in TERMINAL_SLURM_STATES:
         raise ValueError(f"job {current['job_id']} is still {state}; refusing retry")
-    results = root / f"attempt-{int(current['attempt']):02d}" / "results.csv"
-    if results.exists():
-        rows = read_rows(results)
-        if len(rows) == BATCH_SIZE and all(
-            row.get("id") in {"0", "1"} and row.get("runner_state") == "complete"
-            for row in rows
-        ):
-            raise ValueError("all simulations are resolved; repair collection and run advance")
+    attempt = int(current["attempt"])
+    remaining = unresolved_cases(campaign, iteration, attempt)
+    if not remaining:
+        raise ValueError("all simulations are resolved; repair collection and run advance")
     if not submit_job:
         raise ValueError("retry is explicit: pass --submit after inspecting the failed attempt")
     proposal = root / "cases.csv"
-    return submit(campaign, iteration, proposal, new_attempt=True)
+    return submit(
+        campaign,
+        iteration,
+        proposal,
+        new_attempt=True,
+        attempt_rows=remaining,
+    )
 
 
 def approve_manual_batch(campaign: Campaign, source: Path) -> None:
