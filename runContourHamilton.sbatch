@@ -151,13 +151,16 @@ for pid_value in "${pids[@]}"; do
   wait "$pid_value" || rc=1
 done
 
-python3 - "$iteration_dir" <<'PY'
+python3 - "$iteration_dir" "$project_root" <<'PY'
 import csv
 import json
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+sys.path.insert(0, str(Path(sys.argv[2]) / "contourWorkflow"))
+from result_quality import case_quality
+
 manifest = json.loads((root / "case-manifest.json").read_text())
 rows = []
 for item in manifest:
@@ -188,6 +191,7 @@ for item in manifest:
         "t": status.get("t", ""),
         "drop_volume": status.get("drop_volume", ""),
         "drop_radius": status.get("drop_radius", ""),
+        **case_quality(case_dir),
     })
 destination = root / "results.csv"
 temporary = destination.with_suffix(".csv.tmp")

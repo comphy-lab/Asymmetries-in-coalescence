@@ -23,6 +23,11 @@ from pathlib import Path
 from contextlib import contextmanager
 from typing import Iterator, Sequence
 
+try:
+    from result_quality import case_quality
+except ModuleNotFoundError:
+    from contourWorkflow.result_quality import case_quality
+
 
 BATCH_SIZE = 16
 PHASE_ONE_END = 8
@@ -398,6 +403,39 @@ def case_key(row: dict[str, str]) -> tuple[str, float, float]:
         raise ValueError(f"invalid case row: {row}") from error
 
 
+def quarantined_evidence(campaign: Campaign) -> set[tuple[int, int, str]]:
+    """Return exact iteration/attempt/case records excluded by manual review."""
+    path = campaign.root / "quality-quarantine.csv"
+    if not path.exists():
+        return set()
+    quarantine: set[tuple[int, int, str]] = set()
+    for row in read_rows(path):
+        try:
+            iteration = int(row["iteration"])
+            attempt = int(row["attempt"])
+            case_id = row["caseId"].strip()
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"invalid quality quarantine row: {row}") from error
+        if iteration < 1 or attempt < 1 or not case_id:
+            raise ValueError(f"invalid quality quarantine row: {row}")
+        quarantine.add((iteration, attempt, case_id))
+    return quarantine
+
+
+def effective_quality_state(
+    row: dict[str, str], attempt_root: Path
+) -> str:
+    """Return explicit quality or backfill it from retained case evidence."""
+    explicit = row.get("quality_state", "").strip().lower()
+    if explicit:
+        return explicit
+    case_root = attempt_root / "cases"
+    if not case_root.exists():
+        # Grandfather archived result tables whose case evidence was not retained.
+        return "legacy"
+    return case_quality(case_root / f"case-{row['caseId']}")["quality_state"]
+
+
 def merged_resolved_results(
     campaign: Campaign, iteration: int, through_attempt: int
 ) -> dict[str, dict[str, str]]:
@@ -408,6 +446,7 @@ def merged_resolved_results(
     if len(canonical_by_id) != len(canonical):
         raise ValueError(f"iteration {iteration} canonical cases contain duplicate caseIds")
 
+    quarantine = quarantined_evidence(campaign)
     resolved: dict[str, dict[str, str]] = {}
     for attempt in range(1, through_attempt + 1):
         attempt_root = root / f"attempt-{attempt:02d}"
@@ -434,6 +473,10 @@ def merged_resolved_results(
                 f"iteration {iteration} attempt {attempt} results do not match its cases.csv"
             )
         for row in rows:
+            if (iteration, attempt, row["caseId"]) in quarantine:
+                continue
+            if effective_quality_state(row, attempt_root) == "fail":
+                continue
             if row.get("id") not in {"0", "1"} or row.get("runner_state") != "complete":
                 continue
             previous = resolved.get(row["caseId"])

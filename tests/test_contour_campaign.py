@@ -390,6 +390,75 @@ class ContourCampaignTests(unittest.TestCase):
         )
         assess.assert_called_once()
 
+    def test_quality_fail_and_exact_quarantine_are_excluded_from_merge(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        cases = self.valid_proposal()
+        self.write_rows(proposal, cases)
+        iteration = CAMPAIGN_MODULE.stage_proposal(self.campaign, 1, proposal)
+
+        attempt_one = iteration / "attempt-01"
+        attempt_one.mkdir()
+        self.write_rows(attempt_one / "cases.csv", cases)
+        results = self.result_rows(cases)
+        results[0]["quality_state"] = "fail"
+        results[0]["quality_reason"] = "max_ke_exceeds_1000"
+        self.write_rows(attempt_one / "results.csv", results)
+        self.write_rows(
+            self.campaign.root / "quality-quarantine.csv",
+            [
+                {
+                    "iteration": "1",
+                    "attempt": "1",
+                    "caseId": "5001",
+                    "reason": "manual facet review",
+                }
+            ],
+        )
+
+        self.assertEqual(
+            [
+                row["caseId"]
+                for row in CAMPAIGN_MODULE.unresolved_cases(self.campaign, 1, 1)
+            ],
+            ["5000", "5001"],
+        )
+
+        attempt_two = iteration / "attempt-02"
+        attempt_two.mkdir()
+        retry_case = [cases[1]]
+        self.write_rows(attempt_two / "cases.csv", retry_case)
+        self.write_rows(attempt_two / "results.csv", self.result_rows(retry_case))
+        self.assertEqual(
+            [
+                row["caseId"]
+                for row in CAMPAIGN_MODULE.unresolved_cases(self.campaign, 1, 2)
+            ],
+            ["5000"],
+        )
+
+    def test_qualityless_attempt_is_backfilled_from_retained_case_evidence(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        cases = self.valid_proposal()
+        self.write_rows(proposal, cases)
+        iteration = CAMPAIGN_MODULE.stage_proposal(self.campaign, 1, proposal)
+
+        attempt = iteration / "attempt-01"
+        attempt.mkdir()
+        self.write_rows(attempt / "cases.csv", cases)
+        self.write_rows(attempt / "results.csv", self.result_rows(cases))
+        for row in cases:
+            case_dir = attempt / "cases" / f"case-{row['caseId']}"
+            case_dir.mkdir(parents=True)
+            maximum = "1000.01" if row["caseId"] == "5000" else "1"
+            (case_dir / "log").write_text(f"1 0.001 0.1 {maximum} 0 0\n")
+            (case_dir / "interface-latest.dat").write_text("0 1\n")
+
+        resolved = CAMPAIGN_MODULE.merged_resolved_results(self.campaign, 1, 1)
+        self.assertNotIn("5000", resolved)
+        self.assertEqual(len(resolved), CAMPAIGN_MODULE.BATCH_SIZE - 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -33,6 +33,7 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 ├── contourWorkflow/                 Bayesian contour campaign state machine
 │   ├── contour_campaign.py         Propose, submit, collect, and gate iterations
 │   ├── materialize_cases.py        Validate proposals against initial shapes
+│   ├── result_quality.py            Compute KE/facet corruption evidence
 │   └── run_one_contour_case.sh     Run and classify one OpenMP case
 ├── runSimulation.sh                 Single case runner (OpenMP/MPI)
 ├── runParameterSweep.sh             Parameter sweep runner
@@ -153,6 +154,26 @@ or timed-out allocation remains unresolved; after inspection, `retry --submit`
 creates a clean `attempt-NN` directory containing only unresolved cases.
 Collection merges resolved labels across attempts in the original 16-case order
 without overwriting earlier evidence.
+
+New Hamilton result rows include `max_ke`, `facet_lines`, `quality_state`, and
+`quality_reason`. A row fails the conservative corruption gate when its maximum
+kinetic energy exceeds 1000, its latest interface has more than 8000 nonblank
+facet lines, or either evidence source is missing/non-finite. Failed rows remain
+auditable in their attempt but are not promoted or counted as resolved. Rows
+without quality columns are backfilled from retained attempt case evidence;
+archived legacy tables with no retained `cases/` tree remain valid unless
+manually quarantined.
+
+Manual review can quarantine one exact piece of evidence by creating
+`quality-quarantine.csv` in the campaign root:
+
+```csv
+iteration,attempt,caseId,reason
+1,1,5000,corrupt interface confirmed by visual review
+```
+
+The exclusion applies only to that iteration, attempt, and case; a clean retry
+of the same case remains eligible for collection.
 
 For a full-node launch test, override the production header without editing
 the file:
