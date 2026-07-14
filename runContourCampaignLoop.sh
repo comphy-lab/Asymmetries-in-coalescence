@@ -2,8 +2,8 @@
 
 # Drive a fully local Bayesian contour campaign without an interactive agent.
 # The controller owns proposals and collection; simulations run synchronously
-# as bounded OpenMP batches inside this detached supervisor. One selective retry
-# is allowed per iteration.
+# as bounded OpenMP batches inside this detached supervisor. Terminal numerical
+# failures move to adjacent Oh values for a bounded number of attempts.
 
 set -euo pipefail
 
@@ -14,7 +14,7 @@ project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 controller="${project_root}/contourWorkflow/contour_campaign.py"
 state_file="${campaign_root}/campaign-state.json"
 heartbeat_file="${campaign_root}/loop-heartbeat.json"
-max_attempts=${CONTOUR_MAX_ATTEMPTS:-2}
+max_attempts=${CONTOUR_MAX_ATTEMPTS:-6}
 
 if [[ ! "$poll_seconds" =~ ^[1-9][0-9]*$ ]]; then
   echo "POLL_SECONDS must be a positive integer" >&2
