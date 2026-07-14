@@ -22,6 +22,14 @@ get_param() {
   printf '%s\n' "$value"
 }
 
+get_param_default() {
+  local key=$1
+  local fallback=$2
+  local value
+  value=$(awk -F= -v key="$key" '$1 == key {print $2; exit}' "$params")
+  printf '%s\n' "${value:-$fallback}"
+}
+
 OhOut=$(get_param OhOut)
 RhoIn=$(get_param RhoIn)
 Rr=$(get_param Rr)
@@ -44,6 +52,8 @@ drillRegionRadius=$(get_param drillRegionRadius)
 drillFireX=$(get_param drillFireX)
 drillTipRadius=$(get_param drillTipRadius)
 drillRegionalOnly=$(get_param drillRegionalOnly)
+geometryMode=$(get_param_default geometryMode finite)
+wallClearance=$(get_param_default wallClearance -1)
 
 cd "$case_dir"
 rm -f classification.status classification.status.tmp runner.status runner.status.tmp
@@ -62,7 +72,7 @@ set +e
   "$drillMaxlevelStart" "$drillMaxlevelFocus" "$drillNcells" \
   "$drillRegionMinX" "$drillArmSteps" "$drillArmTime" "$drillCoarsenTime" \
   "$drillRegionMaxX" "$drillRegionRadius" "$drillFireX" "$drillTipRadius" \
-  "$drillRegionalOnly"
+  "$drillRegionalOnly" "$geometryMode" "$wallClearance"
 rc=$?
 set -e
 

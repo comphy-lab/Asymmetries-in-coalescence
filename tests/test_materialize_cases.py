@@ -37,7 +37,11 @@ class MaterializeCasesTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def run_materializer(
-        self, rows: list[dict[str, str]], *, expected: int = 16
+        self,
+        rows: list[dict[str, str]],
+        *,
+        expected: int = 16,
+        extra_args: tuple[str, ...] = (),
     ) -> subprocess.CompletedProcess[str]:
         with self.proposal.open("w", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=("caseId", "x", "y", "id"))
@@ -55,6 +59,7 @@ class MaterializeCasesTests(unittest.TestCase):
                 str(self.source),
                 "--expected",
                 str(expected),
+                *extra_args,
             ],
             text=True,
             capture_output=True,
@@ -140,6 +145,34 @@ class MaterializeCasesTests(unittest.TestCase):
             sorted(path.name for path in self.case_root.iterdir()),
             ["case-5000", "case-5001", "case-5012"],
         )
+
+    def test_materialises_separate_halfspace_anchor(self) -> None:
+        (self.data_dir / "Bo0.0000.dat").write_text("-2.02 0\n0 32\n")
+        rows = [deepcopy(self.rows[index]) for index in (0, 1)]
+        for row in rows:
+            row["x"] = "inf"
+        result = self.run_materializer(
+            rows,
+            expected=2,
+            extra_args=(
+                "--geometryMode",
+                "halfspace",
+                "--wallClearance",
+                "0.027",
+            ),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        params = (self.case_root / "case-5000" / "case.params").read_text()
+        self.assertIn("Rr=inf\n", params)
+        self.assertIn("geometryMode=halfspace\n", params)
+        self.assertIn("wallClearance=0.027\n", params)
+
+    def test_rejects_infinite_rr_for_finite_geometry(self) -> None:
+        rows = deepcopy(self.rows)
+        rows[0]["x"] = "inf"
+        result = self.run_materializer(rows)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Rr must be finite", result.stderr)
 
 
 if __name__ == "__main__":

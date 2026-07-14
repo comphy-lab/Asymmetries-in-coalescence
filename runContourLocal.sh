@@ -31,6 +31,8 @@ drill_region_radius=${CONTOUR_DRILL_REGION_RADIUS:-1.5}
 drill_fire_x=${CONTOUR_DRILL_FIRE_X:-0.25}
 drill_tip_radius=${CONTOUR_DRILL_TIP_RADIUS:-0.25}
 drill_regional_only=${CONTOUR_DRILL_REGIONAL_ONLY:-0}
+geometry_mode=${CONTOUR_GEOMETRY_MODE:-finite}
+wall_clearance=${CONTOUR_WALL_CLEARANCE:--1}
 
 for value_name in threads workers max_threads; do
   value=${!value_name}
@@ -93,7 +95,7 @@ echo "host=$(hostname) iteration_dir=${iteration_dir} cases=${case_count}"
 echo "workers=${workers} threads_per_case=${threads} concurrent_threads=$((workers * threads)) ceiling=${max_threads}"
 "$qcc_command" --version
 
-python3 - "$iteration_dir" "$project_root" "$basilisk_ref" "$case_count" "$workers" "$threads" "$max_threads" "$max_level" "$drop_radius_min" "$qcc_command" "$drill_amr" "$drill_start" "$drill_focus" "$drill_ncells" "$drill_region_min_x" "$drill_arm_steps" "$drill_arm_time" "$drill_coarsen_time" "$drill_region_max_x" "$drill_region_radius" "$drill_fire_x" "$drill_tip_radius" "$drill_regional_only" <<'PY'
+python3 - "$iteration_dir" "$project_root" "$basilisk_ref" "$case_count" "$workers" "$threads" "$max_threads" "$max_level" "$drop_radius_min" "$qcc_command" "$drill_amr" "$drill_start" "$drill_focus" "$drill_ncells" "$drill_region_min_x" "$drill_arm_steps" "$drill_arm_time" "$drill_coarsen_time" "$drill_region_max_x" "$drill_region_radius" "$drill_fire_x" "$drill_tip_radius" "$drill_regional_only" "$geometry_mode" "$wall_clearance" <<'PY'
 import json
 import os
 import socket
@@ -135,6 +137,8 @@ metadata = {
     "drill_fire_x": float(sys.argv[21]),
     "drill_tip_radius": float(sys.argv[22]),
     "drill_regional_only": int(sys.argv[23]),
+    "geometry_mode": sys.argv[24],
+    "wall_clearance": float(sys.argv[25]),
     "systemd_unit": os.environ.get("SYSTEMD_UNIT"),
 }
 path = iteration_dir / "run-metadata.json"
@@ -162,6 +166,8 @@ materialize=(
   --drillFireX "$drill_fire_x"
   --drillTipRadius "$drill_tip_radius"
   --drillRegionalOnly "$drill_regional_only"
+  --geometryMode "$geometry_mode"
+  --wallClearance "$wall_clearance"
 )
 if [[ -n "$max_level" ]]; then
   materialize+=(--MAXlevel "$max_level")

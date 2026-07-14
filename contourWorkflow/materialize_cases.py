@@ -5,6 +5,8 @@
 Validate one Bayesian proposal or selective-retry subset and create
 collision-safe Hamilton case directories. Radius ratios are restricted to
 initial-shape files that actually exist in `simulationCases/DataFiles`.
+The separately plotted half-space anchor accepts only `Rr=inf` and uses the
+Bursting-Bubble `Bo0.0000.dat` geometry; it is never predictor input.
 """
 
 from __future__ import annotations
@@ -41,6 +43,8 @@ DEFAULTS = {
     "drillFireX": "0.25",
     "drillTipRadius": "0.25",
     "drillRegionalOnly": "0",
+    "geometryMode": "finite",
+    "wallClearance": "-1",
 }
 PARAMETER_KEYS = (
     "CaseNo",
@@ -66,6 +70,8 @@ PARAMETER_KEYS = (
     "drillFireX",
     "drillTipRadius",
     "drillRegionalOnly",
+    "geometryMode",
+    "wallClearance",
 )
 
 OH_MIN = 0.01
@@ -184,6 +190,12 @@ def main() -> int:
     available = available_radius_ratios(args.data_dir)
     if not available:
         parser.error(f"no initial-shape files in {args.data_dir}")
+    if args.geometryMode not in {"finite", "halfspace"}:
+        parser.error("geometryMode must be 'finite' or 'halfspace'")
+    if args.geometryMode == "halfspace" and not (
+        args.data_dir / "Bo0.0000.dat"
+    ).is_file():
+        parser.error(f"missing half-space geometry {args.data_dir / 'Bo0.0000.dat'}")
 
     source_bytes = args.source.read_bytes()
     data_dir = args.data_dir.resolve()
@@ -196,10 +208,15 @@ def main() -> int:
     for raw in raw_rows:
         try:
             case_id, rr, oh = canonicalise(raw)
-            matched_rr = matched_radius_ratio(rr, available)
+            if args.geometryMode == "halfspace":
+                if not math.isinf(rr) or rr < 0:
+                    raise ValueError("halfspace geometry requires Rr=inf")
+                rr_key = "inf"
+            else:
+                matched_rr = matched_radius_ratio(rr, available)
+                rr_key = f"{matched_rr:.2f}"
         except ValueError as error:
             parser.error(str(error))
-        rr_key = f"{matched_rr:.2f}"
         if not math.isfinite(oh) or not (OH_MIN <= oh <= OH_MAX):
             parser.error(f"Oh must be finite and in [{OH_MIN}, {OH_MAX}], got {oh}")
         oh_key = f"{oh:.12g}"
@@ -230,6 +247,8 @@ def main() -> int:
             "drillFireX": str(args.drillFireX),
             "drillTipRadius": str(args.drillTipRadius),
             "drillRegionalOnly": str(args.drillRegionalOnly),
+            "geometryMode": str(args.geometryMode),
+            "wallClearance": str(args.wallClearance),
         }
         prepared.append(
             {

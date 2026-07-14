@@ -197,6 +197,41 @@ wave/focus/jet band remains at `MAXlevel` for the whole run and only the parent
 bubble exterior is capped. Use this when dynamic pre-jet coarsening changes a
 boundary label or first-drop size.
 
+### Half-space asymptote (`Rr -> infinity`)
+
+The large-radius limit is not represented by an arbitrarily large second
+bubble. It is a unit bubble coalescing with a locally flat gas--liquid
+interface. The reusable `Bo0.0000.dat` geometry is generated from the
+Bursting-Bubble sphere--plane construction:
+
+```bash
+python3 postProcess/generate_Bo0_IC.py \
+  --delta 0.01 --rmax 32 \
+  --out simulationCases/DataFiles/Bo0.0000.dat
+```
+
+Run this limit as a separate anchor with `x=inf` in its `cases.csv`; do not
+feed it into Bayesian acquisition. `CONTOUR_WALL_CLEARANCE=0.027` matches the
+physical south-pole clearance of the finite-map runs at nominal
+`zWall=0.05`. The solver fixes `L0=16` in half-space mode, so Level 11 and the
+map-wide `dropRadiusMin=0.015625` retain the same physical resolution as the
+finite-radius campaign.
+
+```bash
+CONTOUR_GEOMETRY_MODE=halfspace \
+CONTOUR_WALL_CLEARANCE=0.027 \
+CONTOUR_MAXLEVEL=11 \
+CONTOUR_DROP_RADIUS_MIN=0.015625 \
+CONTOUR_THREADS_PER_CASE=8 \
+CONTOUR_WORKERS=2 \
+CONTOUR_MAX_THREADS=48 \
+./runContourLocal.sh /path/to/halfspace-anchor-batch
+```
+
+Plot the resolved half-space transition at `1/Rr=0`. The `x=inf` sentinel is
+accepted only by `geometryMode=halfspace`; finite-radius materialisation still
+requires an exact `InitialConditionRr-*.dat` match.
+
 For a bounded unattended workstation campaign, initialise a fresh campaign
 with explicit numerical and acquisition settings, then run the shell driver:
 

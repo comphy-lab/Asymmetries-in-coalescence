@@ -48,7 +48,7 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
   [drillMaxlevelStart] [drillMaxlevelFocus] [drillNcells] \
   [drillRegionMinX] [drillArmSteps] [drillArmTime] [drillCoarsenTime] \
   [drillRegionMaxX] [drillRegionRadius] [drillFireX] [drillTipRadius] \
-  [drillRegionalOnly]
+  [drillRegionalOnly] [geometryMode] [wallClearance]
 ```
 
 ### Command-line Parameters
@@ -72,6 +72,12 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
 - `drillAMR`: Enable feature-driven regional refinement (`0` by default).
   The drill ramps from `drillMaxlevelStart`, arms on persistent target-region
   curvature demand, then gives full `MAXlevel` only to the end-pinchoff side.
+- `geometryMode`: `finite` loads `InitialConditionRr-*.dat`; `halfspace`
+  loads the Bursting-Bubble `Bo0.0000.dat` sphere-plane geometry and represents
+  the true $R_r\to\infty$ limit.
+- `wallClearance`: Optional physical distance from the bubble south pole to
+  the left wall. A negative value preserves the legacy nominal `zWall`
+  placement. Use `0.027` to match the finite-map `zWall=0.05` clearance.
 
 ## Nondimensional Mapping Used in This Code
 
@@ -104,6 +110,8 @@ Last updated: Jan 2026
 #include "tension.h"
 #include "tag.h"
 #include "adapt_wavelet_limited.h"
+#include <float.h>
+#include <string.h>
 
 #if !_MPI
 #include "distance.h"
@@ -154,6 +162,10 @@ Physical parameters and output configuration:
 double tmax, MuRin, OhOut, RhoIn;
 double Rr, zWall;
 double Ldomain;
+double wallClearance = -1.;
+double shapeSouthPole = 0.;
+char geometryMode[16] = "finite";
+char initialConditionFile[80];
 double dropRadiusMin = -1.;
 double snapshotInterval = tsnap;
 int dropPersistence = 3;
@@ -182,6 +194,39 @@ double drillCoarsenTime = 0.;
 double drillFireX = 0.25;
 double drillTipRadius = 0.25;
 char nameOut[80], dumpFile[80];
+
+/**
+Return the smallest axial coordinate in an initial-shape polyline. Case
+directories expose `DataFiles` as a symlink, while direct runs may already
+have copied the shape into the working directory; support both layouts.
+*/
+static double initial_shape_south_pole (const char * filename)
+{
+  char path[160];
+  FILE * fp = fopen (filename, "r");
+  if (!fp) {
+    snprintf (path, sizeof(path), "DataFiles/%s", filename);
+    fp = fopen (path, "r");
+  }
+  if (!fp) {
+    fprintf (ferr, "Cannot read initial-condition geometry '%s'\n", filename);
+    exit (2);
+  }
+
+  double x, y, xmin = DBL_MAX;
+  int points = 0;
+  while (fscanf (fp, "%lf %lf", &x, &y) == 2) {
+    xmin = min (xmin, x);
+    points++;
+  }
+  fclose (fp);
+  if (points < 2 || xmin == DBL_MAX) {
+    fprintf (ferr, "Initial-condition geometry '%s' is empty or malformed\n",
+             filename);
+    exit (2);
+  }
+  return xmin;
+}
 
 /**
 ### write_classification_status()
@@ -337,6 +382,25 @@ int main(int argc, char const *argv[]) {
     drillTipRadius = atof(argv[21]);
   if (argc > 22)
     drillRegionalOnly = atoi(argv[22]);
+  if (argc > 23)
+    snprintf (geometryMode, sizeof(geometryMode), "%s", argv[23]);
+  if (argc > 24)
+    wallClearance = atof(argv[24]);
+
+  bool halfspace = strcmp (geometryMode, "halfspace") == 0;
+  bool finite = strcmp (geometryMode, "finite") == 0;
+  if (!finite && !halfspace) {
+    fprintf (ferr, "geometryMode must be 'finite' or 'halfspace', got '%s'\n",
+             geometryMode);
+    return 1;
+  }
+  if (halfspace)
+    snprintf (initialConditionFile, sizeof(initialConditionFile),
+              "Bo0.0000.dat");
+  else
+    snprintf (initialConditionFile, sizeof(initialConditionFile),
+              "InitialConditionRr-%3.2f.dat", Rr);
+  shapeSouthPole = initial_shape_south_pole (initialConditionFile);
 
   if (drillMaxlevelStart < 0)
     drillMaxlevelStart = max (MAXlevel - 2, 1);
@@ -349,7 +413,7 @@ int main(int argc, char const *argv[]) {
       drillCoarsenTime > drillArmTime || drillRegionMinX >= drillRegionMaxX ||
       drillRegionRadius <= 0. || drillFireX <= drillRegionMinX ||
       drillFireX >= drillRegionMaxX || drillTipRadius <= 0. ||
-      drillTipRadius > drillRegionRadius ||
+      drillTipRadius > drillRegionRadius || wallClearance == 0. ||
       (drillRegionalOnly != 0 && drillRegionalOnly != 1)) {
     fprintf (ferr, "Invalid contour controls: dropRadiusMin=%g, "
              "dropPersistence=%d, snapshotInterval=%g, drillAMR=%d, "
@@ -370,20 +434,27 @@ int main(int argc, char const *argv[]) {
   Domain size is calculated to fit both bubbles with sufficient margin.
   The formula ensures adequate space: wall + small bubble (R_s=1) +
   gap + large bubble (R_l=Rr) + buffer. */
-  Ldomain = fmin(zWall+2.+2.*Rr+4.0, 16.);
+  Ldomain = halfspace ? 16. : fmin(zWall+2.+2.*Rr+4.0, 16.);
   if (argc > 7 && dropRadiusMin == 0.)
     dropRadiusMin = 2.*Ldomain/(1 << MAXlevel);
   // Preserve the fully resolved initial neck. The drill may coarsen only after
   // drillCoarsenTime, mirroring the validated two-stage drill protocol.
   maxlevelLocal = MAXlevel;
 
-  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly);
-
   /**
   Configure domain and fluid properties: */
   L0=Ldomain;
-  origin(-2.0-zWall, 0.0);
+  double originX = -2.0 - zWall;
+  if (wallClearance > 0.) {
+    originX = shapeSouthPole - wallClearance;
+    zWall = -2.0 - originX;
+  }
+  else
+    wallClearance = shapeSouthPole - originX;
+  origin(originX, 0.0);
   init_grid (1 << (6));
+
+  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly);
 
   /**
   Set fluid properties:
@@ -425,20 +496,17 @@ event init(t = 0){
   }
 #else
   if (!restore (file = dumpFile)){
-    char filename[60];
-    sprintf(filename,"InitialConditionRr-%3.2f.dat", Rr);
-
     char comm[160];
-    snprintf (comm, sizeof(comm), "cp DataFiles/%s .", filename);
+    snprintf (comm, sizeof(comm), "cp DataFiles/%s .", initialConditionFile);
     if (system(comm) != 0) {
       fprintf(ferr, "Failed to copy initial-condition file '%s' from DataFiles/.\n",
-              filename);
+              initialConditionFile);
       return 1;
     }
 
-    FILE * fp = fopen(filename,"rb");
+    FILE * fp = fopen(initialConditionFile,"rb");
     if (fp == NULL){
-      fprintf(ferr, "There is no file named %s\n", filename);
+      fprintf(ferr, "There is no file named %s\n", initialConditionFile);
       return 1;
     }
     coord* InitialShape;
@@ -484,14 +552,26 @@ Refinement ranges from `MAXlevel-6` (coarse, far from interface) to
 
 int drill_level_at (double x, double y, double z) {
   (void) z;
-  if (x >= drillRegionMinX && x <= drillRegionMaxX &&
-      y <= drillRegionRadius)
-    return maxlevelLocal;
-  return min (drillMaxlevelFocus, maxlevelLocal);
+  bool in_wave_band = x >= drillRegionMinX && x <= drillRegionMaxX &&
+    y <= drillRegionRadius;
+
+  if (drillRegionalOnly)
+    return in_wave_band ? MAXlevel : drillMaxlevelFocus;
+
+  /*
+  Preserve the entire capillary-wave, focusing and jet band at the production
+  level.  Only the distant parent-bubble exterior is drilled: it stays at the
+  cheap start level before ARM and moves to the focus level afterwards.  This
+  avoids changing the end-pinchoff mechanism while retaining the workstation
+  speed-up away from the classified event.
+  */
+  if (in_wave_band)
+    return MAXlevel;
+  return drillArmed ? drillMaxlevelFocus : drillMaxlevelStart;
 }
 
 event adapt(i++){
-  if (drillAMR && (drillRegionalOnly || drillFired))
+  if (drillAMR && t >= drillCoarsenTime)
     adapt_wavelet_limited ((scalar *){f, u.x, u.y},
       (double[]){fErr, VelErr, VelErr}, drill_level_at, MAXlevel-6);
   else
@@ -501,9 +581,10 @@ event adapt(i++){
 
 /**
 Feature-driven arm/fire drill controller. Curvature demand arms the controller
-after the bootstrap, but does not release Lmax through the singular focus.
-Regional Lmax fires only after the near-axis leading tip advances beyond
-`drillFireX` persistently; the parent-bubble exterior stays capped.
+after the bootstrap and raises only the distant exterior from the start level
+to the focus level.  The capillary-wave, focusing and jet band remains at
+production resolution throughout.  FIRE records persistent jet advance for
+diagnostics; it does not change the already resolved target band.
 */
 event drillProbe(i++) {
   if (!drillAMR)
@@ -548,12 +629,7 @@ event drillProbe(i++) {
              drillTipSteps, MAXlevel, drillRegionMinX, drillRegionMaxX,
              drillRegionRadius);
   }
-  int target = t < drillCoarsenTime || drillFired ? MAXlevel :
-    min (demanded, drillMaxlevelFocus);
-  if (target > maxlevelLocal)
-    maxlevelLocal = target;
-  else if (target < maxlevelLocal)
-    maxlevelLocal--;
+  maxlevelLocal = MAXlevel;
   return 0;
 }
 
@@ -605,8 +681,9 @@ static void write_contour_pulse (void)
   }
   FILE * meta = fopen ("interface-latest.meta.tmp", "w");
   if (meta) {
-    fprintf (meta, "t=%.8g\nRr=%.8g\nOh=%.8g\nzWall=%.8g\n",
-             t, Rr, OhOut, zWall);
+    fprintf (meta, "t=%.8g\nRr=%.8g\nOh=%.8g\nzWall=%.8g\n"
+             "geometry=%s\nwallClearance=%.8g\n",
+             t, Rr, OhOut, zWall, geometryMode, wallClearance);
     fclose (meta);
     rename ("interface-latest.meta.tmp", "interface-latest.meta");
   }
