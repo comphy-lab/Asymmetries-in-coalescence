@@ -187,15 +187,14 @@ without overwriting earlier evidence.
 
 Contour runs can enable the feature-driven drill with
 `CONTOUR_DRILL_AMR=1`. The controller begins at a configured lower level and
-uses persistent target-region curvature demand to arm. A configurable
-fixed-Lmax bootstrap protects the freshly joined neck before any coarsening.
-Arming does not release Lmax through the singular focus: regional Lmax fires
-only after the leading near-axis tip advances persistently. Full resolution is
-then confined to the physical end-pinchoff band while the parent-bubble
-exterior remains capped one level lower. The public defaults are conservative;
-the drill is off unless a campaign explicitly enables it. Calibrate labels and first-drop radii against
-fixed-level references before production. Rayleigh--Plateau component counts
-are not drill triggers.
+uses persistent target-region curvature demand to arm. Before ARM, the entire
+domain is capped at `CONTOUR_DRILL_START`; after ARM, `MAXlevel` is released
+only in the capillary-wave, focusing and jet band while the parent-bubble
+exterior remains capped at `CONTOUR_DRILL_FOCUS`. FIRE records persistent tip
+advance for diagnostics. The public defaults are conservative; the drill is
+off unless a campaign explicitly enables it. Calibrate labels and first-drop
+radii against fixed-level references before production. Rayleigh--Plateau
+component counts are not drill triggers.
 
 `CONTOUR_DRILL_REGIONAL_ONLY=1` is the conservative mode: the complete
 wave/focus/jet band remains at `MAXlevel` for the whole run and only the parent
@@ -218,9 +217,11 @@ python3 postProcess/generate_Bo0_IC.py \
 Run this limit as a separate anchor with `x=inf` in its `cases.csv`; do not
 feed it into Bayesian acquisition. `CONTOUR_WALL_CLEARANCE=0.027` matches the
 physical south-pole clearance of the finite-map runs at nominal
-`zWall=0.05`. The solver fixes `L0=16` in half-space mode, so Level 11 and the
-map-wide `dropRadiusMin=0.015625` retain the same physical resolution as the
-finite-radius campaign.
+`zWall=0.05`. The solver retains the canonical Bursting-Bubble right boundary
+at `x=4`, giving `L0=min(zWall+6,16)=6.0472`. At Level 11 the 0.027 wall film
+spans about 9.15 cells. Keep the map-wide physical detection threshold
+`dropRadiusMin=0.015625`; do not silently shrink it when the half-space domain
+is narrowed.
 
 ```bash
 CONTOUR_GEOMETRY_MODE=halfspace \

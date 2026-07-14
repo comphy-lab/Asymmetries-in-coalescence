@@ -145,13 +145,20 @@ Adaptive mesh refinement is controlled by these error thresholds:
 /**
 ## Boundary Conditions
 
-Left boundary (axis of symmetry):
-- `f[left]`: No fluid at left boundary (Dirichlet $f=0$)
-- `u.t[left]`: No tangential velocity (no-slip for azimuthal component)
+Left boundary (solid substrate; the axisymmetric axis is `bottom`):
+- `f[left]`: Liquid at the substrate (`f=0`, since `f` denotes gas)
+- `u.n[left]`, `u.t[left]`: No penetration and no slip
+
+Right boundary (far-field outlet, matching Bursting-Bubble):
+- `u.n[right]`: Zero normal gradient
+- `p[right]`: Reference pressure
 */
 
 f[left] = dirichlet(0.0);
+u.n[left] = dirichlet(0.0);
 u.t[left] = dirichlet(0.0);
+u.n[right] = neumann(0.0);
+p[right] = dirichlet(0.0);
 
 /**
 ## Global Variables
@@ -431,10 +438,22 @@ int main(int argc, char const *argv[]) {
   }
 
   /**
-  Domain size is calculated to fit both bubbles with sufficient margin.
-  The formula ensures adequate space: wall + small bubble (R_s=1) +
-  gap + large bubble (R_l=Rr) + buffer. */
-  Ldomain = halfspace ? 16. : fmin(zWall+2.+2.*Rr+4.0, 16.);
+  Place the wall first. For the half-space geometry, retain the canonical
+  Bursting-Bubble right boundary at x=4 rather than forcing L0=16. The latter
+  under-resolves the close-wall film by a factor 16/(zWall + 6). */
+  double originX = -2.0 - zWall;
+  if (wallClearance > 0.) {
+    originX = shapeSouthPole - wallClearance;
+    zWall = -2.0 - originX;
+  }
+  else
+    wallClearance = shapeSouthPole - originX;
+
+  /**
+  The finite domain fits both bubbles plus a buffer. The half-space domain is
+  the Bo=0 Bursting-Bubble domain, L0=min(zWall+6,16). */
+  Ldomain = halfspace ? fmin(zWall + 6.0, 16.) :
+    fmin(zWall + 2. + 2.*Rr + 4.0, 16.);
   if (argc > 7 && dropRadiusMin == 0.)
     dropRadiusMin = 2.*Ldomain/(1 << MAXlevel);
   // Preserve the fully resolved initial neck. The drill may coarsen only after
@@ -444,13 +463,6 @@ int main(int argc, char const *argv[]) {
   /**
   Configure domain and fluid properties: */
   L0=Ldomain;
-  double originX = -2.0 - zWall;
-  if (wallClearance > 0.) {
-    originX = shapeSouthPole - wallClearance;
-    zWall = -2.0 - originX;
-  }
-  else
-    wallClearance = shapeSouthPole - originX;
   origin(originX, 0.0);
   init_grid (1 << (6));
 
@@ -514,7 +526,9 @@ event init(t = 0){
     fclose (fp);
     scalar d[];
     distance (d, InitialShape);
-    while (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8, 1e-8}, MAXlevel).nf);
+    int initialLevel = drillAMR ? drillMaxlevelStart : MAXlevel;
+    while (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8, 1e-8},
+                          initialLevel).nf);
     /**
     The distance function is defined at the center of each cell, we have
     to calculate the value of this function at each vertex. */
@@ -559,14 +573,12 @@ int drill_level_at (double x, double y, double z) {
     return in_wave_band ? MAXlevel : drillMaxlevelFocus;
 
   /*
-  Preserve the entire capillary-wave, focusing and jet band at the production
-  level.  Only the distant parent-bubble exterior is drilled: it stays at the
-  cheap start level before ARM and moves to the focus level afterwards.  This
-  avoids changing the end-pinchoff mechanism while retaining the workstation
-  speed-up away from the classified event.
+  Before ARM, keep the whole domain at the validated pre-inception level. After
+  ARM, release MAXlevel only in the capillary-wave, focusing and jet band while
+  leaving the distant parent-bubble exterior at the cheaper focus level.
   */
   if (in_wave_band)
-    return MAXlevel;
+    return drillArmed ? MAXlevel : drillMaxlevelStart;
   return drillArmed ? drillMaxlevelFocus : drillMaxlevelStart;
 }
 
@@ -581,10 +593,9 @@ event adapt(i++){
 
 /**
 Feature-driven arm/fire drill controller. Curvature demand arms the controller
-after the bootstrap and raises only the distant exterior from the start level
-to the focus level.  The capillary-wave, focusing and jet band remains at
-production resolution throughout.  FIRE records persistent jet advance for
-diagnostics; it does not change the already resolved target band.
+after the bootstrap and releases the capillary-wave, focusing and jet band from
+the pre-inception level to MAXlevel. The distant exterior remains capped at the
+focus level. FIRE records persistent jet advance for diagnostics.
 */
 event drillProbe(i++) {
   if (!drillAMR)

@@ -19,6 +19,7 @@ max_threads=${CONTOUR_MAX_THREADS:-48}
 cpu_start=${CONTOUR_CPU_START:-0}
 cpu_count=${CONTOUR_CPU_COUNT:-24}
 max_level=${CONTOUR_MAXLEVEL:-}
+tmax=${CONTOUR_TMAX:-}
 drop_radius_min=${CONTOUR_DROP_RADIUS_MIN:-}
 drill_amr=${CONTOUR_DRILL_AMR:-0}
 drill_start=${CONTOUR_DRILL_START:-9}
@@ -146,6 +147,7 @@ metadata = {
     "concurrent_threads": int(sys.argv[5]) * int(sys.argv[6]),
     "max_threads": int(sys.argv[7]),
     "max_level_override": sys.argv[8] or None,
+    "tmax_override": os.environ.get("CONTOUR_TMAX") or None,
     "drop_radius_min_override": sys.argv[9] or None,
     "qcc": sys.argv[10],
     "drill_amr": int(sys.argv[11]),
@@ -198,6 +200,9 @@ materialize=(
 )
 if [[ -n "$max_level" ]]; then
   materialize+=(--MAXlevel "$max_level")
+fi
+if [[ -n "$tmax" ]]; then
+  materialize+=(--tmax "$tmax")
 fi
 if [[ -n "$drop_radius_min" ]]; then
   materialize+=(--dropRadiusMin "$drop_radius_min")
