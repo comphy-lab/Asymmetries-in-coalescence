@@ -161,7 +161,12 @@ python3 contourWorkflow/contour_campaign.py \
 
 `runContourLocal.sh` compiles against the ref-locked Basilisk sources under the
 project and uses a host-built `qcc`. Set `CONTOUR_QCC` only when `qcc` is not on
-the non-interactive `PATH`.
+the non-interactive `PATH`. Its rolling queue launches a new case as soon as a
+worker finishes. Machine-wide per-CPU locks prevent independent contour units
+from binding over one another. `CONTOUR_CPU_START` and `CONTOUR_CPU_COUNT`
+select the shared physical-core pool; the workstation defaults use CPUs 0--23,
+leaving CPUs 24--31 free for interactive work. Do not count SMT siblings as
+extra CFD cores without a measured scaling benefit.
 
 `advance --submit` is idempotent. It collects only complete 16-row result
 tables, submits the next batch, stops for manual selection after iteration 8,
@@ -245,7 +250,7 @@ python3 contourWorkflow/contour_campaign.py \
   --final-iteration 20 --no-manual-checkpoint \
   --case-id-start 6000 --n-new 14 --n-repeats 2 \
   --max-level 11 --drop-radius-min 0.015625 \
-  --workers 3 --threads-per-case 8 --max-threads 48 \
+  --workers 6 --threads-per-case 4 --max-threads 48 \
   --unit-prefix dropinj-l11 --allow-unbracketed-edges \
   --posterior-samples 64
 

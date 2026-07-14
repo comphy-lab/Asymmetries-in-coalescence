@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Run one contour attempt on a controlled Linux workstation. Cases are
-# executed in bounded OpenMP batches; no MPI runtime is involved.
+# executed through a machine-wide physical-CPU pool; no MPI runtime is involved.
 
 set -euo pipefail
 
@@ -16,6 +16,8 @@ case_root="${iteration_dir}/cases"
 threads=${CONTOUR_THREADS_PER_CASE:-8}
 workers=${CONTOUR_WORKERS:-3}
 max_threads=${CONTOUR_MAX_THREADS:-48}
+cpu_start=${CONTOUR_CPU_START:-0}
+cpu_count=${CONTOUR_CPU_COUNT:-24}
 max_level=${CONTOUR_MAXLEVEL:-}
 drop_radius_min=${CONTOUR_DROP_RADIUS_MIN:-}
 drill_amr=${CONTOUR_DRILL_AMR:-0}
@@ -34,19 +36,40 @@ drill_regional_only=${CONTOUR_DRILL_REGIONAL_ONLY:-0}
 geometry_mode=${CONTOUR_GEOMETRY_MODE:-finite}
 wall_clearance=${CONTOUR_WALL_CLEARANCE:--1}
 
-for value_name in threads workers max_threads; do
+for value_name in threads workers max_threads cpu_count; do
   value=${!value_name}
   if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
     echo "$value_name must be a positive integer, got $value" >&2
     exit 2
   fi
 done
+if [[ ! "$cpu_start" =~ ^[0-9]+$ ]]; then
+  echo "CONTOUR_CPU_START must be a non-negative integer, got $cpu_start" >&2
+  exit 2
+fi
 if (( max_threads > 48 )); then
   echo "CONTOUR_MAX_THREADS may not exceed the workstation ceiling of 48" >&2
   exit 2
 fi
 if (( workers * threads > max_threads )); then
   echo "requested $workers x $threads = $((workers * threads)) threads; ceiling is $max_threads" >&2
+  exit 2
+fi
+if (( threads > cpu_count )); then
+  echo "one case needs $threads CPUs but the shared pool contains only $cpu_count" >&2
+  exit 2
+fi
+if (( cpu_count % threads != 0 )); then
+  echo "CONTOUR_CPU_COUNT ($cpu_count) must be divisible by threads per case ($threads)" >&2
+  exit 2
+fi
+if (( workers > cpu_count / threads )); then
+  echo "requested $workers workers but the shared pool has only $((cpu_count / threads)) slots" >&2
+  exit 2
+fi
+online_cpus=$(getconf _NPROCESSORS_ONLN)
+if (( cpu_start + cpu_count > online_cpus )); then
+  echo "CPU pool ${cpu_start}-$((cpu_start + cpu_count - 1)) exceeds ${online_cpus} online CPUs" >&2
   exit 2
 fi
 if [[ ! -f "$cases_csv" ]]; then
@@ -93,9 +116,10 @@ basilisk_ref=$(awk -F= '$1 == "ref" {print $2; exit}' "${project_root}/basilisk/
 echo "Drop-injection contour workstation run"
 echo "host=$(hostname) iteration_dir=${iteration_dir} cases=${case_count}"
 echo "workers=${workers} threads_per_case=${threads} concurrent_threads=$((workers * threads)) ceiling=${max_threads}"
+echo "shared_cpu_pool=${cpu_start}-$((cpu_start + cpu_count - 1)) scheduler=rolling-global-locks"
 "$qcc_command" --version
 
-python3 - "$iteration_dir" "$project_root" "$basilisk_ref" "$case_count" "$workers" "$threads" "$max_threads" "$max_level" "$drop_radius_min" "$qcc_command" "$drill_amr" "$drill_start" "$drill_focus" "$drill_ncells" "$drill_region_min_x" "$drill_arm_steps" "$drill_arm_time" "$drill_coarsen_time" "$drill_region_max_x" "$drill_region_radius" "$drill_fire_x" "$drill_tip_radius" "$drill_regional_only" "$geometry_mode" "$wall_clearance" <<'PY'
+python3 - "$iteration_dir" "$project_root" "$basilisk_ref" "$case_count" "$workers" "$threads" "$max_threads" "$max_level" "$drop_radius_min" "$qcc_command" "$drill_amr" "$drill_start" "$drill_focus" "$drill_ncells" "$drill_region_min_x" "$drill_arm_steps" "$drill_arm_time" "$drill_coarsen_time" "$drill_region_max_x" "$drill_region_radius" "$drill_fire_x" "$drill_tip_radius" "$drill_regional_only" "$geometry_mode" "$wall_clearance" "$cpu_start" "$cpu_count" <<'PY'
 import json
 import os
 import socket
@@ -139,6 +163,9 @@ metadata = {
     "drill_regional_only": int(sys.argv[23]),
     "geometry_mode": sys.argv[24],
     "wall_clearance": float(sys.argv[25]),
+    "cpu_start": int(sys.argv[26]),
+    "cpu_count": int(sys.argv[27]),
+    "scheduler": "rolling-global-locks",
     "systemd_unit": os.environ.get("SYSTEMD_UNIT"),
 }
 path = iteration_dir / "run-metadata.json"
@@ -199,25 +226,89 @@ export OMP_NUM_THREADS="$threads"
 export OMP_PLACES=cores
 export OMP_PROC_BIND=close
 
-rc=0
-for ((batch_start = 0; batch_start < case_count; batch_start += workers)); do
-  pids=()
-  for ((slot = 0; slot < workers && batch_start + slot < case_count; slot++)); do
-    case_dir=${case_dirs[$((batch_start + slot))]}
+queue_file="${iteration_dir}/.local-run-next-case"
+queue_lock="${iteration_dir}/.local-run-next-case.lock"
+printf '0\n' >"$queue_file"
+lock_root=${CONTOUR_CPU_LOCK_ROOT:-${XDG_RUNTIME_DIR:-/tmp}/drop-injection-contour-cpus}
+mkdir -p "$lock_root"
+
+claim_next_case() {
+  (
+    flock -x 200
+    next=$(<"$queue_file")
+    if (( next >= case_count )); then
+      exit 1
+    fi
+    printf '%s\n' "$((next + 1))" >"$queue_file"
+    printf '%s\n' "$next"
+  ) 200>"$queue_lock"
+}
+
+acquire_cpu_block() {
+  local candidate cpu fd acquired
+  while true; do
+    for ((candidate = cpu_start; candidate + threads <= cpu_start + cpu_count; candidate += threads)); do
+      cpu_lock_fds=()
+      acquired=1
+      for ((cpu = candidate; cpu < candidate + threads; cpu++)); do
+        exec {fd}>"${lock_root}/cpu-${cpu}.lock"
+        if flock -n "$fd"; then
+          cpu_lock_fds+=("$fd")
+        else
+          eval "exec ${fd}>&-"
+          acquired=0
+          break
+        fi
+      done
+      if (( acquired )); then
+        acquired_cpu_start=$candidate
+        acquired_cpu_end=$((candidate + threads - 1))
+        return 0
+      fi
+      for fd in "${cpu_lock_fds[@]}"; do
+        eval "exec ${fd}>&-"
+      done
+    done
+    sleep 1
+  done
+}
+
+release_cpu_block() {
+  local fd
+  for fd in "${cpu_lock_fds[@]}"; do
+    eval "exec ${fd}>&-"
+  done
+  cpu_lock_fds=()
+}
+
+worker_loop() {
+  local index case_dir case_name worker_rc=0
+  while index=$(claim_next_case); do
+    case_dir=${case_dirs[$index]}
     case_name=$(basename "$case_dir")
-    cpu_start=$((slot * threads))
-    cpu_end=$((cpu_start + threads - 1))
-    taskset -c "${cpu_start}-${cpu_end}" \
+    acquire_cpu_block
+    echo "${case_name}: CPUs ${acquired_cpu_start}-${acquired_cpu_end}"
+    if ! taskset -c "${acquired_cpu_start}-${acquired_cpu_end}" \
       env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
       bash "${project_root}/contourWorkflow/run_one_contour_case.sh" \
         "$case_dir" "${build_dir}/coalescenceBubbleContour" \
         >"${iteration_dir}/logs/${case_name}.out" \
-        2>"${iteration_dir}/logs/${case_name}.err" &
-    pids+=("$!")
+        2>"${iteration_dir}/logs/${case_name}.err"; then
+      worker_rc=1
+    fi
+    release_cpu_block
   done
-  for pid_value in "${pids[@]}"; do
-    wait "$pid_value" || rc=1
-  done
+  return "$worker_rc"
+}
+
+rc=0
+pids=()
+for ((worker = 0; worker < workers; worker++)); do
+  worker_loop &
+  pids+=("$!")
+done
+for pid_value in "${pids[@]}"; do
+  wait "$pid_value" || rc=1
 done
 
 python3 "${project_root}/contourWorkflow/collect_attempt_results.py" "$iteration_dir"
