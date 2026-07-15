@@ -332,7 +332,7 @@ def model_args(campaign: Campaign) -> list[str]:
         "--posterior-samples", str(config.get("posterior_samples", 8)),
         "--transition-width", "0.04",
         "--label-noise", "0.005",
-        "--length-scale-x", "0.18",
+        "--length-scale-x", str(config.get("length_scale_x", 0.18)),
         "--scarcity-fraction", "0.125",
         "--scarcity-candidate-bins", "12",
         "--scarcity-fan-width", "0.08",
