@@ -455,7 +455,9 @@ int main(int argc, char const *argv[]) {
   Ldomain = halfspace ? fmin(zWall + 6.0, 16.) :
     fmin(zWall + 2. + 2.*Rr + 4.0, 16.);
   if (argc > 7 && dropRadiusMin == 0.)
-    dropRadiusMin = 2.*Ldomain/(1 << MAXlevel);
+    // exp2 avoids the int shift (1 << MAXlevel), which is UB/overflow for large
+    // MAXlevel; the result is the same 2^MAXlevel for the levels used here.
+    dropRadiusMin = 2.*Ldomain/exp2((double) MAXlevel);
   // Preserve the fully resolved initial neck. The drill may coarsen only after
   // drillCoarsenTime, mirroring the validated two-stage drill protocol.
   maxlevelLocal = MAXlevel;

@@ -180,8 +180,15 @@ def initialise(
         label = row.get("id", "").strip()
         if not case_id or not x or not y or label not in {"0", "1"}:
             raise ValueError(f"invalid seed row: {row}")
+        try:
+            x_val = float(x)
+            y_val = float(y)
+        except ValueError as exc:
+            raise ValueError(f"invalid seed row (x/y not numeric): {row}") from exc
+        if not math.isfinite(x_val) or not math.isfinite(y_val):
+            raise ValueError(f"invalid seed row (x/y not finite): {row}")
         canonical_row = {"caseId": case_id, "x": x, "y": y, "id": label}
-        if any(abs(float(x) - value) <= 1e-12 for value in exclude_x):
+        if any(abs(x_val - value) <= 1e-12 for value in exclude_x):
             excluded.append(canonical_row)
         else:
             canonical.append(canonical_row)

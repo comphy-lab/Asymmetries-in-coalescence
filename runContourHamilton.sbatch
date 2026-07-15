@@ -7,8 +7,11 @@
 #SBATCH --time=3-00:00:00
 #SBATCH --gres=tmp:16G
 #SBATCH -p multi
-#SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=vatsal.sanjay@durham.ac.uk
+# Mail notifications are opt-in and left unset so this script is reusable and
+# does not embed a personal address. Supply them via `sbatch --mail-type=... \
+# --mail-user=...` or a local copy if you want completion/failure emails.
+# #SBATCH --mail-type=END,FAIL
+# #SBATCH --mail-user=<your-email>
 #SBATCH --output=slurm-contour-%j.out
 #SBATCH --error=slurm-contour-%j.err
 
@@ -136,7 +139,10 @@ export OMP_PROC_BIND=close
 pids=()
 for case_dir in "${case_dirs[@]}"; do
   case_name=$(basename "$case_dir")
-  srun --exclusive --exact -N1 -n1 -c "$threads" --mem=15000M \
+  # No per-step --mem: the job requests the whole node (--mem=0) and per-case
+  # RSS is small, so a large per-step request (16x15G) would exceed node RAM and
+  # throttle/serialise launches. Steps share the allocation's memory instead.
+  srun --exclusive --exact -N1 -n1 -c "$threads" \
     --gres=tmp:1G --cpu-bind=cores \
     env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
     bash "${project_root}/contourWorkflow/run_one_contour_case.sh" \
