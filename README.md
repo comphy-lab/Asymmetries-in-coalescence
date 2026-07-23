@@ -28,14 +28,22 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 │   ├── getData-generic.c           Field extraction on structured grids
 │   ├── getFacet.c                  Interface geometry extraction
 │   ├── getCOM.c                    Center of mass extraction
-│   └── Video-generic.py            Frame-by-frame visualization pipeline
+│   ├── Video-generic.py            Frame-by-frame visualization pipeline
+│   └── render_contour_pulse.py     Render lightweight live contour interfaces
+├── contourWorkflow/                 Bayesian contour campaign state machine
+│   ├── contour_campaign.py         Propose, submit, collect, and gate iterations
+│   ├── materialize_cases.py        Validate proposals against initial shapes
+│   ├── result_quality.py            Compute KE/facet corruption evidence
+│   └── run_one_contour_case.sh     Run and classify one OpenMP case
 ├── runSimulation.sh                 Single case runner (OpenMP/MPI)
 ├── runParameterSweep.sh             Parameter sweep runner
 ├── runPostProcess-Ncases.sh         Batch post-processing runner
 ├── default.params                   Single-case configuration
 ├── sweep.params                     Sweep configuration template
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
-└── runSweepHamilton.sbatch          SLURM script for Hamilton HPC
+├── runSweepHamilton.sbatch          Legacy sequential MPI runner
+├── runContourHamilton.sbatch        Packed 16-case Hamilton runner
+└── runContourLocal.sh               Bounded local-systemd/OpenMP runner
 ```
 
 ## Simulation Files
@@ -103,6 +111,217 @@ The `coalescenceBubble-tag.c` file additionally uses `tag.h` for tracking shape 
 ```bash
 # Submit parameter sweep to SLURM
 sbatch runSweepSnellius.sbatch
+```
+
+### Bayesian contour campaign
+
+The rearmable contour workflow uses batches of 16 simulations. Hamilton runs
+one 16-case Slurm allocation; the local backend launches a user-systemd unit
+and executes three cases at a time by default. Each case receives eight OpenMP
+threads, so the workstation default is 24 concurrent threads. The local runner
+enforces a hard 48-thread ceiling through `CONTOUR_MAX_THREADS` and uses no MPI.
+The simulation detects the first persistent leading-tip detachment during
+runtime, writes `classification.status`, and stops after a component above the
+configured radius cutoff persists for three checks. It is labelled as an
+injected drop only when its volume-weighted axial velocity is positive at
+pinch-off. A zero or negative velocity is no-drop; later Rayleigh--Plateau
+breakup along the jet is deliberately excluded. The contour-case observation
+horizon is `t=1.0` by default.
+
+The campaign controller requires a Bayesian Contour Predictor checkout with
+the `--x-candidates` interface (AnjaliML/Bayesian-Contour-Predictor PR #3 or a
+later release). Initialise from a canonical seed and exclude any known
+configuration-confounded column before proposing:
+
+```bash
+module load python/3.10.8
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /nobackup/$USER/drop-injection-confined \
+  --project-root "$PWD" \
+  --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
+  init --seed NumConfinementSweep-0.csv --exclude-x 8
+
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /nobackup/$USER/drop-injection-confined \
+  --project-root "$PWD" \
+  --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
+  advance --submit
+```
+
+On a controlled Linux workstation, select the local backend explicitly:
+
+```bash
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /path/to/drop-injection-confined \
+  --project-root "$PWD" \
+  --predictor-root /path/to/Bayesian-Contour-Predictor \
+  --backend local \
+  advance --submit
+```
+
+`runContourLocal.sh` compiles against the ref-locked Basilisk sources under the
+project and uses a host-built `qcc`. Set `CONTOUR_QCC` only when `qcc` is not on
+the non-interactive `PATH`. Its rolling queue launches a new case as soon as a
+worker finishes. Machine-wide per-CPU locks prevent independent contour units
+from binding over one another. `CONTOUR_CPU_START` and `CONTOUR_CPU_COUNT`
+select the shared physical-core pool; the workstation defaults use CPUs 0--23,
+leaving CPUs 24--31 free for interactive work. Do not count SMT siblings as
+extra CFD cores without a measured scaling benefit.
+
+`advance --submit` is idempotent. It collects only complete 16-row result
+tables, submits the next batch, stops for manual selection after iteration 8,
+and stops permanently at the configured final iteration. Radius-ratio
+proposals are confined to `simulationCases/DataFiles/`; post-hoc rounding is
+rejected because it changes acquisition scores.
+
+At the iteration-8 checkpoint, generate (but do not approve) the review file
+with `propose-manual-batch`, edit it only for an explicit physics or
+information-gain reason, then install it with `approve-manual-batch`. A failed
+or timed-out allocation remains unresolved; after inspection, `retry --submit`
+creates a clean `attempt-NN` directory containing only unresolved cases at
+adjacent, non-colliding Oh values (1% steps by default). Every replacement is
+recorded in `replacements.csv`; superseded evidence stays auditable but can
+never be promoted under the new coordinate.
+Collection merges resolved labels across attempts in the original 16-case order
+without overwriting earlier evidence.
+
+Contour runs can enable the feature-driven drill with
+`CONTOUR_DRILL_AMR=1`. The controller begins at a configured lower level and
+uses persistent target-region curvature demand to arm. Before ARM, the entire
+domain is capped at `CONTOUR_DRILL_START`; after ARM, `MAXlevel` is released
+only in the capillary-wave, focusing and jet band while the parent-bubble
+exterior remains capped at `CONTOUR_DRILL_FOCUS`. FIRE records persistent tip
+advance for diagnostics. The public defaults are conservative; the drill is
+off unless a campaign explicitly enables it. Calibrate labels and first-drop
+radii against fixed-level references before production. Rayleigh--Plateau
+component counts are not drill triggers.
+
+`CONTOUR_DRILL_REGIONAL_ONLY=1` is the conservative mode: the complete
+wave/focus/jet band remains at `MAXlevel` for the whole run and only the parent
+bubble exterior is capped. Use this when dynamic pre-jet coarsening changes a
+boundary label or first-drop size.
+
+### Half-space asymptote (`Rr -> infinity`)
+
+The large-radius limit is not represented by an arbitrarily large second
+bubble. It is a unit bubble coalescing with a locally flat gas--liquid
+interface. The reusable `Bo0.0000.dat` geometry is generated from the
+Bursting-Bubble sphere--plane construction:
+
+```bash
+python3 postProcess/generate_Bo0_IC.py \
+  --delta 0.01 --rmax 32 \
+  --out simulationCases/DataFiles/Bo0.0000.dat
+```
+
+Run this limit as a separate anchor with `x=inf` in its `cases.csv`; do not
+feed it into Bayesian acquisition. `CONTOUR_WALL_CLEARANCE=0.027` matches the
+physical south-pole clearance of the finite-map runs at nominal
+`zWall=0.05`. The solver retains the canonical Bursting-Bubble right boundary
+at `x=4`, giving `L0=min(zWall+6,16)=6.0472`. At Level 11 the 0.027 wall film
+spans about 9.15 cells. Keep the map-wide physical detection threshold
+`dropRadiusMin=0.015625`; do not silently shrink it when the half-space domain
+is narrowed.
+
+```bash
+CONTOUR_GEOMETRY_MODE=halfspace \
+CONTOUR_WALL_CLEARANCE=0.027 \
+CONTOUR_MAXLEVEL=11 \
+CONTOUR_DROP_RADIUS_MIN=0.015625 \
+CONTOUR_THREADS_PER_CASE=8 \
+CONTOUR_WORKERS=2 \
+CONTOUR_MAX_THREADS=48 \
+./runContourLocal.sh /path/to/halfspace-anchor-batch
+```
+
+Plot the resolved half-space transition at `1/Rr=0`. The `x=inf` sentinel is
+accepted only by `geometryMode=halfspace`; finite-radius materialisation still
+requires an exact `InitialConditionRr-*.dat` match.
+
+### Near-symmetric radius ratios (`Rr` in `(1, ~1.15)`)
+
+`InitialConditionRr-*.dat` files are generated by
+[`Circles-in-contact`](https://github.com/comphy-lab/Circles-in-contact)'s
+`generate_initial_condition.py`, which places a regularised capillary-bridge
+fillet of radius `delta` between the two circles (curvature scales as
+`~1/delta`). Every `InitialConditionRr-*.dat` in this repository uses
+`delta=0.023` **except** `Rr = 1.02, 1.05, 1.07, 1.10`, which use `delta=0.1`.
+
+Reason: `delta=0.023` gives these four points (the closest finite radius
+ratios to the exactly-symmetric `Rr=1` case) a fillet curvature sharp enough
+to blow up the pressure Poisson solve within the first ~100 timesteps
+(`t<0.013`), regardless of drill settings, wisp-removal, or parallelism
+(ruled out serial-vs-parallel: identical crash timestep either way). `Rr=1`
+itself is unaffected (256 historical runs, all clean). `delta=0.1` resolves
+all four cleanly to `t=1`; `delta=0.05` was tested and is insufficient (still
+fails, in some cases earlier than the unpatched `delta=0.023` run). Regenerate
+with:
+
+```bash
+python3 generate_initial_condition.py --delta 0.1 --Rr 1.02,1.05,1.07,1.10 \
+  --data-folder simulationCases/DataFiles
+```
+
+The original `delta=0.023` files for these four points are archived at
+`simulationCases/DataFiles-ORIGINAL-delta0.023-backup-20260715/` on the
+Stokes deployment for provenance; they are deterministically regenerable via
+the command above with `--delta 0.023` and are not otherwise unique.
+
+For a bounded unattended workstation campaign, initialise a fresh campaign
+with explicit numerical and acquisition settings, then run the shell driver:
+
+```bash
+python3 contourWorkflow/contour_campaign.py \
+  --campaign-root /path/to/confined-l11 \
+  --project-root "$PWD" \
+  --predictor-root /path/to/Bayesian-Contour-Predictor \
+  --backend inline init \
+  --seed /path/to/resolved-seed.csv \
+  --final-iteration 20 --no-manual-checkpoint \
+  --case-id-start 6000 --n-new 14 --n-repeats 2 \
+  --max-level 11 --drop-radius-min 0.015625 \
+  --workers 6 --threads-per-case 4 --max-threads 48 \
+  --unit-prefix dropinj-l11 --allow-unbracketed-edges \
+  --posterior-samples 64
+
+./runContourCampaignLoop.sh \
+  /path/to/confined-l11 \
+  /path/to/Bayesian-Contour-Predictor
+```
+
+Run the driver in a detached `tmux` session. Its inline backend avoids depending
+on login-session-scoped user-systemd services. The driver permits one selective
+retry of unresolved cases, then stops with
+`needs_attention`. It never reruns resolved cases. Full per-batch measurements,
+including first-persistent-detachment radius and volume, are retained under
+`measurements/`; the four-column `completed/` tables remain predictor input.
+
+New Hamilton result rows include `max_ke`, `facet_lines`, `quality_state`, and
+`quality_reason`. A row fails the conservative corruption gate when its maximum
+kinetic energy exceeds 1000, its latest interface has more than 8000 nonblank
+facet lines, or either evidence source is missing/non-finite. Failed rows remain
+auditable in their attempt but are not promoted or counted as resolved. Rows
+without quality columns are backfilled from retained attempt case evidence;
+archived legacy tables with no retained `cases/` tree remain valid unless
+manually quarantined.
+
+Manual review can quarantine one exact piece of evidence by creating
+`quality-quarantine.csv` in the campaign root:
+
+```csv
+iteration,attempt,caseId,reason
+1,1,5000,corrupt interface confirmed by visual review
+```
+
+The exclusion applies only to that iteration, attempt, and case; a clean retry
+of the same case remains eligible for collection.
+
+For a full-node launch test, override the production header without editing
+the file:
+
+```bash
+sbatch -p test --time=00:15:00 runContourHamilton.sbatch \
+  /path/to/campaign/iterations/iteration-01
 ```
 
 ### Post-Processing
