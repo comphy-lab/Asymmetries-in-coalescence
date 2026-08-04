@@ -466,7 +466,7 @@ int main(int argc, char const *argv[]) {
   Configure domain and fluid properties: */
   L0=Ldomain;
   origin(originX, 0.0);
-  init_grid (1 << (6));
+  init_grid (1 << (10));
 
   fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly);
 
@@ -531,6 +531,14 @@ event init(t = 0){
     int initialLevel = drillAMR ? drillMaxlevelStart : MAXlevel;
     while (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8, 1e-8},
                           initialLevel).nf);
+    if (drillAMR && drillRegionalOnly) {
+      /* Refine only a narrow signed-distance band around the initial interface
+         in the protected region.  A box-wide distance-field tolerance drives
+         all smooth bulk cells to ML16 and makes the startup prohibitively slow. */
+      refine (level < MAXlevel &&
+              x >= drillRegionMinX && x <= drillRegionMaxX &&
+              y <= drillRegionRadius && fabs(d[]) < 3.*Delta);
+    }
     /**
     The distance function is defined at the center of each cell, we have
     to calculate the value of this function at each vertex. */
