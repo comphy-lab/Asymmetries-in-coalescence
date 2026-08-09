@@ -104,6 +104,15 @@ Last updated: Jan 2026
 
 #include "axi.h"
 #include "navier-stokes/centered.h"
+#ifdef DOUBLE_PROJECTION
+/**
+Opt-in second Poisson solve per timestep (Almgren et al. 2000). Decouples the
+face-velocity projection pressure from the centered-gradient pressure so the
+latter does not feel the divergence history of adaptive refinement. Build with
+`-DDOUBLE_PROJECTION=1` to enable; omit for the standard single-projection
+scheme (the default). */
+#include "navier-stokes/double-projection.h"
+#endif
 #define FILTERED 1
 #include "two-phase.h"
 #include "navier-stokes/conserving.h"
@@ -451,9 +460,18 @@ int main(int argc, char const *argv[]) {
 
   /**
   The finite domain fits both bubbles plus a buffer. The half-space domain is
-  the Bo=0 Bursting-Bubble domain, L0=min(zWall+6,16). */
+  the Bo=0 Bursting-Bubble domain, L0=min(zWall+6,16).
+
+  The finite-geometry branch is deliberately uncapped: the previous
+  `fmin(...,16.)` ceiling truncates the domain for any Rr large enough that
+  `zWall+2+2*Rr+4 > 16` -- e.g. Rr=30 needs Ldomain=66.05 to contain a
+  radius-30 bubble (`InitialConditionRr-30.00.dat` spans x up to ~60, y up to
+  ~30), but the capped formula forces Ldomain=16, truncating the large bubble
+  to roughly half its radius. The half-space branch keeps its cap, since it is
+  unaffected by this and the 16-unit domain there is intentional (see the
+  comment above). */
   Ldomain = halfspace ? fmin(zWall + 6.0, 16.) :
-    fmin(zWall + 2. + 2.*Rr + 4.0, 16.);
+    zWall + 2. + 2.*Rr + 4.0;
   if (argc > 7 && dropRadiusMin == 0.)
     // exp2 avoids the int shift (1 << MAXlevel), which is UB/overflow for large
     // MAXlevel; the result is the same 2^MAXlevel for the levels used here.
