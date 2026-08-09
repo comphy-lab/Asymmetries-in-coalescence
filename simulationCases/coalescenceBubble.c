@@ -48,8 +48,34 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
   [drillMaxlevelStart] [drillMaxlevelFocus] [drillNcells] \
   [drillRegionMinX] [drillArmSteps] [drillArmTime] [drillCoarsenTime] \
   [drillRegionMaxX] [drillRegionRadius] [drillFireX] [drillTipRadius] \
-  [drillRegionalOnly] [geometryMode] [wallClearance]
+  [drillRegionalOnly] [geometryMode] [wallClearance] [interfaceFloor]
 ```
+
+## Solver Stacks
+
+Exactly two solver stacks are supported, and every production run is repeated
+under both. A single compile-time flag selects between them.
+
+| Build | Stack |
+|---|---|
+| (no flag) | `FILTERED` property averaging + `navier-stokes/double-projection.h` |
+| `-DUSE_CONSERVING=1` | `navier-stokes/conserving.h`, no `FILTERED`, no double projection |
+
+Stack 1 is the default. Double projection (Almgren et al. 2000) decouples the
+face-velocity projection pressure from the centered-gradient pressure, so the
+latter does not inherit the divergence history of adaptive refinement. That is
+the dominant failure mode at large $R_r$ with a thin wall film.
+
+Stack 2 is the momentum-conserving VOF advection. It is mutually exclusive with
+Stack 1 by construction: `conserving.h` sets `stokes = true` and moves the
+momentum advection into the `vof` event, ahead of `advection_term`. The
+double-projection update field $A_f$ is assembled in `advection_term` and would
+therefore omit the advective update entirely. `FILTERED` is likewise dropped
+because `conserving.h` supplies its own consistent face density.
+
+The legacy `-DDOUBLE_PROJECTION=1` flag is retained only as a no-op alias for
+Stack 1, which now enables double projection unconditionally. It is rejected
+when combined with `-DUSE_CONSERVING`.
 
 ### Command-line Parameters
 
@@ -78,6 +104,8 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
 - `wallClearance`: Optional physical distance from the bubble south pole to
   the left wall. A negative value preserves the legacy nominal `zWall`
   placement. Use `0.027` to match the finite-map `zWall=0.05` clearance.
+- `interfaceFloor`: Enforce the unconditional `MAXlevel` refinement floor on
+  every interfacial cell after each adaptation (`1` by default, `0` disables).
 
 ## Nondimensional Mapping Used in This Code
 
@@ -102,21 +130,36 @@ Physics of Fluids
 Last updated: Jan 2026
 */
 
+/**
+Reject every invalid stack combination before anything is included. These must
+precede the `FILTERED` definition below, which is part of Stack 1 itself. */
+#if defined(USE_CONSERVING) && defined(DOUBLE_PROJECTION)
+#error "USE_CONSERVING and DOUBLE_PROJECTION are mutually exclusive: conserving.h sets stokes=true and advects momentum in the vof event, so double-projection's Af would omit the advective update. Pick one stack."
+#endif
+#if defined(USE_CONSERVING) && defined(FILTERED)
+#error "USE_CONSERVING excludes FILTERED: conserving.h supplies its own consistent face density. Do not define FILTERED for the conserving stack."
+#endif
+
 #include "axi.h"
 #include "navier-stokes/centered.h"
-#ifdef DOUBLE_PROJECTION
+#ifndef USE_CONSERVING
 /**
-Opt-in second Poisson solve per timestep (Almgren et al. 2000). Decouples the
-face-velocity projection pressure from the centered-gradient pressure so the
-latter does not feel the divergence history of adaptive refinement. Build with
-`-DDOUBLE_PROJECTION=1` to enable; omit for the standard single-projection
-scheme (the default). */
+Stack 1: the second Poisson solve per timestep is unconditional here. */
 #include "navier-stokes/double-projection.h"
-#endif
 #define FILTERED 1
+#endif
 #include "two-phase.h"
+#ifdef USE_CONSERVING
+/**
+Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #include "navier-stokes/conserving.h"
+#endif
 #include "tension.h"
+#ifdef USE_CONSERVING
+#define SOLVER_STACK "conserving"
+#else
+#define SOLVER_STACK "filtered+double-projection"
+#endif
 #include "tag.h"
 #include "adapt_wavelet_limited.h"
 #include <float.h>
@@ -210,6 +253,33 @@ double drillCoarsenTime = 0.;
 double drillFireX = 0.25;
 double drillTipRadius = 0.25;
 char nameOut[80], dumpFile[80];
+
+/**
+## Numerics Guard State
+
+- `interfaceFloor`: runtime switch for the unconditional `MAXlevel` refinement
+  floor on interfacial cells (see the `adapt` event).
+- `interfaceFloorDeficit`: AMR contract count. The number of interfacial cells
+  left below `MAXlevel` after adaptation. It must be zero on every step and is
+  reported per step in `projectionStats.dat`, not on stdout.
+- `dtCap`/`dtCapMax`: persistent timestep ceiling maintained by the
+  projection-failure backoff, and the ceiling it relaxes back to. The cap is
+  published through the global `DT`, which `centered.h`'s `set_dtmax` event
+  applies as `dtmax = DT` at the start of every step; `tension.h` and the
+  advective CFL then reduce `dtmax` further as usual.
+- `projectionFailures`: consecutive failed-projection steps. Reaching
+  `projectionFailureLimit` stops the run cleanly instead of cascading to NaNs.
+- `mgpFaceProjection`: statistics of the *face-velocity* projection. Under
+  Stack 1, `double-projection.h` overwrites `mgp` with the second (update)
+  projection in `end_timestep`, so the first solve's statistics are captured by
+  the overloading `end_timestep` event below.
+*/
+int interfaceFloor = 1;
+int interfaceFloorDeficit = 0;
+int projectionFailures = 0;
+int projectionFailureLimit = 5;
+double dtCap = HUGE, dtCapMax = HUGE;
+mgstats mgpFaceProjection;
 
 /**
 Return the smallest axial coordinate in an initial-shape polyline. Case
@@ -402,6 +472,8 @@ int main(int argc, char const *argv[]) {
     snprintf (geometryMode, sizeof(geometryMode), "%s", argv[23]);
   if (argc > 24)
     wallClearance = atof(argv[24]);
+  if (argc > 25)
+    interfaceFloor = atoi(argv[25]);
 
   bool halfspace = strcmp (geometryMode, "halfspace") == 0;
   bool finite = strcmp (geometryMode, "finite") == 0;
@@ -430,19 +502,20 @@ int main(int argc, char const *argv[]) {
       drillRegionRadius <= 0. || drillFireX <= drillRegionMinX ||
       drillFireX >= drillRegionMaxX || drillTipRadius <= 0. ||
       drillTipRadius > drillRegionRadius || wallClearance == 0. ||
-      (drillRegionalOnly != 0 && drillRegionalOnly != 1)) {
+      (drillRegionalOnly != 0 && drillRegionalOnly != 1) ||
+      (interfaceFloor != 0 && interfaceFloor != 1)) {
     fprintf (ferr, "Invalid contour controls: dropRadiusMin=%g, "
              "dropPersistence=%d, snapshotInterval=%g, drillAMR=%d, "
              "drillStart=%d, drillFocus=%d, drillNcells=%g, "
              "drillRegionMinX=%g, drillArmSteps=%d, drillArmTime=%g, "
              "drillCoarsenTime=%g, drillRegionMaxX=%g, "
              "drillRegionRadius=%g, drillFireX=%g, drillTipRadius=%g, "
-             "drillRegionalOnly=%d\n",
+             "drillRegionalOnly=%d, interfaceFloor=%d\n",
              dropRadiusMin, dropPersistence, snapshotInterval, drillAMR,
              drillMaxlevelStart, drillMaxlevelFocus, drillNcells,
              drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime,
              drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius,
-             drillRegionalOnly);
+             drillRegionalOnly, interfaceFloor);
     return 1;
   }
 
@@ -486,7 +559,7 @@ int main(int argc, char const *argv[]) {
   origin(originX, 0.0);
   init_grid (1 << (10));
 
-  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly);
+  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d, interfaceFloor %d, solverStack %s\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly, interfaceFloor, SOLVER_STACK);
 
   /**
   Set fluid properties:
@@ -505,6 +578,11 @@ int main(int argc, char const *argv[]) {
   TOLERANCE = 1e-4;
   CFL = 1e-1;
 
+  /**
+  Baseline for the projection-failure backoff. `DT` is Basilisk's global
+  timestep ceiling (`HUGE` unless set), so the cap is inert until a projection
+  actually fails and it relaxes all the way back here afterwards. */
+  dtCapMax = DT;
 
   run();
 }
@@ -546,13 +624,23 @@ event init(t = 0){
     fclose (fp);
     scalar d[];
     distance (d, InitialShape);
-    int initialLevel = drillAMR ? drillMaxlevelStart : MAXlevel;
+    /**
+    Build the initial condition at `MAXlevel` everywhere, unconditionally.
+    Seeding the distance-field adaptation at `drillMaxlevelStart` under the
+    drill left the high-curvature neck coarse from step zero; the parasitic
+    capillary currents it seeded are what later destroy the face-velocity
+    projection. The startup cost of a uniform `MAXlevel` target is paid once,
+    and it is the only IC that satisfies the AMR contract enforced in the
+    `adapt` event below. */
+    int initialLevel = MAXlevel;
     while (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8, 1e-8},
                           initialLevel).nf);
     if (drillAMR && drillRegionalOnly) {
-      /* Refine only a narrow signed-distance band around the initial interface
-         in the protected region.  A box-wide distance-field tolerance drives
-         all smooth bulk cells to ML16 and makes the startup prohibitively slow. */
+      /**
+      Retained as a no-op accelerator. With `initialLevel = MAXlevel` the
+      wavelet pass already targets the same ceiling; this only tops up any
+      band cell whose distance-field wavelet error happened to fall below
+      tolerance. It can raise resolution, never lower it. */
       refine (level < MAXlevel &&
               x >= drillRegionMinX && x <= drillRegionMaxX &&
               y <= drillRegionRadius && fabs(d[]) < 3.*Delta);
@@ -617,6 +705,38 @@ event adapt(i++){
   else
     adapt_wavelet ((scalar *){f, u.x, u.y},
       (double[]){fErr, VelErr, VelErr}, maxlevelLocal, MAXlevel-6);
+
+  /**
+  ### Interfacial refinement floor
+
+  `adapt_wavelet*()` treats `MAXlevel` as a local *ceiling*, not a guarantee.
+  A cut cell whose volume-fraction wavelet error falls below `fErr` is left
+  coarse, and a nearly planar interface is exactly such a cell. That is how the
+  $R_r=30$ neck and the thin wall film end up under-resolved between adapt
+  steps, which seeds the parasitic capillary currents that break the face
+  projection. Enforce the separate production contract instead: every
+  interfacial cell sits at `MAXlevel`.
+
+  `refine()` (`grid/tree-common.h`) already wraps its body in a
+  `do { ... } while (refined)` loop and refines one level per pass, so a single
+  invocation drives the whole band up to `MAXlevel`; no outer loop is needed. */
+  const double interfaceEps = 1e-6;
+  if (interfaceFloor)
+    refine (level < MAXlevel &&
+            f[] > interfaceEps && f[] < 1. - interfaceEps);
+
+  /**
+  ### AMR contract check
+
+  Count the interfacial cells still below `MAXlevel`. With the floor engaged
+  this must be zero on every step. It is reported per step in
+  `projectionStats.dat` rather than on stdout, so a violation is auditable
+  without flooding the run log. */
+  int deficit = 0;
+  foreach (reduction(+:deficit))
+    if (f[] > interfaceEps && f[] < 1. - interfaceEps && level < MAXlevel)
+      deficit++;
+  interfaceFloorDeficit = deficit;
 }
 
 /**
@@ -673,6 +793,186 @@ event drillProbe(i++) {
 }
 
 /**
+## Projection Diagnostics and Failure Guard
+
+The face-velocity projection is what actually fails at large $R_r$ with a thin
+wall film: `resb` climbs to $O(10^7)$ and `resa` to $O(10^{18})$ after
+`NITERMAX` V-cycles while the cell-centred solve still converges in three
+cycles, and nothing physical has moved at the moment of death. Record enough
+per step to see it coming, and cap the timestep once it starts.
+
+Diagnostics go to `projectionStats.dat`, one line per step. The main `log`
+column layout is deliberately left untouched: `BayesianWorkflow/result_quality.py`
+parses `log` positionally and reads `fields[3]` as the kinetic energy, so any
+numeric line added there would be mistaken for a physical sample.
+*/
+
+/**
+`double-projection.h` overwrites `mgp` with the second (update) projection in
+its own `end_timestep`. Basilisk event inheritance runs the most recently
+defined overload first, so this event -- defined last -- captures the
+face-velocity projection statistics before they are lost. Under the conserving
+stack there is no second projection and `mgp` is already the face solve, so the
+same assignment is correct for both stacks.
+*/
+event end_timestep (i++) {
+  mgpFaceProjection = mgp;
+}
+
+event projectionStats (i++, last) {
+
+  /**
+  ### Unweighted divergence monitor
+
+  `project()` measures the residual of the *metric-weighted* discrete
+  divergence. In axisymmetry `uf` already carries the face metric $f_m = y$, so
+  the quantity the multigrid drives to zero is
+
+  $$ D_w = \frac{1}{\Delta}\sum_d \left(u_{f,d}^{+} - u_{f,d}^{-}\right)
+     = y\,\partial_x u_x + \partial_y (y\,u_y) $$
+
+  which is $O(y)$ and therefore vanishes on the axis however bad the velocity
+  field is there. Dividing by the cell metric $c_m = y$ recovers the honest
+  divergence
+
+  $$ \nabla\cdot\mathbf{u} = \partial_x u_x + \frac{1}{y}\partial_y (y\,u_y)
+     = \frac{D_w}{c_m} $$
+
+  and its maximum is what is reported. `cm[]` is at least $\Delta/2$ on the
+  axis row so the division is safe; the floor is belt and braces. The field is
+  sampled after adaptation, i.e. exactly as it is handed to the next step, so
+  regrid-induced divergence is included by design. */
+
+  double divMax = 0., fMin = 1., fMax = 0.;
+  foreach (reduction(max:divMax) reduction(min:fMin) reduction(max:fMax)) {
+    double divLocal = 0.;
+    foreach_dimension()
+      divLocal += uf.x[1] - uf.x[];
+    divLocal = fabs(divLocal)/(Delta*max(cm[], 1e-30));
+    if (divLocal > divMax)
+      divMax = divLocal;
+    if (f[] < fMin)
+      fMin = f[];
+    if (f[] > fMax)
+      fMax = f[];
+  }
+
+  /**
+  ### Failure detection
+
+  `project()` solves to the raw Poisson tolerance `TOLERANCE/dt^2`, so a fixed
+  threshold on `resa` is dimensionally wrong and would reject healthy small
+  timesteps. The scaled residual `resa*dt^2` is the dimensionless quantity the
+  solver is actually asked to bring below `TOLERANCE`, so
+  `resa*dt^2 > TOLERANCE` means precisely "the solve missed its bar", which can
+  only happen by exhausting `NITERMAX`. Non-finite residuals count as failures
+  too. */
+
+  double scaledResidual = mgpFaceProjection.resa*sq(dt);
+  bool projectionFailed = !isfinite (mgpFaceProjection.resa) ||
+    !isfinite (scaledResidual) || scaledResidual > TOLERANCE;
+
+  /**
+  ### Timestep backoff
+
+  This is a guard, not a new integrator: there is no state rollback. On failure
+  the cap is seeded from the achieved `dt` (the standing cap is `HUGE` until
+  then), halved, and published through `DT` so that `centered.h`'s `set_dtmax`
+  applies it as `dtmax` on the next step. A failure snapshot is written first so
+  the state that broke is always recoverable. Clean steps relax the cap by 5%
+  per step back up to `dtCapMax`. */
+
+  if (projectionFailed) {
+    projectionFailures++;
+    dtCap = 0.5*(dtCap < dtCapMax ? dtCap : dt);
+    DT = dtCap;
+    char failName[80];
+    snprintf (failName, sizeof(failName), "dump-projection-failure-%5.4f", t);
+    dump (file = failName);
+    if (pid() == 0)
+      fprintf (ferr, "PROJECTION-FAILURE %d/%d at i=%d t=%g dt=%g: "
+               "face.i=%d/%d resb=%g resa=%g scaled_resa=%g > tolerance=%g, "
+               "maxDivU=%g. dt cap -> %g. Snapshot '%s'.\n",
+               projectionFailures, projectionFailureLimit, i, t, dt,
+               mgpFaceProjection.i, NITERMAX, mgpFaceProjection.resb,
+               mgpFaceProjection.resa, scaledResidual, TOLERANCE, divMax,
+               dtCap, failName);
+  }
+  else {
+    projectionFailures = 0;
+    if (dtCap < dtCapMax) {
+      dtCap = min (1.05*dtCap, dtCapMax);
+      DT = dtCap;
+    }
+  }
+
+  static FILE * fps;
+  if (pid() == 0) {
+    if (i == 0) {
+      fps = fopen ("projectionStats.dat", "w");
+      if (fps)
+        fprintf (fps, "# solverStack %s, MAXlevel %d, TOLERANCE %g, "
+                 "NITERMAX %d, interfaceFloor %d, projectionFailureLimit %d\n"
+                 "# i t dt mgp_i mgp_resb mgp_resa mgp_scaled_resa mgp_nrelax "
+                 "maxDivU fMin fMax contractDeficit dtCap projectionFailed "
+                 "mgu_i mgu_resa\n",
+                 SOLVER_STACK, MAXlevel, TOLERANCE, NITERMAX, interfaceFloor,
+                 projectionFailureLimit);
+    }
+    else
+      fps = fopen ("projectionStats.dat", "a");
+    if (fps) {
+      /**
+      `mgu` (the viscous solve) is reported but not guarded. The conserving
+      stack exhausts `NITERMAX` there long before the pressure projection is in
+      trouble, so a projection-only diagnostic would report a healthy step
+      while the run is in fact grinding. Two extra columns make that visible
+      without changing any behaviour. */
+      fprintf (fps, "%d %.8g %.8g %d %.8g %.8g %.8g %d %.8g %.8g %.8g %d "
+               "%.8g %d %d %.8g\n", i, t, dt, mgpFaceProjection.i,
+               mgpFaceProjection.resb, mgpFaceProjection.resa, scaledResidual,
+               mgpFaceProjection.nrelax, divMax, fMin, fMax,
+               interfaceFloorDeficit, dtCap, (int) projectionFailed,
+               mgu.i, mgu.resa);
+      fclose (fps);
+    }
+  }
+
+  /**
+  ### Clean stop
+
+  `projectionFailureLimit` consecutive failures mean the backoff is not
+  recovering the solve. Stop with a distinct status rather than letting the
+  residual cascade into NaNs, and leave every dump in place. `event end` then
+  publishes `abnormal_termination_unclassified` for contour campaigns, so no
+  physical verdict is fabricated. */
+
+  if (projectionFailures >= projectionFailureLimit) {
+    if (pid() == 0) {
+      fprintf (ferr, "PROJECTION-GUARD: %d consecutive failed face projections "
+               "at i=%d t=%g dt=%g (scaled resa=%g > tolerance=%g). Stopping "
+               "cleanly; dumps retained; no physical verdict.\n",
+               projectionFailures, i, t, dt, scaledResidual, TOLERANCE);
+      FILE * gfp = fopen ("projection_guard.status", "w");
+      if (gfp) {
+        fprintf (gfp, "status=projection_failure_backoff_exhausted\n"
+                 "solverStack=%s\ni=%d\nt=%.8g\ndt=%.8g\nconsecutive=%d\n"
+                 "face_i=%d\nface_resb=%.8g\nface_resa=%.8g\n"
+                 "face_scaled_resa=%.8g\ntolerance=%.8g\nmaxDivU=%.8g\n"
+                 "contractDeficit=%d\ndtCap=%.8g\n", SOLVER_STACK, i, t, dt,
+                 projectionFailures, mgpFaceProjection.i,
+                 mgpFaceProjection.resb, mgpFaceProjection.resa,
+                 scaledResidual, TOLERANCE, divMax, interfaceFloorDeficit,
+                 dtCap);
+        fclose (gfp);
+      }
+    }
+    return 1;
+  }
+  return 0;
+}
+
+/**
 ## Output Files
 
 Save simulation snapshots at regular intervals:
@@ -681,12 +981,19 @@ Save simulation snapshots at regular intervals:
 */
 
 event writingFiles (t = 0; t += snapshotInterval; t <= tmax + snapshotInterval) {
-  // Contour campaigns use lightweight facets and coarse restart checkpoints.
-  // Writing two full dumps every 0.05 time units for 16 simultaneous cases
-  // overwhelms the shared filesystem without improving classification.
+  /**
+  The restart checkpoint is unconditional. Contour mode previously returned
+  before any `dump()`, so a crash between the 0.5-interval `contourCheckpoint`
+  dumps left nothing to restart from -- including at $t=0$, which made every
+  early-death case unrecoverable and unreproducible.
+
+  The original guard's intent is preserved: only the full snapshot *time
+  series* stays suppressed for contour campaigns, where a second full dump per
+  `snapshotInterval` across 16 simultaneous cases overwhelms the shared
+  filesystem without improving classification. */
+  dump (file = dumpFile);
   if (dropRadiusMin >= 0.)
     return 0;
-  dump (file = dumpFile);
   sprintf (nameOut, "intermediate/snapshot-%5.4f", t);
   dump(file=nameOut);
 }
