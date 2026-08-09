@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).parents[1] / "contourWorkflow" / "result_quality.py"
+SCRIPT = Path(__file__).parents[1] / "BayesianWorkflow" / "result_quality.py"
 SPEC = importlib.util.spec_from_file_location("result_quality_under_test", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 QUALITY_MODULE = importlib.util.module_from_spec(SPEC)

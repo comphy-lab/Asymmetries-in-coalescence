@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 
-SCRIPT = Path(__file__).parents[1] / "contourWorkflow" / "contour_campaign.py"
+SCRIPT = Path(__file__).parents[1] / "BayesianWorkflow" / "contour_campaign.py"
 SPEC = importlib.util.spec_from_file_location("contour_campaign_under_test", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 CAMPAIGN_MODULE = importlib.util.module_from_spec(SPEC)

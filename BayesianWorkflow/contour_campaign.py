@@ -27,7 +27,7 @@ from typing import Iterator, Sequence
 try:
     from result_quality import case_quality
 except ModuleNotFoundError:
-    from contourWorkflow.result_quality import case_quality
+    from BayesianWorkflow.result_quality import case_quality
 
 
 BATCH_SIZE = 16

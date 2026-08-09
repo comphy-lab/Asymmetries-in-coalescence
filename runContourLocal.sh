@@ -177,7 +177,7 @@ temporary.replace(path)
 PY
 
 materialize=(
-  python3 "${project_root}/contourWorkflow/materialize_cases.py"
+  python3 "${project_root}/BayesianWorkflow/materialize_cases.py"
   "$cases_csv" "$case_root"
   --data-dir "${project_root}/simulationCases/DataFiles"
   --source "${project_root}/simulationCases/coalescenceBubble.c"
@@ -295,7 +295,7 @@ worker_loop() {
     echo "${case_name}: CPUs ${acquired_cpu_start}-${acquired_cpu_end}"
     if ! taskset -c "${acquired_cpu_start}-${acquired_cpu_end}" \
       env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
-      bash "${project_root}/contourWorkflow/run_one_contour_case.sh" \
+      bash "${project_root}/BayesianWorkflow/run_one_contour_case.sh" \
         "$case_dir" "${build_dir}/coalescenceBubbleContour" \
         >"${iteration_dir}/logs/${case_name}.out" \
         2>"${iteration_dir}/logs/${case_name}.err"; then
@@ -316,6 +316,6 @@ for pid_value in "${pids[@]}"; do
   wait "$pid_value" || rc=1
 done
 
-python3 "${project_root}/contourWorkflow/collect_attempt_results.py" "$iteration_dir"
+python3 "${project_root}/BayesianWorkflow/collect_attempt_results.py" "$iteration_dir"
 
 exit "$rc"

@@ -107,7 +107,7 @@ temporary.write_text(json.dumps(metadata, indent=2) + "\n")
 temporary.replace(path)
 PY
 
-python3 "${project_root}/contourWorkflow/materialize_cases.py" \
+python3 "${project_root}/BayesianWorkflow/materialize_cases.py" \
   "$cases_csv" "$case_root" \
   --data-dir "${project_root}/simulationCases/DataFiles" \
   --source "${project_root}/simulationCases/coalescenceBubble.c" \
@@ -145,7 +145,7 @@ for case_dir in "${case_dirs[@]}"; do
   srun --exclusive --exact -N1 -n1 -c "$threads" \
     --gres=tmp:1G --cpu-bind=cores \
     env OMP_NUM_THREADS="$threads" OMP_PLACES=cores OMP_PROC_BIND=close \
-    bash "${project_root}/contourWorkflow/run_one_contour_case.sh" \
+    bash "${project_root}/BayesianWorkflow/run_one_contour_case.sh" \
       "$case_dir" "${build_dir}/coalescenceBubbleContour" \
       >"${iteration_dir}/logs/${case_name}.out" \
       2>"${iteration_dir}/logs/${case_name}.err" &
@@ -164,7 +164,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(Path(sys.argv[2]) / "contourWorkflow"))
+sys.path.insert(0, str(Path(sys.argv[2]) / "BayesianWorkflow"))
 from result_quality import case_quality
 
 manifest = json.loads((root / "case-manifest.json").read_text())

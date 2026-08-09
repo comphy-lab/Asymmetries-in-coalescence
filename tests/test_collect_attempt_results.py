@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).parents[1] / "contourWorkflow" / "collect_attempt_results.py"
+SCRIPT = Path(__file__).parents[1] / "BayesianWorkflow" / "collect_attempt_results.py"
 SPEC = importlib.util.spec_from_file_location("collect_attempt_results_under_test", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
