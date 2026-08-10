@@ -218,7 +218,7 @@ Adaptive mesh refinement is controlled by these error thresholds:
 - `VelErr`: Velocity field tolerance (captures flow gradients)
 */
 
-#define fErr (1e-3)
+double fErr = 1e-3;
 #define VelErr (1e-2)
 
 /**
@@ -325,7 +325,10 @@ char nameOut[80], dumpFile[80];
   every dump, so a checkpoint now carries the full state.
 */
 int interfaceFloor = 1;
+double interfaceEps = 1e-6;
 int interfaceFloorDeficit = 0;
+int interfaceFloorPreDeficit = 0;
+int adaptRefined = 0, adaptCoarsened = 0;
 int projectionFailures = 0;
 int projectionFailureLimit = 1;
 double dtCap = HUGE, dtCapMax = HUGE;
@@ -649,7 +652,87 @@ int main(int argc, char const *argv[]) {
   returns, so the historical `CFL = 1e-1` in this spot never took effect (the
   measured effective CFL was exactly 0.5). Record the target instead; the
   `numericsControl` event publishes it every step. */
-  cflTarget = 1e-1;
+  cflTarget = 5e-1;
+
+  /**
+  Why 0.5 and not the 0.1 that the dead line asked for: 0.1 was measured and
+  it is a net regression. At $R_r=30$, $Oh=0.05$ the blow-up is a *per-step*
+  event, not a per-time one -- the four instrumented failures land at step
+  1522, 1630, 1638 and 2269 while their physical times span 0.0177 to 0.0540.
+  Cutting `CFL` to 0.1 does buy per-step robustness (the update projection
+  needs 3 V-cycles instead of 6, because the Poisson right-hand side is
+  $\nabla\cdot a$ and therefore $dt$-independent, so the required residual
+  reduction scales as $dt^2$), but it buys only ~1.5x more steps while costing
+  3.7x more steps per unit time. Net effect: the same run died at $t=0.023$
+  instead of $t=0.050$. Use `COALESCENCE_CFL` to bracket it.
+
+  All numerical controls are overridable from the environment. The positional
+  argument list is full and is parsed by several campaign scripts, so a new
+  positional would break them; these two knobs exist to bracket the solver
+  without editing and recompiling the source, which is how the dead
+  `CFL = 1e-1` line survived unnoticed in the first place. Out-of-range or
+  unparseable values are rejected rather than silently ignored. */
+  const char * cflEnv = getenv ("COALESCENCE_CFL");
+  if (cflEnv && *cflEnv) {
+    char * endp = NULL;
+    double v = strtod (cflEnv, &endp);
+    if (endp == cflEnv || *endp || !(v > 0.) || v > 0.5) {
+      fprintf (ferr, "COALESCENCE_CFL='%s' is not a number in (0, 0.5]\n",
+               cflEnv);
+      return 1;
+    }
+    cflTarget = v;
+  }
+  const char * tolEnv = getenv ("COALESCENCE_TOLERANCE");
+  if (tolEnv && *tolEnv) {
+    char * endp = NULL;
+    double v = strtod (tolEnv, &endp);
+    if (endp == tolEnv || *endp || !(v > 0.) || v > 1.) {
+      fprintf (ferr, "COALESCENCE_TOLERANCE='%s' is not a number in (0, 1]\n",
+               tolEnv);
+      return 1;
+    }
+    TOLERANCE = v;
+  }
+  /**
+  `fErr` is the volume-fraction wavelet tolerance. It is overridable for the
+  same reason, and it matters more than it looks: with `fErr = 1e-3` and the
+  interfacial floor engaged, `adapt_wavelet` coarsens tens of thousands of
+  interfacial cells every step and the floor immediately re-refines them,
+  which is a refine/coarsen limit cycle rather than an adaptation. */
+  const char * ferrEnv = getenv ("COALESCENCE_FERR");
+  if (ferrEnv && *ferrEnv) {
+    char * endp = NULL;
+    double v = strtod (ferrEnv, &endp);
+    if (endp == ferrEnv || *endp || !(v > 0.) || v >= 1.) {
+      fprintf (ferr, "COALESCENCE_FERR='%s' is not a number in (0, 1)\n",
+               ferrEnv);
+      return 1;
+    }
+    fErr = v;
+  }
+
+  /**
+  `interfaceEps` is the half-width of the band the refinement floor calls
+  "interfacial". At the historical $10^{-6}$ it pins every cell holding a
+  millionth of a percent of gas, which is tens of thousands of cells that the
+  wavelet criterion correctly regards as empty and coarsens again immediately.
+  Widening the definition of "interface" does not resolve the interface; it
+  only widens the limit cycle. */
+  const char * epsEnv = getenv ("COALESCENCE_INTERFACE_EPS");
+  if (epsEnv && *epsEnv) {
+    char * endp = NULL;
+    double v = strtod (epsEnv, &endp);
+    if (endp == epsEnv || *endp || !(v > 0.) || v >= 0.5) {
+      fprintf (ferr, "COALESCENCE_INTERFACE_EPS='%s' is not in (0, 0.5)\n",
+               epsEnv);
+      return 1;
+    }
+    interfaceEps = v;
+  }
+  fprintf (ferr, "numerics: cflTarget %g, TOLERANCE %g, fErr %g, "
+           "interfaceEps %g, solverStack %s\n", cflTarget, TOLERANCE, fErr,
+           interfaceEps, SOLVER_STACK);
 
   /**
   Baseline for the projection-failure backoff. `DT` is Basilisk's global
@@ -809,12 +892,35 @@ int drill_level_at (double x, double y, double z) {
 }
 
 event adapt(i++){
+  astats as;
   if (drillAMR && t >= drillCoarsenTime)
-    adapt_wavelet_limited ((scalar *){f, u.x, u.y},
+    as = adapt_wavelet_limited ((scalar *){f, u.x, u.y},
       (double[]){fErr, VelErr, VelErr}, drill_level_at, MAXlevel-6);
   else
-    adapt_wavelet ((scalar *){f, u.x, u.y},
+    as = adapt_wavelet ((scalar *){f, u.x, u.y},
       (double[]){fErr, VelErr, VelErr}, maxlevelLocal, MAXlevel-6);
+  adaptRefined = as.nf;
+  adaptCoarsened = as.nc;
+
+  /**
+  ### AMR churn measurement
+
+  Count the interfacial cells the wavelet pass has just left below `MAXlevel`,
+  *before* the floor puts them back. A steady non-zero value here is a
+  refine/coarsen limit cycle: `adapt_wavelet` coarsens an interfacial cell
+  because its volume-fraction wavelet error is under `fErr`, and the floor
+  immediately re-refines it, on every step, for the whole run. Each turn of
+  that cycle prolongates and restricts `f`, `u` and `uf` across the interface,
+  and the resulting noise is injected per *step*, not per unit time. The four
+  observed $R_r=30$ blow-ups cluster at step 1522, 1630, 1638 and 2269 while
+  their physical times span a factor of three (0.0177 to 0.0540), which is the
+  signature of exactly such a per-step accumulation. */
+
+  int preFloorDeficit = 0;
+  foreach (reduction(+:preFloorDeficit))
+    if (f[] > interfaceEps && f[] < 1. - interfaceEps && level < MAXlevel)
+      preFloorDeficit++;
+  interfaceFloorPreDeficit = preFloorDeficit;
 
   /**
   ### Interfacial refinement floor
@@ -830,7 +936,6 @@ event adapt(i++){
   `refine()` (`grid/tree-common.h`) already wraps its body in a
   `do { ... } while (refined)` loop and refines one level per pass, so a single
   invocation drives the whole band up to `MAXlevel`; no outer loop is needed. */
-  const double interfaceEps = 1e-6;
   if (interfaceFloor)
     refine (level < MAXlevel &&
             f[] > interfaceEps && f[] < 1. - interfaceEps);
@@ -1096,7 +1201,8 @@ event projectionStats (i++, last) {
                  "maxDivU fMin fMax contractDeficit dtCap projectionFailed "
                  "mgu_i mgu_resa "
                  "upd_i upd_resb upd_resa upd_scaled_resa upd_nrelax "
-                 "CFL dtAdvLimit\n",
+                 "CFL dtAdvLimit adaptRefined adaptCoarsened "
+                 "preFloorDeficit\n",
                  SOLVER_STACK, MAXlevel, TOLERANCE, NITERMAX, interfaceFloor,
                  projectionFailureLimit, cflTarget, DUAL_PROJECTION);
     }
@@ -1115,7 +1221,7 @@ event projectionStats (i++, last) {
       face projection and `upd_*` is the update projection; under Stacks 1S
       and 2 the two blocks are identical by construction. */
       fprintf (fps, "%d %.8g %.8g %d %.8g %.8g %.8g %d %.8g %.8g %.8g %d "
-               "%.8g %d %d %.8g %d %.8g %.8g %.8g %d %.8g %.8g\n",
+               "%.8g %d %d %.8g %d %.8g %.8g %.8g %d %.8g %.8g %d %d %d\n",
                i, t, dt, mgpFaceProjection.i,
                mgpFaceProjection.resb, mgpFaceProjection.resa,
                faceScaledResidual,
@@ -1124,7 +1230,8 @@ event projectionStats (i++, last) {
                mgu.i, mgu.resa,
                mgpUpdateProjection.i, mgpUpdateProjection.resb,
                mgpUpdateProjection.resa, updScaledResidual,
-               mgpUpdateProjection.nrelax, CFL, dtAdvLimit);
+               mgpUpdateProjection.nrelax, CFL, dtAdvLimit,
+               adaptRefined, adaptCoarsened, interfaceFloorPreDeficit);
       fclose (fps);
     }
   }
