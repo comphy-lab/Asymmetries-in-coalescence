@@ -256,6 +256,17 @@ def generate(Rr: float, delta: float, maxlevel: int, outdir: str,
              wall_clearance: float = WALL_CLEARANCE_DEFAULT,
              n_min: int = 64, verbose: bool = True) -> dict:
     """Generate one InitialConditionRr-<Rr>.dat file. Returns a report dict."""
+    # Reject degenerate geometry before any trigonometry or allocation: Rr <= 0
+    # divides by zero in the large-arc parametrisation, delta <= 0 collapses the
+    # fillet, and delta >= 0.5 puts arcsin(2*delta) outside its domain. Sampling
+    # is arc-length-uniform, so an unbounded Rr would also size the point array
+    # before anything else could complain.
+    if not math.isfinite(Rr) or Rr <= 0.0:
+        raise ValueError(f"Rr must be finite and greater than zero (got {Rr!r})")
+    if not math.isfinite(delta) or not 0.0 < delta < 0.5:
+        raise ValueError(
+            f"delta must be finite and satisfy 0 < delta < 0.5 (got {delta!r})")
+
     tg = target_geometry(Rr, delta, maxlevel, wall_clearance)
     h = tg["h"]
 
@@ -332,7 +343,7 @@ def main():
 
     try:
         generate(a.Rr, a.delta, a.maxlevel, a.outdir, a.wall_clearance, a.n_min)
-    except AssertionError as exc:
+    except (AssertionError, ValueError) as exc:
         print(f"SELF-CHECK FAILED: {exc}", file=sys.stderr)
         sys.exit(1)
 
