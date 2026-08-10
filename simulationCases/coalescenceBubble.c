@@ -335,7 +335,8 @@ int projectionFailureLimit = 1;
 int projectionSoftFailures = 0, projectionSoftTotal = 0;
 int projectionSoftLimit = 40;
 double projectionFatalFactor = 1e4;
-double keJumpFactor = 10.;
+double keJumpFactor = 100.;
+double keJumpFloor = 1e-3;
 int localCapillaryDt = 1;
 double localCapillaryDtLast = 0.;
 double dtCap = HUGE, dtCapMax = HUGE;
@@ -766,6 +767,18 @@ int main(int argc, char const *argv[]) {
   const char * capEnv = getenv ("COALESCENCE_LOCAL_CAPILLARY_DT");
   if (capEnv && *capEnv)
     localCapillaryDt = atoi (capEnv) != 0;
+
+  const char * keFloorEnv = getenv ("COALESCENCE_KE_JUMP_FLOOR");
+  if (keFloorEnv && *keFloorEnv) {
+    char * endp = NULL;
+    double v = strtod (keFloorEnv, &endp);
+    if (endp == keFloorEnv || *endp || !(v > 0.)) {
+      fprintf (ferr, "COALESCENCE_KE_JUMP_FLOOR='%s' is not a number > 0\n",
+               keFloorEnv);
+      return 1;
+    }
+    keJumpFloor = v;
+  }
 
   const char * keJumpEnv = getenv ("COALESCENCE_KE_JUMP_FACTOR");
   if (keJumpEnv && *keJumpEnv) {
@@ -1646,13 +1659,25 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
   projection guard. Silent corruption is worse than a loud failure: it yields
   a case that looks merely slow.
 
-  Kinetic energy is the honest, scheme-independent check. Physical growth
-  through the capillary-focusing event is smooth and never approaches an order
-  of magnitude per logging interval, so a jump beyond `keJumpFactor` is a
-  corrupted field by definition, whatever the residuals claim. */
+  Kinetic energy is the honest, scheme-independent check, but the threshold
+  has to come from the physics rather than intuition. Measured over a complete
+  healthy run ($R_r=30$, $Oh=0.05$, $\delta=0.01$, $t=0$ to the drop at 0.77):
+  the largest legitimate ratio between consecutive logging intervals is
+  **10.32**, and it occurs at $t=0.0002$ in the start-up transient where the
+  energy is climbing off zero; across the rest of the run, including the
+  capillary-focusing peak, it never exceeds 1.73. The corruption events this
+  guard exists for are three to five orders larger: 0.28 -> 1034 (3.7e3) and
+  0.146 -> 73250 (5e5).
+
+  So `keJumpFactor` is 100 -- an order of magnitude above the worst physical
+  transient and an order below the mildest observed corruption -- and the test
+  additionally requires `kePrev > keJumpFloor`, which exempts the start-up
+  transient entirely (it runs at `ke` $\sim 10^{-5}$, while both real events
+  had `kePrev` of order $10^{-1}$). A factor of 10 alone sat exactly on the
+  physical boundary and aborted a healthy reproduction run at $t=0.0002$. */
 
   static double kePrev = -1.;
-  bool keExploded = kePrev > 1e-12 && isfinite (ke) &&
+  bool keExploded = kePrev > keJumpFloor && isfinite (ke) &&
     ke > keJumpFactor*kePrev;
   if (keExploded && pid() == 0)
     fprintf (ferr, "NUMERICS-GUARD: kinetic energy jumped %g -> %g (factor "
