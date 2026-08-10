@@ -329,8 +329,12 @@ double interfaceEps = 1e-6;
 int interfaceFloorDeficit = 0;
 int interfaceFloorPreDeficit = 0;
 int adaptRefined = 0, adaptCoarsened = 0;
+long gridCells = 0;
 int projectionFailures = 0;
 int projectionFailureLimit = 1;
+int projectionSoftFailures = 0, projectionSoftTotal = 0;
+int projectionSoftLimit = 40;
+double projectionFatalFactor = 1e4;
 double dtCap = HUGE, dtCapMax = HUGE;
 double cflTarget = 1e-1;
 mgstats mgpFaceProjection, mgpUpdateProjection;
@@ -730,9 +734,49 @@ int main(int argc, char const *argv[]) {
     }
     interfaceEps = v;
   }
+  /**
+  `projectionFatalFactor` separates a recoverable convergence miss from a real
+  divergence. Missing `TOLERANCE` by a factor of tens happens during the
+  opening transient and is cured by one halved timestep; the pathology this
+  guard exists for overshoots by $10^{10}$ or more. Treating both as fatal
+  killed the $\delta=0.08$ control at $t=0.0009$ on a scaled residual of
+  $6\times10^{-3}$ -- a run that, unguarded, had previously reached $t=0.639$. */
+  /**
+  `NITERMAX` bounds the multigrid cycles per solve. The stock 100 is generous
+  for a healthy solve (the update projection converges at roughly $2.5\times$
+  per cycle and finishes in 6) but it is exactly what a marginal solve runs
+  out of, and running out is what the guard sees as a "failure". Raising it is
+  the cheap, correct response to a soft miss: cycles cost time, not accuracy,
+  and a truly divergent iteration still terminates via the fatal branch. */
+  const char * niterEnv = getenv ("COALESCENCE_NITERMAX");
+  if (niterEnv && *niterEnv) {
+    char * endp = NULL;
+    long v = strtol (niterEnv, &endp, 10);
+    if (endp == niterEnv || *endp || v < 10 || v > 100000) {
+      fprintf (ferr, "COALESCENCE_NITERMAX='%s' is not an integer in [10, 1e5]\n",
+               niterEnv);
+      return 1;
+    }
+    NITERMAX = (int) v;
+  }
+
+  const char * fatalEnv = getenv ("COALESCENCE_FATAL_FACTOR");
+  if (fatalEnv && *fatalEnv) {
+    char * endp = NULL;
+    double v = strtod (fatalEnv, &endp);
+    if (endp == fatalEnv || *endp || !(v >= 1.)) {
+      fprintf (ferr, "COALESCENCE_FATAL_FACTOR='%s' is not a number >= 1\n",
+               fatalEnv);
+      return 1;
+    }
+    projectionFatalFactor = v;
+  }
+
   fprintf (ferr, "numerics: cflTarget %g, TOLERANCE %g, fErr %g, "
-           "interfaceEps %g, solverStack %s\n", cflTarget, TOLERANCE, fErr,
-           interfaceEps, SOLVER_STACK);
+           "interfaceEps %g, NITERMAX %d, fatalFactor %g, softLimit %d, "
+           "solverStack %s\n",
+           cflTarget, TOLERANCE, fErr, interfaceEps, NITERMAX,
+           projectionFatalFactor, projectionSoftLimit, SOLVER_STACK);
 
   /**
   Baseline for the projection-failure backoff. `DT` is Basilisk's global
@@ -952,6 +996,12 @@ event adapt(i++){
     if (f[] > interfaceEps && f[] < 1. - interfaceEps && level < MAXlevel)
       deficit++;
   interfaceFloorDeficit = deficit;
+
+  /**
+  Grid size after adaptation. Tightening `fErr` to suppress the limit cycle
+  buys stability with cells, so the cost has to be measurable per step rather
+  than inferred from dump sizes. */
+  gridCells = grid->tn;
 }
 
 /**
@@ -1139,27 +1189,57 @@ event projectionStats (i++, last) {
     (updFailed ? "update" : (faceFailed ? "face" : "none"));
 
   /**
-  ### First-failure stop
+  ### Severity-tiered response
 
-  The historical guard did three things wrong and all three are removed here.
-  It watched only the face projection, so it never saw the update solve die.
-  Its `DT` backoff took effect a step *late*: `centered.h`'s
-  `set_dtmax`/`stability` are declared before this event, and on the failure
-  step `timestep()` skips non-finite faces, so `dtnext()` returned the whole
-  remaining logging interval and the measured `dt` doubled or tripled at the
-  moment the cap was supposed to bite. And it continued integrating a corrupted
-  field, whose `resb` reached $2.7\times10^{43}$ on the next step.
+  The historical guard watched only the face projection, backed off `DT` a step
+  *late*, and integrated on through a corrupted field whose `resb` reached
+  $2.7\times10^{43}$. Watching both solves and stopping fixed that, but
+  stopping on the *first* miss of either solve proved equally wrong in the
+  other direction: measured scaled residuals at the first miss span
+  $6\times10^{-3}$ to $5\times10^{21}$, thirteen orders of magnitude, and the
+  mild end is a transient hiccup that one halved timestep cures. The
+  $\delta=0.08$ control -- the only configuration ever observed to survive to
+  $t=0.639$ -- was killed at $i=12$ on a scaled residual of $6\times10^{-3}$.
 
-  The policy is now: the first failure of either projection stops the run. The
-  `dtCap`/relax machinery is retained behind `projectionFailureLimit > 1` for
-  deliberate backoff experiments, but it is no longer the production path. */
+  So a miss is *soft* while `scaled <= projectionFatalFactor*TOLERANCE`:
+  halve the timestep cap and keep integrating, exactly as an adaptive solver
+  should. It is *fatal* when the residual is non-finite or overshoots that
+  factor, or when `projectionSoftLimit` consecutive soft misses show the
+  backoff is not recovering. Only a fatal event stops the run. */
 
-  if (projectionFailed) {
+  bool fatalFailure = projectionFailed &&
+    (!isfinite (scaledResidual) ||
+     scaledResidual > projectionFatalFactor*TOLERANCE ||
+     projectionSoftFailures + 1 >= projectionSoftLimit);
+
+  if (projectionFailed && !fatalFailure) {
+    /**
+    Soft miss: log and continue *without touching the timestep*.
+
+    Halving `dt` is the intuitive response and it is actively wrong here.
+    `project()` solves to `TOLERANCE/dt^2`, so a smaller step demands a
+    quadratically smaller absolute residual: backing off makes the very solve
+    that just struggled strictly harder, and the cap never recovers because
+    each retry misses again. Measured: $\delta=0.08$ at ML13 halved its way to
+    a standstill at $i=12$, and the earlier `CFL=0.1` bracket died at
+    $t=0.023$ against $t=0.050$ for `CFL=0.5` -- both are this mechanism.
+
+    A miss with `i == NITERMAX` is a solve that ran out of cycles while still
+    converging, so the fix is cycles (`COALESCENCE_NITERMAX`), not step size.
+    A genuinely divergent iteration is caught by the fatal branch instead. */
+    projectionSoftFailures++;
+    projectionSoftTotal++;
+    if (pid() == 0 && projectionSoftTotal <= 20)
+      fprintf (ferr, "PROJECTION-SOFT %d (consecutive %d/%d) at i=%d t=%g "
+               "dt=%g culprit=%s scaled=%g (fatal above %g) face.i=%d upd.i=%d "
+               "of NITERMAX=%d; dt unchanged\n",
+               projectionSoftTotal, projectionSoftFailures, projectionSoftLimit,
+               i, t, dt, culprit, scaledResidual,
+               projectionFatalFactor*TOLERANCE, mgpFaceProjection.i,
+               mgpUpdateProjection.i, NITERMAX);
+  }
+  else if (fatalFailure) {
     projectionFailures++;
-    if (projectionFailureLimit > 1) {
-      dtCap = 0.5*(dtCap < dtCapMax ? dtCap : dt);
-      DT = dtCap;
-    }
     /**
     The failure dump is named with both the step number and a six-decimal
     time. The old `%5.4f` format collided whenever two failures fell inside
@@ -1183,6 +1263,7 @@ event projectionStats (i++, last) {
   }
   else {
     projectionFailures = 0;
+    projectionSoftFailures = 0;
     if (dtCap < dtCapMax) {
       dtCap = min (1.05*dtCap, dtCapMax);
       DT = dtCap;
@@ -1202,7 +1283,7 @@ event projectionStats (i++, last) {
                  "mgu_i mgu_resa "
                  "upd_i upd_resb upd_resa upd_scaled_resa upd_nrelax "
                  "CFL dtAdvLimit adaptRefined adaptCoarsened "
-                 "preFloorDeficit\n",
+                 "preFloorDeficit gridCells\n",
                  SOLVER_STACK, MAXlevel, TOLERANCE, NITERMAX, interfaceFloor,
                  projectionFailureLimit, cflTarget, DUAL_PROJECTION);
     }
@@ -1221,7 +1302,7 @@ event projectionStats (i++, last) {
       face projection and `upd_*` is the update projection; under Stacks 1S
       and 2 the two blocks are identical by construction. */
       fprintf (fps, "%d %.8g %.8g %d %.8g %.8g %.8g %d %.8g %.8g %.8g %d "
-               "%.8g %d %d %.8g %d %.8g %.8g %.8g %d %.8g %.8g %d %d %d\n",
+               "%.8g %d %d %.8g %d %.8g %.8g %.8g %d %.8g %.8g %d %d %d %ld\n",
                i, t, dt, mgpFaceProjection.i,
                mgpFaceProjection.resb, mgpFaceProjection.resa,
                faceScaledResidual,
@@ -1231,7 +1312,8 @@ event projectionStats (i++, last) {
                mgpUpdateProjection.i, mgpUpdateProjection.resb,
                mgpUpdateProjection.resa, updScaledResidual,
                mgpUpdateProjection.nrelax, CFL, dtAdvLimit,
-               adaptRefined, adaptCoarsened, interfaceFloorPreDeficit);
+               adaptRefined, adaptCoarsened, interfaceFloorPreDeficit,
+               gridCells);
       fclose (fps);
     }
   }
@@ -1248,15 +1330,15 @@ event projectionStats (i++, last) {
 
   if (projectionFailures >= projectionFailureLimit) {
     if (pid() == 0) {
-      fprintf (ferr, "PROJECTION-GUARD: %d consecutive failed projections "
-               "(culprit=%s) at i=%d t=%g dt=%g (worst scaled resa=%g > "
-               "tolerance=%g). Stopping cleanly; dumps retained; no physical "
-               "verdict.\n",
-               projectionFailures, culprit, i, t, dt, scaledResidual,
-               TOLERANCE);
+      fprintf (ferr, "PROJECTION-GUARD: fatal projection failure "
+               "(culprit=%s) at i=%d t=%g dt=%g (worst scaled resa=%g > fatal "
+               "threshold=%g; %d soft misses absorbed earlier). Stopping "
+               "cleanly; dumps retained; no physical verdict.\n",
+               culprit, i, t, dt, scaledResidual,
+               projectionFatalFactor*TOLERANCE, projectionSoftTotal);
       FILE * gfp = fopen ("projection_guard.status", "w");
       if (gfp) {
-        fprintf (gfp, "status=projection_failure_first_failure_stop\n"
+        fprintf (gfp, "status=projection_failure_fatal_stop\n"
                  "solverStack=%s\nculprit=%s\ni=%d\nt=%.8g\ndt=%.8g\n"
                  "consecutive=%d\nlimit=%d\n"
                  "face_i=%d\nface_resb=%.8g\nface_resa=%.8g\n"
@@ -1264,7 +1346,8 @@ event projectionStats (i++, last) {
                  "upd_i=%d\nupd_resb=%.8g\nupd_resa=%.8g\n"
                  "upd_scaled_resa=%.8g\n"
                  "tolerance=%.8g\nnitermax=%d\nmaxDivU=%.8g\n"
-                 "contractDeficit=%d\ndtCap=%.8g\nCFL=%.8g\ndtAdvLimit=%.8g\n",
+                 "contractDeficit=%d\ndtCap=%.8g\nCFL=%.8g\ndtAdvLimit=%.8g\n"
+                 "fatalFactor=%.8g\nsoftMissesAbsorbed=%d\n",
                  SOLVER_STACK, culprit, i, t, dt,
                  projectionFailures, projectionFailureLimit,
                  mgpFaceProjection.i, mgpFaceProjection.resb,
@@ -1272,7 +1355,8 @@ event projectionStats (i++, last) {
                  mgpUpdateProjection.i, mgpUpdateProjection.resb,
                  mgpUpdateProjection.resa, updScaledResidual,
                  TOLERANCE, NITERMAX, divMax, interfaceFloorDeficit,
-                 dtCap, CFL, dtAdvLimit);
+                 dtCap, CFL, dtAdvLimit,
+                 projectionFatalFactor*TOLERANCE, projectionSoftTotal);
         fclose (gfp);
       }
     }
