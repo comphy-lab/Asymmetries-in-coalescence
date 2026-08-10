@@ -30,7 +30,7 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 │   ├── getCOM.c                    Center of mass extraction
 │   ├── Video-generic.py            Frame-by-frame visualization pipeline
 │   └── render_contour_pulse.py     Render lightweight live contour interfaces
-├── contourWorkflow/                 Bayesian contour campaign state machine
+├── BayesianWorkflow/                 Bayesian contour campaign state machine
 │   ├── contour_campaign.py         Propose, submit, collect, and gate iterations
 │   ├── materialize_cases.py        Validate proposals against initial shapes
 │   ├── result_quality.py            Compute KE/facet corruption evidence
@@ -135,13 +135,13 @@ configuration-confounded column before proposing:
 
 ```bash
 module load python/3.10.8
-python3 contourWorkflow/contour_campaign.py \
+python3 BayesianWorkflow/contour_campaign.py \
   --campaign-root /nobackup/$USER/drop-injection-confined \
   --project-root "$PWD" \
   --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
   init --seed NumConfinementSweep-0.csv --exclude-x 8
 
-python3 contourWorkflow/contour_campaign.py \
+python3 BayesianWorkflow/contour_campaign.py \
   --campaign-root /nobackup/$USER/drop-injection-confined \
   --project-root "$PWD" \
   --predictor-root /nobackup/$USER/Bayesian-Contour-Predictor \
@@ -151,7 +151,7 @@ python3 contourWorkflow/contour_campaign.py \
 On a controlled Linux workstation, select the local backend explicitly:
 
 ```bash
-python3 contourWorkflow/contour_campaign.py \
+python3 BayesianWorkflow/contour_campaign.py \
   --campaign-root /path/to/drop-injection-confined \
   --project-root "$PWD" \
   --predictor-root /path/to/Bayesian-Contour-Predictor \
@@ -271,7 +271,7 @@ For a bounded unattended workstation campaign, initialise a fresh campaign
 with explicit numerical and acquisition settings, then run the shell driver:
 
 ```bash
-python3 contourWorkflow/contour_campaign.py \
+python3 BayesianWorkflow/contour_campaign.py \
   --campaign-root /path/to/confined-l11 \
   --project-root "$PWD" \
   --predictor-root /path/to/Bayesian-Contour-Predictor \

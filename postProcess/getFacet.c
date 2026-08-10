@@ -73,7 +73,7 @@ int main(int a, char const *arguments[])
   Also configure proper VOF refinement for interface cells. */
   f[left] = dirichlet(0.);
   f.prolongation = fraction_refine;
-  f.dirty = true;
+  // f.dirty = true;  // removed: attribute absent in this basilisk version (safe for read-only facet extract)
 
   /**
   Output facets (interface segments where $0 < f < 1$): */

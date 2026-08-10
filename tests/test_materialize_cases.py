@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).parents[1] / "contourWorkflow" / "materialize_cases.py"
+SCRIPT = Path(__file__).parents[1] / "BayesianWorkflow" / "materialize_cases.py"
 
 
 class MaterializeCasesTests(unittest.TestCase):
