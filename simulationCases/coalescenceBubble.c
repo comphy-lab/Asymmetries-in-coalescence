@@ -335,6 +335,9 @@ int projectionFailureLimit = 1;
 int projectionSoftFailures = 0, projectionSoftTotal = 0;
 int projectionSoftLimit = 40;
 double projectionFatalFactor = 1e4;
+double keJumpFactor = 10.;
+int localCapillaryDt = 1;
+double localCapillaryDtLast = 0.;
 double dtCap = HUGE, dtCapMax = HUGE;
 double cflTarget = 1e-1;
 mgstats mgpFaceProjection, mgpUpdateProjection;
@@ -760,6 +763,22 @@ int main(int argc, char const *argv[]) {
     NITERMAX = (int) v;
   }
 
+  const char * capEnv = getenv ("COALESCENCE_LOCAL_CAPILLARY_DT");
+  if (capEnv && *capEnv)
+    localCapillaryDt = atoi (capEnv) != 0;
+
+  const char * keJumpEnv = getenv ("COALESCENCE_KE_JUMP_FACTOR");
+  if (keJumpEnv && *keJumpEnv) {
+    char * endp = NULL;
+    double v = strtod (keJumpEnv, &endp);
+    if (endp == keJumpEnv || *endp || !(v > 1.)) {
+      fprintf (ferr, "COALESCENCE_KE_JUMP_FACTOR='%s' is not a number > 1\n",
+               keJumpEnv);
+      return 1;
+    }
+    keJumpFactor = v;
+  }
+
   const char * fatalEnv = getenv ("COALESCENCE_FATAL_FACTOR");
   if (fatalEnv && *fatalEnv) {
     char * endp = NULL;
@@ -904,6 +923,59 @@ every step including `i = 0`.
 */
 event numericsControl (i++) {
   CFL = cflTarget;
+}
+
+/**
+## Local capillary time-step limit
+
+`tension.h`'s `stability` event bounds the step by the oscillation period of
+the shortest capillary wave,
+$\Delta t_\sigma = \sqrt{\rho_m \Delta_{min}^3/(\pi\sigma)}$, but it evaluates
+$\rho_m$ from the *global* extremes of `alpha`, giving
+$\rho_m = (\rho_1+\rho_2)/2 = 0.5005$ here. The density the interface actually
+carries is the filtered face value, whose minimum over interfacial cells is
+$\approx 0.108$ at every resolution -- a property of the two-cell `FILTERED`
+stencil, not of the mesh. The true local limit is therefore
+$\sqrt{0.108/0.5005} \approx 0.46$ of the global one, and the global figure is
+optimistic by that factor exactly where the capillary waves live.
+
+Measured consequence at $R_r=30$, $\delta=0.05$: at `MAXlevel` 12 and 13 the
+step sits at 12% and 35% of the global limit and **no** interfacial cell
+exceeds its own local limit; at `MAXlevel` 15 the step reaches 92% of the
+global limit and **34% of the interface (20743 cells) is integrated above its
+own capillary-wave stability limit on every step**, from long before the
+projection fails. The baseline divergence floor rises 1.17 -> 1.46 -> 6.32
+with refinement while $\Delta t$ falls, which is under-damped interfacial
+capillary waves rather than a converging solution.
+
+Applying the same criterion cell-locally costs one reduction per step and no
+accuracy, and unlike lowering `CFL` it does not throttle the advective limit
+in the bulk where the density is high. Set `COALESCENCE_LOCAL_CAPILLARY_DT=0`
+to recover the stock global behaviour for A/B tests. */
+
+event stability (i++, last) {
+  /**
+  `last` matters: `centered.h` declares `set_dtmax (i++,last)`, which resets
+  `dtmax = DT` at the start of the group. An overload without `last` runs
+  *before* that reset, so its reduction is applied to the previous step's
+  already-reduced `dtmax` and compounds geometrically -- measured as a run
+  that managed three steps while its twin did eighty. */
+  if (!localCapillaryDt || !(f.sigma > 0.))
+    return 0;
+  double dtLocal = HUGE;
+  foreach (reduction(min:dtLocal))
+    if (f[] > interfaceEps && f[] < 1. - interfaceEps) {
+      double rhoLocal = rhov[]/cm[];
+      if (rhoLocal > 0.) {
+        double dtc = sqrt (rhoLocal*cube(Delta)/(pi*f.sigma));
+        if (dtc < dtLocal)
+          dtLocal = dtc;
+      }
+    }
+  localCapillaryDtLast = dtLocal;
+  if (dtLocal < dtmax)
+    dtmax = dtLocal;
+  return 0;
 }
 
 /**
@@ -1563,14 +1635,46 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
   than failed. With the first-failure projection guard above this path should
   now be unreachable, but if it is ever reached it must terminate the same way
   the guard does: an auditable status file and a clean return. */
-  if (!isfinite (ke) || ke <= -1e-10) {
+  /**
+  ### Energy-jump guard
+
+  A residual threshold alone cannot separate a recoverable convergence miss
+  from a corrupting one. Measured: a "soft" miss with scaled residual 0.031
+  -- only 310x the tolerance, far under the $10^4$ fatal factor -- took `ke`
+  from 0.28 to 1034 in a single step, and the run then continued for hours at
+  `dt` $\sim 3\times10^{-6}$ producing nonsense without ever tripping the
+  projection guard. Silent corruption is worse than a loud failure: it yields
+  a case that looks merely slow.
+
+  Kinetic energy is the honest, scheme-independent check. Physical growth
+  through the capillary-focusing event is smooth and never approaches an order
+  of magnitude per logging interval, so a jump beyond `keJumpFactor` is a
+  corrupted field by definition, whatever the residuals claim. */
+
+  static double kePrev = -1.;
+  bool keExploded = kePrev > 1e-12 && isfinite (ke) &&
+    ke > keJumpFactor*kePrev;
+  if (keExploded && pid() == 0)
+    fprintf (ferr, "NUMERICS-GUARD: kinetic energy jumped %g -> %g (factor "
+             "%g > %g) in one logging interval at i=%d t=%g dt=%g -- field is "
+             "corrupted, not merely stiff.\n", kePrev, ke, ke/kePrev,
+             keJumpFactor, i, t, dt);
+  kePrev = ke;
+
+  if (!isfinite (ke) || ke <= -1e-10 || keExploded) {
     if (pid() == 0) {
       fprintf (ferr, "NUMERICS-GUARD: non-physical kinetic energy ke=%g at "
                "i=%d t=%g dt=%g. Stopping cleanly.\n", ke, i, t, dt);
+      char keDump[96];
+      snprintf (keDump, sizeof(keDump), "dump-ke-guard-i%06d-t%.6f", i, t);
+      sync_uf_mirror();
+      dump (file = keDump);
       FILE * gfp = fopen ("numerics_guard.status", "w");
       if (gfp) {
-        fprintf (gfp, "status=nonphysical_kinetic_energy\nsolverStack=%s\n"
-                 "i=%d\nt=%.8g\ndt=%.8g\nke=%.8g\n", SOLVER_STACK, i, t, dt,
+        fprintf (gfp, "status=%s\nsolverStack=%s\n"
+                 "i=%d\nt=%.8g\ndt=%.8g\nke=%.8g\n",
+                 keExploded ? "kinetic_energy_jump" :
+                 "nonphysical_kinetic_energy", SOLVER_STACK, i, t, dt,
                  ke);
         fclose (gfp);
       }
