@@ -43,6 +43,7 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
 ├── runSweepHamilton.sbatch          Legacy sequential MPI runner
 ├── runContourHamilton.sbatch        Packed 16-case Hamilton runner
+├── runContourSnellius.sbatch        Packed 16-case Snellius (genoa) runner
 └── runContourLocal.sh               Bounded local-systemd/OpenMP runner
 ```
 
@@ -322,6 +323,18 @@ the file:
 ```bash
 sbatch -p test --time=00:15:00 runContourHamilton.sbatch \
   /path/to/campaign/iterations/iteration-01
+```
+
+On Snellius the equivalent launcher takes the initial-shape directory as a
+second argument and forwards any remaining options to `materialize_cases.py`,
+so a campaign pins its resolution and geometry at submission time rather than
+by editing the script. The accounting project is not hardcoded:
+
+```bash
+sbatch -A <account> runContourSnellius.sbatch \
+  /scratch-shared/<user>/campaign/iterations/iteration-01 \
+  /scratch-shared/<user>/campaign/DataFiles \
+  --MAXlevel 14 --tmax 1.0 --dropRadiusMin 0.021005127
 ```
 
 ### Post-Processing
