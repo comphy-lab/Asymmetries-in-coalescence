@@ -54,6 +54,9 @@ drillTipRadius=$(get_param drillTipRadius)
 drillRegionalOnly=$(get_param drillRegionalOnly)
 geometryMode=$(get_param_default geometryMode finite)
 wallClearance=$(get_param_default wallClearance -1)
+# argv 25. Case tables written before this key existed fall back to the solver's
+# compiled default of 1, so older batches keep their behaviour.
+interfaceFloor=$(get_param_default interfaceFloor 1)
 
 cd "$case_dir"
 rm -f classification.status classification.status.tmp runner.status runner.status.tmp
@@ -72,7 +75,7 @@ set +e
   "$drillMaxlevelStart" "$drillMaxlevelFocus" "$drillNcells" \
   "$drillRegionMinX" "$drillArmSteps" "$drillArmTime" "$drillCoarsenTime" \
   "$drillRegionMaxX" "$drillRegionRadius" "$drillFireX" "$drillTipRadius" \
-  "$drillRegionalOnly" "$geometryMode" "$wallClearance"
+  "$drillRegionalOnly" "$geometryMode" "$wallClearance" "$interfaceFloor"
 rc=$?
 set -e
 
