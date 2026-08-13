@@ -167,6 +167,24 @@ class MaterializeCasesTests(unittest.TestCase):
         self.assertIn("geometryMode=halfspace\n", params)
         self.assertIn("wallClearance=0.027\n", params)
 
+    def test_accepts_and_bounds_configurable_oh_window(self) -> None:
+        rows = deepcopy(self.rows)
+        rows[-1]["y"] = "0.085"
+        accepted = self.run_materializer(rows)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertIn("OhOut=0.085\n", (self.case_root / "case-5015" / "case.params").read_text())
+
+        narrowed = self.run_materializer(rows, extra_args=("--oh-max", "0.08"))
+        self.assertNotEqual(narrowed.returncode, 0)
+        self.assertIn("Oh must be finite and in [0.01, 0.08]", narrowed.stderr)
+
+    def test_rejects_inverted_oh_window(self) -> None:
+        result = self.run_materializer(
+            self.rows, extra_args=("--oh-min", "0.05", "--oh-max", "0.02")
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--oh-min <= --oh-max", result.stderr)
+
     def test_rejects_infinite_rr_for_finite_geometry(self) -> None:
         rows = deepcopy(self.rows)
         rows[0]["x"] = "inf"

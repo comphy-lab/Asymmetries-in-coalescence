@@ -74,8 +74,11 @@ PARAMETER_KEYS = (
     "wallClearance",
 )
 
+# Staging guard rails, not physics: the solver imposes no upper bound on
+# `OhOut`. They exist to catch a proposal that has escaped the campaign's
+# intended window, so they are overridable with --oh-min / --oh-max.
 OH_MIN = 0.01
-OH_MAX = 0.075
+OH_MAX = 0.09
 RADIUS_MATCH_TOLERANCE = 1e-12
 SAFE_CASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -175,12 +178,20 @@ def main() -> int:
     parser.add_argument("--data-dir", required=True, type=Path)
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--expected", type=int, default=16)
+    parser.add_argument("--oh-min", type=float, default=OH_MIN)
+    parser.add_argument("--oh-max", type=float, default=OH_MAX)
     for key, value in DEFAULTS.items():
         parser.add_argument(f"--{key}", default=value)
     args = parser.parse_args()
 
     if not 1 <= args.expected <= 16:
         parser.error(f"expected row count must be in [1, 16], got {args.expected}")
+    if not math.isfinite(args.oh_min) or not math.isfinite(args.oh_max):
+        parser.error("--oh-min and --oh-max must be finite")
+    if not 0 < args.oh_min <= args.oh_max:
+        parser.error(
+            f"need 0 < --oh-min <= --oh-max, got [{args.oh_min}, {args.oh_max}]"
+        )
 
     with args.cases_csv.open(newline="") as stream:
         raw_rows = list(csv.DictReader(stream))
@@ -217,8 +228,10 @@ def main() -> int:
                 rr_key = f"{matched_rr:.2f}"
         except ValueError as error:
             parser.error(str(error))
-        if not math.isfinite(oh) or not (OH_MIN <= oh <= OH_MAX):
-            parser.error(f"Oh must be finite and in [{OH_MIN}, {OH_MAX}], got {oh}")
+        if not math.isfinite(oh) or not (args.oh_min <= oh <= args.oh_max):
+            parser.error(
+                f"Oh must be finite and in [{args.oh_min}, {args.oh_max}], got {oh}"
+            )
         oh_key = f"{oh:.12g}"
         if case_id in seen_ids:
             parser.error(f"duplicate caseId {case_id}")
