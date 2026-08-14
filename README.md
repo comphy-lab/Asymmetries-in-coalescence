@@ -15,6 +15,14 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 
 > **Note**: Replace `v2026-01-13` with the [latest release tag](https://github.com/comphy-lab/basilisk-C/releases).
 
+## Shell Requirements
+
+The runners and shell libraries require **bash 4.2 or newer** for associative
+arrays and `declare -g`. Hamilton, Snellius and any current Linux workstation
+satisfy this. On macOS the system `/bin/bash` is 3.2 and has never been
+supported; install a current bash (for example `brew install bash`) and run the
+scripts with that.
+
 ## Repository Structure
 
 ```

@@ -9,6 +9,9 @@
 # a new solver argument is added in exactly two places: the solver and this
 # file.
 #
+# Requires bash 4.2+: the maps below use `declare -gA`, so that they stay global
+# when this file is sourced from inside a function.
+#
 # Usage:
 #   source src-local/solver_args.sh
 #

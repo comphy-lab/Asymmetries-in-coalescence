@@ -21,7 +21,7 @@
 #   generate_sweep_combinations
 #
 # Dependencies:
-#   - bash 4.0+ (for arrays and ${!var} syntax)
+#   - bash 4.2+ (for arrays, ${!var} syntax, and declare -g in solver_args.sh)
 #   - Standard POSIX utilities (sed, xargs, mktemp)
 #
 # Author: Vatsal Sanjay
