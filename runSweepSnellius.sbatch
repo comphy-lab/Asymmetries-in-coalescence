@@ -104,6 +104,14 @@ else
     exit 1
 fi
 
+# Source the canonical solver command-line contract
+if [ -f "${SCRIPT_DIR}/src-local/solver_args.sh" ]; then
+    source "${SCRIPT_DIR}/src-local/solver_args.sh"
+else
+    echo "ERROR: src-local/solver_args.sh not found" >&2
+    exit 1
+fi
+
 # Check sweep file exists
 if [ ! -f "$SWEEP_FILE" ]; then
     echo "ERROR: Sweep file not found: $SWEEP_FILE" >&2
@@ -400,12 +408,20 @@ for param_file in "${CASE_FILES[@]}"; do
         continue
     fi
 
+    # Build the full solver argument list from case.params
+    if ! coalescence_solver_args_from_params; then
+        echo "ERROR: could not build solver arguments for case $CASE_NO" >&2
+        ((FAILED_CASES++)) || true
+        cd "$SCRIPT_DIR"
+        continue
+    fi
+
     # Run simulation with srun
     echo "Running full simulation with ${SLURM_NTASKS} MPI tasks..."
-    echo "Command: srun -n ${SLURM_NTASKS} ./coalescenceBubble $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
+    echo "Command: srun -n ${SLURM_NTASKS} ./coalescenceBubble ${COALESCENCE_SOLVER_ARGS[*]}"
     echo ""
 
-    if srun -n ${SLURM_NTASKS} ./coalescenceBubble $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall; then
+    if srun -n "${SLURM_NTASKS}" ./coalescenceBubble "${COALESCENCE_SOLVER_ARGS[@]}"; then
         echo ""
         echo "Case $CASE_NO completed successfully"
         ((SUCCESSFUL_CASES++)) || true

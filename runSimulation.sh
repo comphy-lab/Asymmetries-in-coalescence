@@ -40,6 +40,14 @@ else
     exit 1
 fi
 
+# Source the canonical solver command-line contract
+if [ -f "${SCRIPT_DIR}/src-local/solver_args.sh" ]; then
+    source "${SCRIPT_DIR}/src-local/solver_args.sh"
+else
+    echo "ERROR: src-local/solver_args.sh not found" >&2
+    exit 1
+fi
+
 # ============================================================
 # Usage Information
 # ============================================================
@@ -424,9 +432,10 @@ if [ $STAGE -eq 1 ] || [ $STAGE -eq 0 ]; then
     else
         echo "  Running single-threaded"
     fi
-    echo "  Command: ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall"
+    coalescence_solver_args_from_params "tmax=$STAGE1_TMAX" || exit 1
+    echo "  Command: ./${EXECUTABLE} ${COALESCENCE_SOLVER_ARGS[*]}"
 
-    ./${EXECUTABLE} $OhOut $RhoIn $Rr $MAXlevel $STAGE1_TMAX $zWall
+    "./${EXECUTABLE}" "${COALESCENCE_SOLVER_ARGS[@]}"
 
     # Validate the restart file was created successfully
     if ! validate_restart_file "restart"; then
@@ -527,20 +536,21 @@ if [ $STAGE -eq 2 ] || [ $STAGE -eq 0 ]; then
     # Execution
     echo ""
     echo "Starting full simulation..."
-    echo "  Command args: $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
+    coalescence_solver_args_from_params || exit 1
+    echo "  Command args: ${COALESCENCE_SOLVER_ARGS[*]}"
     echo "========================================="
 
     if [ $MPI_ENABLED -eq 1 ]; then
-        [ $VERBOSE -eq 1 ] && echo "Command: mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
-        mpirun -np $MPI_CORES ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
+        [ $VERBOSE -eq 1 ] && echo "Command: mpirun -np $MPI_CORES ./$EXECUTABLE ${COALESCENCE_SOLVER_ARGS[*]}"
+        mpirun -np "$MPI_CORES" "./$EXECUTABLE" "${COALESCENCE_SOLVER_ARGS[@]}"
     elif [ $FOPENMP_ENABLED -eq 1 ]; then
         export OMP_NUM_THREADS=$FOPENMP_THREADS
         [ $VERBOSE -eq 1 ] && echo "OMP_NUM_THREADS=$FOPENMP_THREADS"
-        [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
-        ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
+        [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE ${COALESCENCE_SOLVER_ARGS[*]}"
+        "./$EXECUTABLE" "${COALESCENCE_SOLVER_ARGS[@]}"
     else
-        [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall"
-        ./$EXECUTABLE $OhOut $RhoIn $Rr $MAXlevel $tmax $zWall
+        [ $VERBOSE -eq 1 ] && echo "Command: ./$EXECUTABLE ${COALESCENCE_SOLVER_ARGS[*]}"
+        "./$EXECUTABLE" "${COALESCENCE_SOLVER_ARGS[@]}"
     fi
 
     EXIT_CODE=$?

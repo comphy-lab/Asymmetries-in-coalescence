@@ -54,5 +54,31 @@ zWall=0.05
 # Output directory name (created inside case folder)
 output_dir=results
 
-# Snapshot interval (defined in source code as tsnap = 1e-2)
 # Log interval (defined in source code as tsnap2 = 1e-4)
+
+# ============================================================
+# Optional Solver Controls
+# ============================================================
+# The solver takes 25 positional arguments; the six above are required and the
+# rest fall back to the compiled defaults listed in src-local/solver_args.sh.
+# Uncomment any of these to pin it for a case or a sweep. The values shown are
+# the compiled defaults, so leaving them commented changes nothing.
+# dropRadiusMin=-1
+# dropPersistence=3
+# snapshotInterval=1e-2
+# drillAMR=0
+# drillMaxlevelStart=-1
+# drillMaxlevelFocus=-1
+# drillNcells=5
+# drillRegionMinX=-2.1
+# drillArmSteps=5
+# drillArmTime=0
+# drillCoarsenTime=0
+# drillRegionMaxX=3
+# drillRegionRadius=1.5
+# drillFireX=0.25
+# drillTipRadius=0.25
+# drillRegionalOnly=0
+# geometryMode=finite
+# wallClearance=-1
+# interfaceFloor=1

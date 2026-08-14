@@ -23,7 +23,8 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 │   ├── coalescenceBubble-tag.c     Extended version with shape tracking
 ├── src-local/                       Custom Basilisk headers
 │   ├── two-phase-tag.h             Two-phase flow with interface tagging
-│   └── parse_params.sh             Parameter file parsing library
+│   ├── parse_params.sh             Parameter file parsing library
+│   └── solver_args.sh              Canonical 25-argument solver contract
 ├── postProcess/                     Post-processing tools
 │   ├── getData-generic.c           Field extraction on structured grids
 │   ├── getFacet.c                  Interface geometry extraction
@@ -116,8 +117,9 @@ sbatch runSweepSnellius.sbatch
 
 ### Bayesian contour campaign
 
-The rearmable contour workflow uses batches of 16 simulations. Hamilton runs
-one 16-case Slurm allocation; the local backend launches a user-systemd unit
+The rearmable contour workflow uses batches of 16 simulations. Hamilton and
+Snellius each run one 16-case Slurm allocation; the local backend launches a
+user-systemd unit
 and executes three cases at a time by default. Each case receives eight OpenMP
 threads, so the workstation default is 24 concurrent threads. The local runner
 enforces a hard 48-thread ceiling through `CONTOUR_MAX_THREADS` and uses no MPI.
