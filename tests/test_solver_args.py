@@ -81,6 +81,72 @@ class SolverArgumentContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.split(), ["0.05", "0"])
 
+    def test_omitted_keys_do_not_leak_from_the_previous_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            first = Path(temporary) / "first.params"
+            second = Path(temporary) / "second.params"
+            first.write_text("OhOut=0.03\nRhoIn=9e-2\nRr=2.0\nMAXlevel=13\ntmax=1.0\nzWall=0.05\n")
+            second.write_text("OhOut=0.04\nRr=3.0\nMAXlevel=13\ntmax=1.0\nzWall=0.05\n")
+            result = run_bash(
+                f'source "{PARSE_PARAMS}"; source "{LIBRARY}"; '
+                f'parse_param_file "{first}" >/dev/null; '
+                f'parse_param_file "{second}" >/dev/null; '
+                "coalescence_solver_args_from_params; "
+                'printf "%s\\n" "${COALESCENCE_SOLVER_ARGS[0]}" '
+                '"${COALESCENCE_SOLVER_ARGS[1]}" "${COALESCENCE_SOLVER_ARGS[2]}"'
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        oh, rho, rr = result.stdout.split()
+        self.assertEqual(oh, "0.04")
+        self.assertEqual(rho, "1e-3")
+        self.assertEqual(rr, "3.0")
+
+    def test_parse_leaves_unrelated_param_file_variables_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            params = Path(temporary) / "case.params"
+            params.write_text("OhOut=0.03\n")
+            result = run_bash(
+                f'PARAM_FILE=keep-me; PARAM_FILES=also-keep; '
+                f'source "{PARSE_PARAMS}"; '
+                f'parse_param_file "{params}" >/dev/null; '
+                'printf "%s\\n" "$PARAM_FILE" "$PARAM_FILES"'
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), ["keep-me", "also-keep"])
+
+    def test_parse_ignores_reserved_file_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            params = Path(temporary) / "case.params"
+            params.write_text("OhOut=0.03\nFILE=clobber\nFILES=also-clobber\n")
+            result = run_bash(
+                f'PARAM_FILE=keep-me; PARAM_FILES=also-keep; '
+                f'source "{PARSE_PARAMS}"; '
+                f'parse_param_file "{params}" >/dev/null; '
+                'printf "%s\\n" "$PARAM_FILE" "$PARAM_FILES" "$PARAM_OhOut"'
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), ["keep-me", "also-keep", "0.03"])
+        self.assertIn("reserved parameter key FILE", result.stderr)
+        self.assertIn("reserved parameter key FILES", result.stderr)
+
+    def test_failed_parse_leaves_the_previous_file_loaded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            first = Path(temporary) / "first.params"
+            bad = Path(temporary) / "bad.params"
+            first.write_text("OhOut=0.03\nRhoIn=9e-2\n")
+            bad.write_text("OhOut=0.04\nbad-key=1\n")
+            result = run_bash(
+                f'source "{PARSE_PARAMS}"; '
+                f'parse_param_file "{first}" >/dev/null; '
+                f'parse_param_file "{bad}" >/dev/null; '
+                'printf "%s\\n" "$?"; '
+                'printf "%s\\n" "${PARAM_OhOut}" "${PARAM_RhoIn}"'
+            )
+        lines = result.stdout.split()
+        self.assertEqual(lines[0], "1")
+        self.assertEqual(lines[1:], ["0.03", "9e-2"])
+        self.assertIn("invalid parameter key", result.stderr)
+
     def test_reports_a_missing_required_argument(self) -> None:
         result = run_bash(
             f'source "{LIBRARY}"; nothing() {{ :; }}; '
@@ -156,7 +222,8 @@ class ContourRunnerTests(unittest.TestCase):
     def test_honours_an_explicit_interface_floor(self) -> None:
         params = dict(self.PARAMS)
         params["interfaceFloor"] = "0"
-        _, case_dir = self.run_case(params)
+        result, case_dir = self.run_case(params)
+        self.assertEqual(result.returncode, 0, result.stderr)
         argv = (case_dir / "argv.txt").read_text().split()[1:]
         self.assertEqual(argv[24], "0")
 
