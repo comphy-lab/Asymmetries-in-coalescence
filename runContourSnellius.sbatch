@@ -58,6 +58,15 @@ if [[ ! "$project_root" =~ $scratch_pattern ]]; then
   echo "Snellius campaign must run from scratch, got $project_root" >&2
   exit 2
 fi
+# ITERATION_DIR can be an absolute path; resolve it so /scratch-shared/../home
+# cannot sneak campaign output off scratch.
+if [[ -e "$iteration_dir" ]]; then
+  iteration_dir=$(realpath -- "$iteration_dir")
+fi
+if [[ ! "$iteration_dir" =~ $scratch_pattern ]]; then
+  echo "Snellius iteration directory must be on scratch, got $iteration_dir" >&2
+  exit 2
+fi
 if [[ ! -f "$cases_csv" ]]; then
   echo "Missing proposal: $cases_csv" >&2
   exit 2
