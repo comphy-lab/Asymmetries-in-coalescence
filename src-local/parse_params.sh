@@ -32,6 +32,11 @@
 # Last updated: Jan 2026
 # ==============================================================================
 
+# Keys exported by the most recent successful parse_param_file call. The next
+# parse unsets these so omitted keys do not leak, without touching unrelated
+# PARAM_* names such as PARAM_FILE / PARAM_FILES in the launchers.
+declare -ga COALESCENCE_PARSED_PARAM_KEYS=()
+
 # ==============================================================================
 # Function: parse_param_file
 #
@@ -43,10 +48,17 @@
 #   $1 - Path to the parameter file
 #
 # Returns:
-#   0 on success, 1 if file not found
+#   0 on success, 1 if the file is missing or a key is not a valid
+#   shell identifier. A failed parse leaves the previous PARAM_* state.
 #
 # Side Effects:
-#   Exports environment variables named PARAM_<key> for each parameter
+#   Unsets PARAM_* keys from the previous parse, then exports
+#   PARAM_<key> for each key in this file. A parse is not a merge:
+#   a key omitted from the file is unset, so get_param falls back
+#   to its default instead of leaking the previous file's value.
+#   Unrelated PARAM_* names (PARAM_FILE, PARAM_FILES) are left alone.
+#   A file key of FILE or FILES is ignored so those launcher names
+#   cannot be overwritten or later unset.
 #
 # Example:
 #   parse_param_file "default.params"
@@ -54,13 +66,17 @@
 # ==============================================================================
 parse_param_file() {
     local param_file=$1
+    local key value
+    local -a new_keys=()
+    local -A new_vals=()
 
     if [ ! -f "$param_file" ]; then
         echo "ERROR: Parameter file $param_file not found" >&2
         return 1
     fi
 
-    # Read parameters (skip comments and empty lines)
+    # Read the whole file first. A failed parse must leave the previous
+    # PARAM_* state intact; only then drop the last file's keys.
     while IFS='=' read -r key value || [ -n "$key" ]; do
         # Skip comments and empty lines
         [[ "$key" =~ ^[[:space:]]*# ]] && continue
@@ -74,9 +90,36 @@ parse_param_file() {
         [ -z "$key" ] && continue
         [ -z "$value" ] && continue
 
-        # Export as environment variable with PARAM_ prefix
-        export "PARAM_${key}=${value}"
+        # FILE/FILES would export as PARAM_FILE / PARAM_FILES, which the
+        # launchers already use for their own paths. Leave those names alone.
+        case "$key" in
+            FILE|FILES)
+                echo "WARNING: ignoring reserved parameter key $key in $param_file" >&2
+                continue
+                ;;
+        esac
+
+        if ! [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "ERROR: invalid parameter key '$key' in $param_file" >&2
+            return 1
+        fi
+
+        new_keys+=("$key")
+        new_vals["$key"]="$value"
     done < "$param_file"
+
+    # Drop keys from the previous parse so omitted entries fall back to
+    # defaults instead of the last file. Do not glob PARAM_* — launchers
+    # keep PARAM_FILE / PARAM_FILES in the same namespace.
+    for key in "${COALESCENCE_PARSED_PARAM_KEYS[@]+"${COALESCENCE_PARSED_PARAM_KEYS[@]}"}"; do
+        unset -v "PARAM_${key}"
+    done
+    COALESCENCE_PARSED_PARAM_KEYS=()
+
+    for key in "${new_keys[@]}"; do
+        export "PARAM_${key}=${new_vals[$key]}"
+        COALESCENCE_PARSED_PARAM_KEYS+=("$key")
+    done
 
     return 0
 }

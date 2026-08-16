@@ -278,6 +278,7 @@ run_stage1_case() {
 
     # Source parameter parsing in subshell
     source "${script_dir}/src-local/parse_params.sh"
+    source "${script_dir}/src-local/solver_args.sh"
 
     parse_param_file "$param_file"
     local CASE_NO=$(get_param "CaseNo")
@@ -349,7 +350,11 @@ run_stage1_case() {
 
         # Run Stage 1 with small tmax
         echo "Running Stage 1 (tmax=$stage1_tmax)..."
-        if ./coalescenceBubble $OhOut $RhoIn $Rr $MAXlevel $stage1_tmax $zWall; then
+        if ! coalescence_solver_args_from_params "tmax=$stage1_tmax"; then
+            echo "FAILED" > "${status_dir}/${CASE_NO}"
+            return 1
+        fi
+        if ./coalescenceBubble "${COALESCENCE_SOLVER_ARGS[@]}"; then
             echo "Stage 1 completed"
 
             # Verify restart file was created

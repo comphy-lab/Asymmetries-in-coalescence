@@ -15,6 +15,14 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 
 > **Note**: Replace `v2026-01-13` with the [latest release tag](https://github.com/comphy-lab/basilisk-C/releases).
 
+## Shell Requirements
+
+The runners and shell libraries require **bash 4.2 or newer** for associative
+arrays and `declare -g`. Hamilton, Snellius and any current Linux workstation
+satisfy this. On macOS the system `/bin/bash` is 3.2 and has never been
+supported; install a current bash (for example `brew install bash`) and run the
+scripts with that.
+
 ## Repository Structure
 
 ```
@@ -23,7 +31,8 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 │   ├── coalescenceBubble-tag.c     Extended version with shape tracking
 ├── src-local/                       Custom Basilisk headers
 │   ├── two-phase-tag.h             Two-phase flow with interface tagging
-│   └── parse_params.sh             Parameter file parsing library
+│   ├── parse_params.sh             Parameter file parsing library
+│   └── solver_args.sh              Canonical 25-argument solver contract
 ├── postProcess/                     Post-processing tools
 │   ├── getData-generic.c           Field extraction on structured grids
 │   ├── getFacet.c                  Interface geometry extraction
@@ -43,6 +52,7 @@ curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_inst
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
 ├── runSweepHamilton.sbatch          Legacy sequential MPI runner
 ├── runContourHamilton.sbatch        Packed 16-case Hamilton runner
+├── runContourSnellius.sbatch        Packed 16-case Snellius (genoa) runner
 └── runContourLocal.sh               Bounded local-systemd/OpenMP runner
 ```
 
@@ -115,8 +125,9 @@ sbatch runSweepSnellius.sbatch
 
 ### Bayesian contour campaign
 
-The rearmable contour workflow uses batches of 16 simulations. Hamilton runs
-one 16-case Slurm allocation; the local backend launches a user-systemd unit
+The rearmable contour workflow uses batches of 16 simulations. Hamilton and
+Snellius each run one 16-case Slurm allocation; the local backend launches a
+user-systemd unit
 and executes three cases at a time by default. Each case receives eight OpenMP
 threads, so the workstation default is 24 concurrent threads. The local runner
 enforces a hard 48-thread ceiling through `CONTOUR_MAX_THREADS` and uses no MPI.
@@ -322,6 +333,18 @@ the file:
 ```bash
 sbatch -p test --time=00:15:00 runContourHamilton.sbatch \
   /path/to/campaign/iterations/iteration-01
+```
+
+On Snellius the equivalent launcher takes the initial-shape directory as a
+second argument and forwards any remaining options to `materialize_cases.py`,
+so a campaign pins its resolution and geometry at submission time rather than
+by editing the script. The accounting project is not hardcoded:
+
+```bash
+sbatch -A <account> runContourSnellius.sbatch \
+  /scratch-shared/<user>/campaign/iterations/iteration-01 \
+  /scratch-shared/<user>/campaign/DataFiles \
+  --MAXlevel 14 --tmax 1.0 --dropRadiusMin 0.021005127
 ```
 
 ### Post-Processing

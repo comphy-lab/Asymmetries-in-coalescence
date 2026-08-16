@@ -5,55 +5,37 @@ set -euo pipefail
 case_dir=${1:?usage: run_one_contour_case.sh CASE_DIR BINARY}
 binary=${2:?usage: run_one_contour_case.sh CASE_DIR BINARY}
 params="${case_dir}/case.params"
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ! -f "$params" ]]; then
   echo "Missing parameter file: $params" >&2
   exit 2
 fi
 
-get_param() {
+# shellcheck source=../src-local/solver_args.sh
+source "${script_dir}/../src-local/solver_args.sh"
+
+# A materialised case table carries every control explicitly, so anything the
+# contour campaign is meant to pin must be present. The three keys that
+# postdate the earliest case tables fall back to the solver's compiled default
+# instead, which keeps older batches reproducible.
+case_param() {
   local key=$1
   local value
   value=$(awk -F= -v key="$key" '$1 == key {print $2; exit}' "$params")
   if [[ -z "$value" ]]; then
-    echo "Missing $key in $params" >&2
-    return 1
+    case "$key" in
+      geometryMode | wallClearance | interfaceFloor) return 0 ;;
+      *)
+        echo "Missing $key in $params" >&2
+        return 1
+        ;;
+    esac
   fi
   printf '%s\n' "$value"
 }
 
-get_param_default() {
-  local key=$1
-  local fallback=$2
-  local value
-  value=$(awk -F= -v key="$key" '$1 == key {print $2; exit}' "$params")
-  printf '%s\n' "${value:-$fallback}"
-}
-
-OhOut=$(get_param OhOut)
-RhoIn=$(get_param RhoIn)
-Rr=$(get_param Rr)
-MAXlevel=$(get_param MAXlevel)
-tmax=$(get_param tmax)
-zWall=$(get_param zWall)
-dropRadiusMin=$(get_param dropRadiusMin)
-dropPersistence=$(get_param dropPersistence)
-snapshotInterval=$(get_param snapshotInterval)
-drillAMR=$(get_param drillAMR)
-drillMaxlevelStart=$(get_param drillMaxlevelStart)
-drillMaxlevelFocus=$(get_param drillMaxlevelFocus)
-drillNcells=$(get_param drillNcells)
-drillRegionMinX=$(get_param drillRegionMinX)
-drillArmSteps=$(get_param drillArmSteps)
-drillArmTime=$(get_param drillArmTime)
-drillCoarsenTime=$(get_param drillCoarsenTime)
-drillRegionMaxX=$(get_param drillRegionMaxX)
-drillRegionRadius=$(get_param drillRegionRadius)
-drillFireX=$(get_param drillFireX)
-drillTipRadius=$(get_param drillTipRadius)
-drillRegionalOnly=$(get_param drillRegionalOnly)
-geometryMode=$(get_param_default geometryMode finite)
-wallClearance=$(get_param_default wallClearance -1)
+coalescence_solver_args case_param
 
 cd "$case_dir"
 rm -f classification.status classification.status.tmp runner.status runner.status.tmp
@@ -66,13 +48,7 @@ printf 'state=running\nstarted_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp
 mv "$tmp_status" "$final_status"
 
 set +e
-./coalescenceBubbleContour \
-  "$OhOut" "$RhoIn" "$Rr" "$MAXlevel" "$tmax" "$zWall" \
-  "$dropRadiusMin" "$dropPersistence" "$snapshotInterval" "$drillAMR" \
-  "$drillMaxlevelStart" "$drillMaxlevelFocus" "$drillNcells" \
-  "$drillRegionMinX" "$drillArmSteps" "$drillArmTime" "$drillCoarsenTime" \
-  "$drillRegionMaxX" "$drillRegionRadius" "$drillFireX" "$drillTipRadius" \
-  "$drillRegionalOnly" "$geometryMode" "$wallClearance"
+./coalescenceBubbleContour "${COALESCENCE_SOLVER_ARGS[@]}"
 rc=$?
 set -e
 
