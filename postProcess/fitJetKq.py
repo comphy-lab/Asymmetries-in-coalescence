@@ -139,10 +139,11 @@ def main() -> int:
         nu = args.nu
         logs = [math.log(qj) - nu * math.log(r) for r, qj in zip(r_j, q_j)]
         kq = math.exp(sum(logs) / len(logs))
-        pred = [kq * (r**nu) for r in r_j]
-        mean = sum(q_j) / len(q_j)
-        ss_res = sum((y - p) ** 2 for y, p in zip(q_j, pred))
-        ss_tot = sum((y - mean) ** 2 for y in q_j)
+        ly = [math.log(qj) for qj in q_j]
+        lp = [math.log(kq) + nu * math.log(r) for r in r_j]
+        mean = sum(ly) / len(ly)
+        ss_res = sum((y - p) ** 2 for y, p in zip(ly, lp))
+        ss_tot = sum((y - mean) ** 2 for y in ly)
         r2 = 1.0 - ss_res / ss_tot if ss_tot > 0.0 else 1.0
         source = f"frozen ν={nu:g}"
 

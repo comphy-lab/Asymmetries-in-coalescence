@@ -1668,19 +1668,25 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
       double rb = -1000., zb = -1000.;
       if (i == 0) {
         footfp = fopen ("foot.dat", "w");
-        fprintf (footfp,
-                 "MAXlevel %d, Oh %g, Oha %g, Bo 0, zWall %g, Ldomain %g, "
-                 "wallClearance %g, geometry halfspace\n",
-                 MAXlevel, OhOut, MuRin*OhOut, zWall, Ldomain, wallClearance);
-        fprintf (footfp,
-                 "i dt t ke maxlevel r_b z_b r_base z_base q_jet q_l\n");
+        if (footfp) {
+          fprintf (footfp,
+                   "MAXlevel %d, Oh %g, Oha %g, Bo 0, zWall %g, Ldomain %g, "
+                   "wallClearance %g, geometry halfspace\n",
+                   MAXlevel, OhOut, MuRin*OhOut, zWall, Ldomain, wallClearance);
+          fprintf (footfp,
+                   "i dt t ke maxlevel r_b z_b r_base z_base q_jet q_l\n");
+        }
       }
       else
         footfp = fopen ("foot.dat", "a");
-      fprintf (footfp, "%d %.6e %.8f %.6e %d %.6e %.6e %.6e %.6e %.6e %.6e\n",
-               i, dt, t, ke, maxlevelLocal, rb, zb,
-               foot.r_base, foot.z_base, foot.q_jet, foot.q_l);
-      fclose (footfp);
+      if (!footfp)
+        fprintf (ferr, "JET-FOOT: cannot open foot.dat at i=%d t=%g\n", i, t);
+      else {
+        fprintf (footfp, "%d %.6e %.8f %.6e %d %.6e %.6e %.6e %.6e %.6e %.6e\n",
+                 i, dt, t, ke, maxlevelLocal, rb, zb,
+                 foot.r_base, foot.z_base, foot.q_jet, foot.q_l);
+        fclose (footfp);
+      }
     }
 #endif
   }
