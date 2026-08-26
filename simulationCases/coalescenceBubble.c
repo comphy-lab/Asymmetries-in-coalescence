@@ -51,6 +51,10 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
   [drillRegionalOnly] [geometryMode] [wallClearance] [interfaceFloor]
 ```
 
+The χ → 0 half-space jet-foot build is `halfspaceJet.c` (defines
+`ENABLE_JET_FOOT` and `FORCE_GEOMETRY_HALFSPACE`, writes `foot.dat`).
+Finite-$R_r$ Oh$_c$ ladders stay on this file with those flags unset.
+
 ## Solver Stacks
 
 Three solver stacks are supported. A single compile-time flag selects between
@@ -191,6 +195,16 @@ Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #include "adapt_wavelet_limited.h"
 #include <float.h>
 #include <string.h>
+
+#ifndef ENABLE_JET_FOOT
+#define ENABLE_JET_FOOT 0
+#endif
+#ifndef FORCE_GEOMETRY_HALFSPACE
+#define FORCE_GEOMETRY_HALFSPACE 0
+#endif
+#if ENABLE_JET_FOOT
+#include "jetFoot.h"
+#endif
 
 #if !_MPI
 #include "distance.h"
@@ -552,6 +566,9 @@ int main(int argc, char const *argv[]) {
     wallClearance = atof(argv[24]);
   if (argc > 25)
     interfaceFloor = atoi(argv[25]);
+#if FORCE_GEOMETRY_HALFSPACE
+  snprintf (geometryMode, sizeof(geometryMode), "%s", "halfspace");
+#endif
 
   bool halfspace = strcmp (geometryMode, "halfspace") == 0;
   bool finite = strcmp (geometryMode, "finite") == 0;
@@ -1618,6 +1635,14 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
   }
   xCOM /= wt;
 
+#if ENABLE_JET_FOOT
+  /**
+  Outer-surface base + q_jet/q_l (Bursting-Bubble getBase protocol). Rank-wide
+  because the tag/flux reductions must see every cell; only pid 0 writes
+  `foot.dat`. The drop-injection `log` columns are unchanged. */
+  JetFoot foot = measure_jet_foot();
+#endif
+
   static FILE * fp;
 
   if (pid() == 0) {
@@ -1637,6 +1662,27 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
     }
     fprintf (ferr, "%d %g %g %g %g %g %d %d %d\n", i, dt, t, ke,
              xCOM, Vcm/wt, maxlevelLocal, drillArmed, drillFired);
+#if ENABLE_JET_FOOT
+    {
+      static FILE * footfp;
+      double rb = -1000., zb = -1000.;
+      if (i == 0) {
+        footfp = fopen ("foot.dat", "w");
+        fprintf (footfp,
+                 "MAXlevel %d, Oh %g, Oha %g, Bo 0, zWall %g, Ldomain %g, "
+                 "wallClearance %g, geometry halfspace\n",
+                 MAXlevel, OhOut, MuRin*OhOut, zWall, Ldomain, wallClearance);
+        fprintf (footfp,
+                 "i dt t ke maxlevel r_b z_b r_base z_base q_jet q_l\n");
+      }
+      else
+        footfp = fopen ("foot.dat", "a");
+      fprintf (footfp, "%d %.6e %.8f %.6e %d %.6e %.6e %.6e %.6e %.6e %.6e\n",
+               i, dt, t, ke, maxlevelLocal, rb, zb,
+               foot.r_base, foot.z_base, foot.q_jet, foot.q_l);
+      fclose (footfp);
+    }
+#endif
   }
 
   /**
