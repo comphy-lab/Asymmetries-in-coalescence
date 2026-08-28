@@ -49,9 +49,15 @@ The pinned detector is still evaluated every check and written to
 
 This is a wrapper, not a standalone solver. It includes
 `burstingBubble-drillResolution.c`, which is owned by the
-`singular-bursting-bubbles` project and is hash-guarded by the launcher so
-that a ladder cannot silently be produced against a different base solver.
-Stage both files together; this driver will not compile on its own.
+`singular-bursting-bubbles` project and will not compile on its own.
+
+That solver in turn includes `params.h` and `adapt_wavelet_limited.h`. Both
+must come from the same bursting-bubble tree: this repository's `src-local`
+has no `params.h` and carries a *different* `adapt_wavelet_limited.h`, so a
+build that resolves `-I../src-local` to this checkout would either fail or
+silently use different regional-AMR behaviour. The launcher hash-guards all
+three files for that reason. Stage the bundle; do not run from a bare
+checkout of this repository.
 
 ## Outputs
 
@@ -67,10 +73,14 @@ extends rather than truncates its history.
 ## Usage
 
 ~~~bash
+# from the staged bundle, where src-local is the bursting-bubble one
 qcc -O2 -Wall -disable-dimensions -fopenmp -I../src-local \
   burstingBubbleDropMap.c -o bursting-bubble-dropmap -lm
 ./bursting-bubble-dropmap case.params
 ~~~
+
+No `-DFILTERED`. The comparator cases 6211/6212 were built without it, and
+matching them is the point of the ladder.
 
 Run with `drillRelaxLevel=-1` so detached components and the rounded tip stay
 at production resolution; relaxing the mesh after pinch changes the measured
@@ -124,8 +134,8 @@ event dropmap (t = 0.; t += TLOG; t <= tmax + 1e-9)
     momentum = calloc (n, sizeof(double));
     xmoment  = calloc (n, sizeof(double));
     cells    = calloc (n, sizeof(double));
-    xmin     = malloc (n*sizeof(double));
-    xmax     = malloc (n*sizeof(double));
+    xmin     = calloc (n, sizeof(double));
+    xmax     = calloc (n, sizeof(double));
     for (int j = 0; j < n; j++) {
       xmin[j] =  HUGE;
       xmax[j] = -HUGE;

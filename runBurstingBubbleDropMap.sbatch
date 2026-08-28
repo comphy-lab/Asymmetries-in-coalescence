@@ -59,17 +59,46 @@ test -x "${BASILISK}/qcc"
 test -f "${BASILISK_ROOT}/.comphy-lock"
 grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"
 
-# The base solver must be byte-identical to the one that produced 6211/6212,
-# otherwise the ladder is not matched.
-expected_solver='2ebb137102b81de6f2622489bc367c4056b728e43517f9f523fd7fb167b18daa'
-actual_solver=$(sha256sum simulationCases/burstingBubble-drillResolution.c | awk '{print $1}')
-test "$actual_solver" = "$expected_solver"
+# Matching 6211/6212 means matching the whole build, not just the solver .c.
+# burstingBubble-drillResolution.c includes params.h and
+# adapt_wavelet_limited.h, so a bundle staged with this repository's own
+# src-local would compile against a different regional-AMR header and a
+# missing params.h. Guarding all three turns that silent mismatch into an
+# immediate failure.
+guard_sha256() {
+  local path="$1" expected="$2" actual
+  actual=$(sha256sum "$path" | awk '{print $1}')
+  if [[ "$actual" != "$expected" ]]; then
+    echo "ERROR: $path is not the file 6211/6212 were built against." >&2
+    echo "       expected $expected" >&2
+    echo "       actual   $actual" >&2
+    echo "       Stage the bursting-bubble bundle; do not run this from a" >&2
+    echo "       bare checkout of this repository." >&2
+    exit 3
+  fi
+  echo "guarded $path $actual"
+}
+
+guard_sha256 simulationCases/burstingBubble-drillResolution.c \
+  2ebb137102b81de6f2622489bc367c4056b728e43517f9f523fd7fb167b18daa
+guard_sha256 src-local/params.h \
+  808dc389acb05fde6e7e0bba30be2b88b68181f65c621b6696b5de7bd97b7500
+guard_sha256 src-local/adapt_wavelet_limited.h \
+  16564742e060837637fbdc7eafb2e10ed94f33565d2c351a36d0ed65e5ccc7cc
+actual_solver=2ebb137102b81de6f2622489bc367c4056b728e43517f9f523fd7fb167b18daa
 
 echo "mode=$MODE group=$GROUP tmax=$TMAX tsnap=$TSNAP MAXlevel=$MAXLEVEL threads_per_case=$THREADS"
 echo "solver_sha256=$actual_solver basilisk_ref=$EXPECTED_BASILISK_REF"
 echo "cases=${CASE_IDS[*]} oh=${OH_VALUES[*]}"
 
 cd simulationCases
+# Deliberately no -DFILTERED and no $QCC_FLAGS. The comparator cases 6211/6212
+# were built by this project's runBulkVisibleBracket.sbatch with exactly this
+# bare line, and their case.params sets no FILTERED. Bursting-Bubble's
+# runSnelliusDrillOhSweep.sbatch does set FILTERED=1 through
+# append_solver_qcc_flags, but that is a different campaign; adding the flag
+# here would smear the two-phase properties on one side of the comparison and
+# break the match this ladder exists to make.
 qcc -O2 -Wall -disable-dimensions -fopenmp -I../src-local \
   burstingBubbleDropMap.c -o bursting-bubble-dropmap -lm
 
@@ -116,7 +145,7 @@ PARAMS
     export OMP_NUM_THREADS="$THREADS"
     export OMP_PROC_BIND=close
     export OMP_PLACES=cores
-    srun --exclusive -N1 -n1 -c "$THREADS" --cpu-bind=cores \
+    srun --exclusive --exact -N1 -n1 -c "$THREADS" --cpu-bind=cores \
       ./bursting-bubble-dropmap case.params > runner.out 2> runner.err
   ) &
   pids+=("$!")
@@ -137,8 +166,12 @@ for case_id in "${CASE_IDS[@]}"; do
     last_t=$(tail -1 "$d/jet.log" | cut -d, -f1)
     ncomp_max=$(awk -F, 'NR>1 {if ($7+0 > m) m=$7+0} END {print m+0}' "$d/jet.log")
     echo "  reached t=$last_t (horizon $TMAX), max components seen=$ncomp_max"
+    # A short stop is a warning, not a failure: keStopMin=1e-6 in case.params
+    # ends a run whose kinetic energy has decayed, which is a complete result.
     awk -v t="$last_t" -v h="$TMAX" 'BEGIN {exit !(t < h - 0.02)}' \
-      && { echo "  WARNING: $case_id stopped short of its horizon" >&2; }
+      && { echo "  NOTE: $case_id stopped at t=$last_t before its $TMAX horizon;" \
+                "check the log for a keStop termination before treating it" \
+                "as a failure" >&2; }
   fi
   [[ -s "$d/classification.status" ]] && cat "$d/classification.status"
 done
