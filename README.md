@@ -29,6 +29,7 @@ scripts with that.
 ├── simulationCases/                 Main simulation code
 │   ├── coalescenceBubble.c         Primary simulation (production runs)
 │   ├── coalescenceBubble-tag.c     Extended version with shape tracking
+│   └── burstingBubbleDropMap.c     Drop-map driver: every component + jet history
 ├── src-local/                       Custom Basilisk headers
 │   ├── two-phase-tag.h             Two-phase flow with interface tagging
 │   ├── parse_params.sh             Parameter file parsing library
@@ -51,9 +52,12 @@ scripts with that.
 ├── sweep.params                     Sweep configuration template
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
 ├── runSweepHamilton.sbatch          Legacy sequential MPI runner
+├── runBurstingBubbleDropMap.sbatch  Packed drop-map ladder (Snellius, genoa)
 ├── runContourHamilton.sbatch        Packed 16-case Hamilton runner
 ├── runContourSnellius.sbatch        Packed 16-case Snellius (genoa) runner
-└── runContourLocal.sh               Bounded local-systemd/OpenMP runner
+├── runContourLocal.sh               Bounded local-systemd/OpenMP runner
+├── docs/                            Authored public reports (Markdown, LaTeX, PDF)
+└── .github/docs/                    Generated GitHub Pages site (do not hand-edit)
 ```
 
 ## Simulation Files

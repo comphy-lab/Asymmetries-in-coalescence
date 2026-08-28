@@ -70,6 +70,11 @@ Key physics components:
 - `DataFiles/`: Initial condition files (InitialConditionRr-*.dat)
 - `intermediate/`: Output directory for simulation snapshots
 - `postProcess/`: Python and C tools for analyzing results
+- `docs/`: Authored public reports (Markdown, LaTeX, PDF). Written as
+  eventually public; not the project website.
+- `.github/docs/`: Generated GitHub Pages site. Built by
+  `.github/scripts/build.sh` and published by `.github/workflows/deploy.yml`.
+  Never hand-edit it — change the generator instead.
 
 ## Testing
 
