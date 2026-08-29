@@ -111,6 +111,14 @@ Always pass the pinned detector radius explicitly (argv 7
 #define DETACH_STOP 0
 #include "coalescenceBubble.c"
 
+/* The dropmap census below accumulates per-component sums in a
+   foreach(serial) loop, which is rank-local: correct under OpenMP (shared
+   memory), silently wrong under MPI. Fail the build rather than the
+   science. */
+#if _MPI
+#error "burstingBubbleInfiniteRr.c instrumentation is OpenMP-only; compile without -D_MPI"
+#endif
+
 #define TLOG 0.005          /* component + jet cadence */
 #define RTIP 0.50           /* near-axis band defining the jet tip */
 #define CAPDEPTH 0.05       /* axial depth of the tip cap used for v(t) */

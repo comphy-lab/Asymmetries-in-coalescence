@@ -62,7 +62,7 @@ scripts with that.
 
 ## Simulation Files
 
-This project contains two simulation files:
+This project contains three simulation drivers:
 
 ### coalescenceBubble.c (Primary)
 The main simulation file used for all production runs. Outputs:
