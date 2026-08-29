@@ -132,7 +132,11 @@ def test_jet_crossing_and_vmax(tmp_path):
     m = h.jet_metrics(h.read_jet(d / "jet.log"))
     assert abs(m["t_cross"] - 0.505) < 1e-9
     assert abs(m["v_jet0"] - 9.0) < 1e-9         # midway between 8 and 10
-    assert abs(m["r_jet0"] - 0.04) < 1e-9        # midway between 0.05, 0.03
+    # stem protocol: first frame with z_tip >= Z0_CLEAR (0.08 at t=0.52),
+    # NOT the interpolated value at the crossing where the tip cap sits
+    # inside the station slab
+    assert abs(m["r_jet0"] - 0.04) < 1e-9
+    assert abs(m["t_rjet0"] - 0.52) < 1e-12
     assert abs(m["v_max"] - 12.0) < 1e-12
     assert abs(m["t_vmax"] - 0.52) < 1e-12
 
@@ -230,4 +234,69 @@ def test_restart_replay_rows_are_superseded(tmp_path):
     # the pre-crash 0.505 AND 0.510 frames are superseded by the replay
     assert [f[0].t for f in frames] == [0.500, 0.505]
     drops = [c for c in frames[-1] if not c.is_main]
+    assert len(drops) == 1 and abs(drops[0].r_eq - 0.05) < 1e-12
+
+
+def test_rjet0_not_taken_at_the_crossing(tmp_path):
+    """At t_cross the tip cap occupies the x=0 slab, so r_jet_z0 there is
+    the cap curvature; the stem is read only after z_tip clears Z0_CLEAR."""
+    rows = [
+        {"t": 0.45, "z_tip": -1.00, "u_tip_cap": 2.0, "vol_cap": 0.01,
+         "r_jet_z0": -1e30, "ke": 1, "n_components": 1},
+        # crossing frame: tiny r_jet_z0 = tip cap on the axis; must NOT win
+        {"t": 0.50, "z_tip": -0.01, "u_tip_cap": 8.0, "vol_cap": 1e-4,
+         "r_jet_z0": 0.001, "ke": 1, "n_components": 1},
+        {"t": 0.505, "z_tip": +0.02, "u_tip_cap": 9.0, "vol_cap": 1e-4,
+         "r_jet_z0": 0.002, "ke": 1, "n_components": 1},
+        # tip has cleared the station: this is the stem
+        {"t": 0.515, "z_tip": +0.09, "u_tip_cap": 10.0, "vol_cap": 1e-4,
+         "r_jet_z0": 0.031, "ke": 1, "n_components": 1},
+    ]
+    d = ladder_case(tmp_path, [(0.5, [(1, True, 0.8, -1.0, 0.1)])], rows)
+    m = h.jet_metrics(h.read_jet(d / "jet.log"))
+    assert abs(m["r_jet0"] - 0.031) < 1e-12
+    assert abs(m["t_rjet0"] - 0.515) < 1e-12
+
+
+def test_jet_log_restart_replay_superseded(tmp_path):
+    """jet.log is appended across restarts too: on a time regression the
+    recomputed rows must replace the pre-crash tail before any metric."""
+    rows = [
+        {"t": 0.45, "z_tip": -1.0, "u_tip_cap": 2.0, "vol_cap": 0.01,
+         "ke": 1, "n_components": 1},
+        {"t": 0.50, "z_tip": -0.5, "u_tip_cap": 999.0, "vol_cap": 1e-4,
+         "ke": 1, "n_components": 1},   # pre-crash garbage
+        {"t": 0.55, "z_tip": -0.4, "u_tip_cap": 999.0, "vol_cap": 1e-4,
+         "ke": 1, "n_components": 1},   # pre-crash garbage
+        # restart replays from t=0.50 with sane values
+        {"t": 0.50, "z_tip": -0.02, "u_tip_cap": 8.0, "vol_cap": 1e-4,
+         "ke": 1, "n_components": 1},
+        {"t": 0.51, "z_tip": +0.02, "u_tip_cap": 10.0, "vol_cap": 1e-4,
+         "ke": 1, "n_components": 1},
+    ]
+    d = ladder_case(tmp_path, [(0.5, [(1, True, 0.8, -1.0, 0.1)])],
+                    rows, with_rjet=False)
+    parsed = h.read_jet(d / "jet.log")
+    assert [r["t"] for r in parsed] == [0.45, 0.50, 0.51]
+    m = h.jet_metrics(parsed)
+    assert m["v_max"] is not None and m["v_max"] < 100  # garbage gone
+
+
+def test_components_exact_time_replay_superseded(tmp_path):
+    """A replay whose first frame is exactly the last logged time (restart
+    dump written at that frame) must replace it, detected by the component
+    index restarting."""
+    d = tmp_path / "9001"
+    d.mkdir()
+    write_components(d / "components.log", [
+        (0.505, [(1, True, 0.8, -1.0, 0.1), (2, False, 0.03, 1.0, 5.0)]),
+    ])
+    with open(d / "components.log", "a") as fh:
+        import csv as _csv
+        w = _csv.writer(fh)
+        w.writerow([0.505, 1, 1, 9000, vol(0.8), 0.8, -1.0, 0.1, -1.8, -0.2])
+        w.writerow([0.505, 2, 0, 40, vol(0.05), 0.05, 1.0, 5.0, 0.95, 1.05])
+    frames = h.read_components(d / "components.log")
+    assert len(frames) == 1 and len(frames[0]) == 2
+    drops = [c for c in frames[0] if not c.is_main]
     assert len(drops) == 1 and abs(drops[0].r_eq - 0.05) < 1e-12

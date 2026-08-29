@@ -64,6 +64,13 @@ esac
 ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 cd "$ROOT"
 
+# Canonical 25-argument solver contract; compiled defaults fill every key a
+# ladder case does not override.
+source "$ROOT/src-local/solver_args.sh"
+solver_default_lookup() {
+  printf '%s' "${COALESCENCE_SOLVER_ARG_DEFAULTS[$1]-}"
+}
+
 module purge
 module load 2024
 module load OpenMPI/5.0.3-GCC-13.3.0
@@ -92,20 +99,27 @@ for index in 0 1 2 3; do
   cp burstingBubbleInfiniteRr "$case_dir/"
   ln -sfn "$ROOT/simulationCases/DataFiles" "$case_dir/DataFiles"
 
+  # Build argv 1..25 through the canonical contract in
+  # src-local/solver_args.sh: compiled defaults for everything the ladder
+  # does not set, explicit overrides for what it does. The pinned detector
+  # radius is NEVER 0 (0 makes the solver derive a mesh-tied value); Rr is a
+  # placeholder in halfspace geometry.
+  coalescence_solver_args solver_default_lookup \
+    "OhOut=$oh" "RhoIn=1e-3" "Rr=1000" "MAXlevel=$MAXLEVEL" \
+    "tmax=$TMAX" "zWall=$ZWALL" \
+    "dropRadiusMin=0.021005127" "dropPersistence=3" \
+    "snapshotInterval=$SNAPINT" "drillAMR=0" \
+    "geometryMode=halfspace" "wallClearance=$WALLCLEARANCE" \
+    "interfaceFloor=1"
+  solver_args=("${COALESCENCE_SOLVER_ARGS[@]}")
+
   (
     cd "$case_dir"
     export OMP_NUM_THREADS="$THREADS"
     export OMP_PROC_BIND=close
     export OMP_PLACES=cores
-    # argv 1..25 per src-local/solver_args.sh; the pinned detector radius is
-    # NEVER 0 (0 makes the solver derive a mesh-tied value). Rr is a
-    # placeholder in halfspace geometry. drillAMR=0: fixed adaptive ceiling.
     srun --exclusive --exact -N1 -n1 -c "$THREADS" --cpu-bind=cores \
-      ./burstingBubbleInfiniteRr \
-        "$oh" 1e-3 1000 "$MAXLEVEL" "$TMAX" "$ZWALL" \
-        0.021005127 3 "$SNAPINT" 0 \
-        -1 -1 5 -2.1 5 0 0 3 1.5 0.25 0.25 0 \
-        halfspace "$WALLCLEARANCE" 1 \
+      ./burstingBubbleInfiniteRr "${solver_args[@]}" \
         > runner.out 2> runner.err &
     echo $! > .srun.pid
     wait $!
@@ -172,10 +186,14 @@ for case_id in "${CASE_IDS[@]}"; do
   if [[ -s "$d/jet.log" ]]; then
     last_t=$(tail -1 "$d/jet.log" | cut -d, -f1)
     echo "  reached t=$last_t (horizon $TMAX)"
+    # Unlike the drill-solver ladder there is no keStop gate and
+    # DETACH_STOP=0 removes the classifier stop, so a healthy case has no
+    # legitimate way to end early: a short stop is a projection-guard
+    # failure, a crash or a watchdog kill, and fails the job.
     awk -v t="$last_t" -v h="$TMAX" 'BEGIN {exit !(t < h - 0.02)}' \
-      && { echo "  NOTE: $case_id stopped at t=$last_t before its $TMAX horizon;" \
-                "check log and projection_guard.status before treating it" \
-                "as a failure" >&2; }
+      && { echo "  ERROR: $case_id stopped at t=$last_t before its $TMAX horizon" >&2
+           [[ -s "$d/projection_guard.status" ]] && head -2 "$d/projection_guard.status" >&2
+           rc=1; }
   fi
   [[ -s "$d/WATCHDOG" ]] && { cat "$d/WATCHDOG"; rc=1; }
   [[ -s "$d/classification.status" ]] && head -2 "$d/classification.status"

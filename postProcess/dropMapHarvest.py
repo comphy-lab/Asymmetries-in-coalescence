@@ -115,12 +115,23 @@ def read_components(path: Path) -> list[list[Component]]:
                 order.append(key)
                 by_time[key] = []
                 prev_key = key
+            elif by_time[key] and c.index <= by_time[key][-1].index:
+                # same time, but component indices restart: a replay whose
+                # first frame is exactly the last logged one. The recomputed
+                # pass replaces the pre-crash rows wholesale.
+                by_time[key] = []
             by_time[key].append(c)
     return [by_time[k] for k in order]
 
 
 def read_jet(path: Path) -> list[dict]:
-    """Parse jet.log, handling both the 10- and 11-column layouts."""
+    """Parse jet.log, handling both the 10- and 11-column layouts.
+
+    Same restart-replay rule as ``read_components``: jet.log is opened in
+    append mode, so a restart concatenates a recomputed series onto the
+    pre-crash one. On a time regression (or an exact repeat of an existing
+    time) the recomputed rows supersede everything from that time onward.
+    """
     rows: list[dict] = []
     with open(path, newline="") as fh:
         reader = csv.reader(fh)
@@ -132,9 +143,13 @@ def read_jet(path: Path) -> list[dict]:
             if len(row) != len(names):
                 continue
             try:
-                rows.append({k: float(v) for k, v in zip(names, row)})
+                parsed = {k: float(v) for k, v in zip(names, row)}
             except ValueError:
                 continue
+            t = parsed["t"]
+            while rows and rows[-1]["t"] >= t - FRAME_TOL:
+                rows.pop()
+            rows.append(parsed)
     return rows
 
 
@@ -275,6 +290,11 @@ def _interp_crossing(ts, ys, level=0.0):
 
 VOLCAP_MIN = 1e-6   # tip caps smaller than this are one or two cells: their
                     # momentum/volume ratio is numerically meaningless
+Z0_CLEAR = 0.05     # the tip must be this far past x = 0 before r_jet_z0
+                    # measures the STEM: at the crossing instant the tip cap
+                    # itself sits inside the station slab, so the minimum
+                    # interface radius there is the cap curvature, not the
+                    # jet radius
 
 
 def jet_metrics(rows: list[dict]) -> dict:
@@ -291,13 +311,19 @@ def jet_metrics(rows: list[dict]) -> dict:
                  bracketing frames when both have a trustworthy cap
                  (vol_cap >= VOLCAP_MIN); otherwise the first trustworthy
                  post-crossing frame is used and flagged.
-    - r_jet0:    r_jet_z0 at t_cross (column exists only on
-                 burstingBubbleInfiniteRr.c runs; None otherwise)
+    - r_jet0:    the jet STEM radius at the x = 0 station: r_jet_z0 read at
+                 the first trustworthy frame with z_tip >= Z0_CLEAR after the
+                 crossing, once the tip cap has left the slab. Values logged
+                 before the crossing are the collapsing rim, not the jet, and
+                 the value AT the crossing is the tip-cap curvature; neither
+                 is used. (Column exists only on burstingBubbleInfiniteRr.c
+                 runs; None otherwise.)
     - v_max:     max tip-cap velocity over trustworthy frames after
                  t_cross, with the frame time
     """
     out: dict = {"t_cross": None, "v_jet0": None, "v_jet0_interpolated": None,
-                 "r_jet0": None, "v_max": None, "t_vmax": None}
+                 "r_jet0": None, "t_rjet0": None, "v_max": None,
+                 "t_vmax": None}
     if not rows:
         return out
 
@@ -335,22 +361,31 @@ def jet_metrics(rows: list[dict]) -> dict:
                             out["v_jet0"] = vtip[k]
                             out["v_jet0_interpolated"] = False
                             break
-                r0 = rows[i - 1].get("r_jet_z0")
-                r1 = rows[i].get("r_jet_z0")
-                if valid(r0) and valid(r1):
-                    out["r_jet0"] = r0 + w * (r1 - r0)
                 break
         post = [(v, tt) for tt, v, ok in zip(ts, vtip, trusty)
                 if ok and tt >= t_cross]
         if post:
             out["v_max"], out["t_vmax"] = max(post)
+        # stem radius: first trustworthy frame after the tip clears the slab
+        for i, r in enumerate(rows):
+            if (ztip[i] is not None and ztip[i] >= Z0_CLEAR and trusty[i]
+                    and valid(r.get("r_jet_z0"))):
+                out["r_jet0"] = r["r_jet_z0"]
+                out["t_rjet0"] = ts[i]
+                break
     return out
 
 
-def harvest_case(case_dir: Path, oh: float) -> dict:
+def load_case(case_dir: Path):
+    """Parse and track once; harvest_case and write_case_details share it."""
     frames = read_components(case_dir / "components.log")
     tracks = track_components(frames)
     jrows = read_jet(case_dir / "jet.log")
+    return frames, tracks, jrows
+
+
+def harvest_case(case_dir: Path, oh: float, loaded=None) -> dict:
+    frames, tracks, jrows = loaded if loaded is not None else load_case(case_dir)
 
     row: dict = {"case": case_dir.name, "oh": oh,
                  "t_last": frames[-1][0].t if frames else None,
@@ -368,10 +403,10 @@ def harvest_case(case_dir: Path, oh: float) -> dict:
     return row
 
 
-def write_case_details(case_dir: Path, out_dir: Path, oh: float) -> None:
+def write_case_details(case_dir: Path, out_dir: Path, oh: float,
+                       loaded=None) -> None:
     """Per-case drops.csv (every confirmed track) and jet_metrics.csv."""
-    frames = read_components(case_dir / "components.log")
-    tracks = track_components(frames)
+    frames, tracks, jrows = loaded if loaded is not None else load_case(case_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "drops.csv", "w", newline="") as fh:
         w = csv.writer(fh)
@@ -386,7 +421,6 @@ def write_case_details(case_dir: Path, out_dir: Path, oh: float) -> None:
                         tr.born.u_x_mean, tr.confirmed_at.u_x_mean,
                         tr.confirmed_at.cells, len(tr.history),
                         int(tr.ever_main)])
-    jrows = read_jet(case_dir / "jet.log")
     with open(out_dir / "jet_metrics.csv", "w", newline="") as fh:
         w = csv.writer(fh)
         m = jet_metrics(jrows)
@@ -414,13 +448,15 @@ def main(argv=None) -> int:
     for case, oh in zip(args.cases, args.oh):
         case_dir = Path(case)
         try:
-            rows.append(harvest_case(case_dir, oh))
+            loaded = load_case(case_dir)
         except FileNotFoundError as exc:
             print(f"SKIP {case_dir}: {exc}", file=sys.stderr)
             continue
+        rows.append(harvest_case(case_dir, oh, loaded=loaded))
         if args.details:
             write_case_details(case_dir,
-                               Path(args.details) / case_dir.name, oh)
+                               Path(args.details) / case_dir.name, oh,
+                               loaded=loaded)
 
     rows.sort(key=lambda r: r["oh"])
     if rows:

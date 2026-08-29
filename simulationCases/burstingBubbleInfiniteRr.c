@@ -133,11 +133,18 @@ static void dropmap_open (void)
   if (fp_components)
     return;
   fp_components = fopen ("components.log", "a");
-  if (fp_components && ftell (fp_components) == 0)
+  fp_jet = fopen ("jet.log", "a");
+  if (!fp_components || !fp_jet) {
+    /* a case without its diagnostics is not a result: fail loudly rather
+       than burn node-hours producing an unusable run */
+    fprintf (ferr, "dropmap: cannot open %s in the case directory\n",
+             !fp_components ? "components.log" : "jet.log");
+    exit (1);
+  }
+  if (ftell (fp_components) == 0)
     fprintf (fp_components,
              "t,component,is_main,cells,volume,r_eq,x_mean,u_x_mean,x_min,x_max\n");
-  fp_jet = fopen ("jet.log", "a");
-  if (fp_jet && ftell (fp_jet) == 0)
+  if (ftell (fp_jet) == 0)
     fprintf (fp_jet,
              "t,z_tip,u_tip_cap,r_cap_max,vol_cap,r_jet_z0,ke,n_components,"
              "r_largest_detached,u_largest_detached,x_largest_detached\n");

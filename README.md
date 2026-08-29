@@ -5,15 +5,15 @@ Asymmetries in coalescence: size asymmetry. Still axially symmetric.
 
 First-time install (or reinstall):
 ```bash
-curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13 --hard
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-07-20 --hard
 ```
 
 Subsequent runs (reuses existing `basilisk/` if same ref):
 ```bash
-curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-01-13
+curl -sL https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk-ref-locked.sh | bash -s -- --ref=v2026-07-20
 ```
 
-> **Note**: Replace `v2026-01-13` with the [latest release tag](https://github.com/comphy-lab/basilisk-C/releases).
+> **Note**: Replace `v2026-07-20` with the [latest release tag](https://github.com/comphy-lab/basilisk-C/releases).
 
 ## Shell Requirements
 
@@ -87,7 +87,7 @@ detailed shape tracking of the largest connected bubble region. Outputs:
 - `ZNp`: North pole position (positive x on axis)
 - `ZSp`: South pole position (negative x on axis)
 
-**Note:** All cases in this project are run with `coalescenceBubble.c`. The `-tag.c` variant is provided as an optional alternative for cases requiring detailed shape tracking.
+**Note:** Finite-$R_r$ cases run with `coalescenceBubble.c`; $R_r \to \infty$ cases (any $\chi$) run with `burstingBubbleInfiniteRr.c`. The `-tag.c` variant belongs to the swimming-bubbles project.
 
 ## Why coalescenceBubble.c (not coalescenceBubble-tag.c)
 

@@ -77,14 +77,17 @@ def profile_powerlaw_zero(oh: np.ndarray, y: np.ndarray, side: str,
                 "n": int(len(oh))}
     if side == "left":
         lo, hi = oh.max() * (1 + 1e-6), oh.max() * 3
-        gaps = np.linspace(lo, hi, n_grid)
-        dist = lambda ohc: ohc - oh
+
+        def dist(ohc):
+            return ohc - oh
     elif side == "right":
         lo, hi = oh.min() / 3, oh.min() * (1 - 1e-6)
-        gaps = np.linspace(lo, hi, n_grid)
-        dist = lambda ohc: oh - ohc
+
+        def dist(ohc):
+            return oh - ohc
     else:
         raise ValueError(side)
+    gaps = np.linspace(lo, hi, n_grid)
     best = None
     for ohc in gaps:
         d = dist(ohc)
@@ -98,6 +101,13 @@ def profile_powerlaw_zero(oh: np.ndarray, y: np.ndarray, side: str,
         if best is None or rms < best["rms"]:
             best = {"oh_c": float(ohc), "p": float(p),
                     "C": float(math.exp(logC)), "rms": rms, "n": int(len(oh))}
+    if best is not None:
+        # A minimiser at (or one grid step from) either search bound is a
+        # saturated search, not a resolved virtual zero; flag it so the
+        # reader can reject the estimate.
+        step = (hi - lo) / max(n_grid - 1, 1)
+        best["at_search_boundary"] = bool(
+            best["oh_c"] <= lo + step or best["oh_c"] >= hi - step)
     return best or {"oh_c": None, "p": None, "C": None, "rms": None,
                     "n": int(len(oh))}
 
@@ -171,8 +181,17 @@ def estimate(rows: list[dict]) -> dict:
                 gsub = grid[support]
                 lhs = f["C"] * (f["oh_c"] - gsub) ** f["p"]
                 rhs = g["C"] * (gsub - g["oh_c"]) ** g["p"]
-                k = int(np.argmin(np.abs(np.log(lhs) - np.log(rhs))))
-                blk["P3_branch_intersection_oh"] = float(gsub[k])
+                gap = np.log(lhs) - np.log(rhs)
+                # a genuine intersection changes sign; the closest endpoint
+                # of a non-crossing pair must not be reported as Oh_opt
+                if np.any(gap > 0) and np.any(gap < 0):
+                    k = int(np.argmin(np.abs(gap)))
+                    blk["P3_branch_intersection_oh"] = float(gsub[k])
+                    blk["P3_residual"] = float(abs(gap[k]))
+                else:
+                    blk["P3_branch_intersection_oh"] = None
+                    blk["P3_note"] = ("branch fits do not cross inside the "
+                                      "overlap")
             else:
                 blk["P3_branch_intersection_oh"] = None
                 blk["P3_note"] = "falling and rising supports do not overlap"
