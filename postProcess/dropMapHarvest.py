@@ -20,8 +20,9 @@ Pre-registered drop selection (frozen 2026-08-29, BEFORE the ladder landed)
 A tracked component is the *first visible forward drop* when ALL hold:
 
 1. it is not the main component in any frame of its life;
-2. its equivalent radius satisfies ``r_eq >= R_VISIBLE`` (0.021005127, the
-   pinned literature threshold) on ``PERSISTENCE`` (3) consecutive frames;
+2. its equivalent radius satisfies ``r_eq >= R_VISIBLE`` (0.021005127 — an
+   arbitrary but FIXED resolution gate whose job is to discard unresolved or
+   intermittent fragments) on ``PERSISTENCE`` (3) consecutive frames;
 3. its volume-weighted axial velocity is positive on the frame the
    persistence count completes.
 
@@ -57,7 +58,10 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-R_VISIBLE = 0.021005127     # pinned literature threshold, never mesh-derived
+R_VISIBLE = 0.021005127     # pinned resolution gate: arbitrary but FIXED,
+                            # never mesh-derived; discards unresolved or
+                            # intermittent fragments (a large-enough
+                            # component is certainly a true drop)
 PERSISTENCE = 3             # consecutive frames >= R_VISIBLE
 MATCH_COST_CAP = 0.75       # max volume+centroid mismatch to link two frames
 FRAME_TOL = 1e-6            # frame-time comparison tolerance
