@@ -366,9 +366,12 @@ def jet_metrics(rows: list[dict]) -> dict:
                 if ok and tt >= t_cross]
         if post:
             out["v_max"], out["t_vmax"] = max(post)
-        # stem radius: first trustworthy frame after the tip clears the slab
+        # stem radius: first trustworthy frame AFTER the crossing whose tip
+        # has cleared the slab (a pre-collapse rim sample could satisfy the
+        # geometric test alone)
         for i, r in enumerate(rows):
-            if (ztip[i] is not None and ztip[i] >= Z0_CLEAR and trusty[i]
+            if (ts[i] > t_cross and ztip[i] is not None
+                    and ztip[i] >= Z0_CLEAR and trusty[i]
                     and valid(r.get("r_jet_z0"))):
                 out["r_jet0"] = r["r_jet_z0"]
                 out["t_rjet0"] = ts[i]

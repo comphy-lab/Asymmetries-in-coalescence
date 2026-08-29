@@ -300,3 +300,25 @@ def test_components_exact_time_replay_superseded(tmp_path):
     assert len(frames) == 1 and len(frames[0]) == 2
     drops = [c for c in frames[0] if not c.is_main]
     assert len(drops) == 1 and abs(drops[0].r_eq - 0.05) < 1e-12
+
+
+def test_pre_collapse_rim_cannot_be_the_stem(tmp_path):
+    """A pre-collapse rim frame with z_tip >= Z0_CLEAR and a trustworthy cap
+    must not be recorded as r_jet0; only post-crossing frames qualify."""
+    rows = [
+        # rim excursion above the clearance BEFORE the collapse
+        {"t": 0.02, "z_tip": +0.06, "u_tip_cap": -0.01, "vol_cap": 0.03,
+         "r_jet_z0": 0.40, "ke": 1, "n_components": 1},
+        {"t": 0.45, "z_tip": -1.00, "u_tip_cap": 2.0, "vol_cap": 0.01,
+         "r_jet_z0": 0.30, "ke": 1, "n_components": 1},
+        {"t": 0.50, "z_tip": -0.01, "u_tip_cap": 8.0, "vol_cap": 1e-4,
+         "r_jet_z0": 0.001, "ke": 1, "n_components": 1},
+        {"t": 0.505, "z_tip": +0.02, "u_tip_cap": 9.0, "vol_cap": 1e-4,
+         "r_jet_z0": 0.002, "ke": 1, "n_components": 1},
+        {"t": 0.515, "z_tip": +0.09, "u_tip_cap": 10.0, "vol_cap": 1e-4,
+         "r_jet_z0": 0.031, "ke": 1, "n_components": 1},
+    ]
+    d = ladder_case(tmp_path, [(0.5, [(1, True, 0.8, -1.0, 0.1)])], rows)
+    m = h.jet_metrics(h.read_jet(d / "jet.log"))
+    assert abs(m["r_jet0"] - 0.031) < 1e-12   # the stem, not the 0.40 rim
+    assert abs(m["t_rjet0"] - 0.515) < 1e-12
