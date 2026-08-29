@@ -76,6 +76,14 @@ Key physics components:
   `.github/scripts/build.sh` and published by `.github/workflows/deploy.yml`.
   Never hand-edit it — change the generator instead.
 
+## Phase convention
+
+`f = 1` is the GAS phase throughout this repository (the code tracks
+bubbles). The `singular-bursting-bubbles` drill solver uses the opposite
+convention (`f = 1` is liquid). Instrumentation ported between the two must
+flip `f` to `1 - f` for every liquid measurement; see the landmine note in
+`simulationCases/burstingBubbleInfiniteRr.c`.
+
 ## Testing
 
 Run tests using Basilisk's testing framework:

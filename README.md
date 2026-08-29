@@ -27,9 +27,9 @@ scripts with that.
 
 ```
 ├── simulationCases/                 Main simulation code
-│   ├── coalescenceBubble.c         Primary simulation (production runs)
-│   ├── coalescenceBubble-tag.c     Extended version with shape tracking
-│   └── burstingBubbleDropMap.c     Drop-map driver: every component + jet history
+│   ├── coalescenceBubble.c         General driver: finite Rr, arbitrary χ
+│   ├── burstingBubbleInfiniteRr.c  Rr→∞ driver, arbitrary χ: foot.dat + every component + jet history
+│   └── coalescenceBubble-tag.c     Shape tracking (swimming-bubbles project)
 ├── src-local/                       Custom Basilisk headers
 │   ├── two-phase-tag.h             Two-phase flow with interface tagging
 │   ├── parse_params.sh             Parameter file parsing library
@@ -52,7 +52,7 @@ scripts with that.
 ├── sweep.params                     Sweep configuration template
 ├── runSweepSnellius.sbatch          SLURM script for Snellius HPC
 ├── runSweepHamilton.sbatch          Legacy sequential MPI runner
-├── runBurstingBubbleDropMap.sbatch  Packed drop-map ladder (Snellius, genoa)
+├── runBurstingBubbleInfiniteRr.sbatch  Packed Rr→∞ ladder (Snellius, genoa)
 ├── runContourHamilton.sbatch        Packed 16-case Hamilton runner
 ├── runContourSnellius.sbatch        Packed 16-case Snellius (genoa) runner
 ├── runContourLocal.sh               Bounded local-systemd/OpenMP runner
@@ -68,8 +68,20 @@ This project contains two simulation files:
 The main simulation file used for all production runs. Outputs:
 - `i dt t ke Xc Vcm` (6 columns)
 
-### coalescenceBubble-tag.c (Optional)
-An extended version with interface tagging for detailed shape tracking. Uses `tag.h` to identify and track only the largest connected bubble region (filters out satellite droplets). Outputs additional geometric measurements:
+### burstingBubbleInfiniteRr.c
+The $R_r \to \infty$ driver for arbitrary wall clearance $\chi$ — near-wall
+half-space ($\chi \ll 1$, `wallClearance` small) through bulk
+($\chi \to \infty$, `wallClearance = -1`). Wraps `coalescenceBubble.c`
+(same solver stack, same argv contract) and adds the jet-foot series
+(`foot.dat`), a per-component census (`components.log`), the jet time series
+(`jet.log`, including the jet radius at the undisturbed-surface station),
+and `DETACH_STOP=0` so every case runs to its horizon. Supersedes the former
+`halfspaceJet.c` and `burstingBubbleDropMap.c`.
+
+### coalescenceBubble-tag.c (different project)
+Belongs to the **swimming-bubbles** project (currently awaiting Detlef's
+review); it lives here for historical reasons only. Interface tagging for
+detailed shape tracking of the largest connected bubble region. Outputs:
 - `i dt t ke Xc Vcm Re ZNp ZSp` (9 columns)
 - `Re`: Equatorial radius at center of mass
 - `ZNp`: North pole position (positive x on axis)

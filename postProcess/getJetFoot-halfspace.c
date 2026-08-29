@@ -18,7 +18,7 @@ qcc -I../src-local -O2 -Wall -disable-dimensions \
 ./getJetFoot-halfspace intermediate/snapshot-0.5000
 ```
 
-The on-the-fly time series from `halfspaceJet.c` (`foot.dat`) is the
+The on-the-fly time series from `burstingBubbleInfiniteRr.c` (`foot.dat`) is the
 primary $K_q$ source; this tool is for post-hoc snapshot checks.
 */
 
