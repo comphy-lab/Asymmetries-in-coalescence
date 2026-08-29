@@ -76,13 +76,18 @@ Key physics components:
   `.github/scripts/build.sh` and published by `.github/workflows/deploy.yml`.
   Never hand-edit it — change the generator instead.
 
-## Phase convention
+## Phase convention (repository standard)
 
-`f = 1` is the GAS phase throughout this repository (the code tracks
-bubbles). The `singular-bursting-bubbles` drill solver uses the opposite
-convention (`f = 1` is liquid). Instrumentation ported between the two must
-flip `f` to `1 - f` for every liquid measurement; see the landmine note in
-`simulationCases/burstingBubbleInfiniteRr.c`.
+`f = 1` is the BUBBLE/GAS phase in every code in this repository — solvers,
+headers and post-processing alike. `comphy-lab/Bursting-Bubble` (and the
+singular-bursting-bubbles project built on it) uses the opposite convention
+(`f = 1` is liquid), so anything ported from there must have its VOF sense
+flipped as part of the port and the flip marked at the port site.
+Ported-and-flipped so far: `src-local/jetFoot.h` (from `getBase.c` /
+`getJetFoot.c`; its former `JETFOOT_F_IS_LIQUID` toggle is removed so the
+convention cannot fork) and the drop-map instrumentation in
+`simulationCases/burstingBubbleInfiniteRr.c`. Every liquid measurement in
+this repository is a `1 - f` measurement.
 
 ## Testing
 

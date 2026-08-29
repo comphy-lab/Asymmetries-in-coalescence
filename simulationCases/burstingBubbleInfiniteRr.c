@@ -63,12 +63,13 @@ read at the same crossing instant (interpolated from `z_tip(t)` offline).
 Before the crossing the slab holds no near-axis interface and the column is
 `nodata`.
 
-**Phase convention (landmine).** In `coalescenceBubble.c`, `f = 1` is the
-GAS phase (the code tracks bubbles), the opposite of the
-`singular-bursting-bubbles` drill solver where `f = 1` is liquid. Every
-liquid measurement below therefore uses `1 - f`. This was caught in the
-first smoke run of this driver: with the drill-solver convention the
-"main component" was the atmosphere, volume 1260.8.
+**Phase convention.** This repository standardises on `f = 1` as the
+bubble/gas phase in every code (see `AGENTS.md`). The drop-map
+instrumentation below was ported from the `comphy-lab/Bursting-Bubble`
+drill-solver wrapper, where `f = 1` is liquid, and the VOF sense was
+flipped as part of that port: every liquid measurement uses `1 - f`. The
+flip was caught by the first smoke run of this driver — with the source
+convention the "main liquid component" was the atmosphere, volume 1260.8.
 
 `classification.status` is owned by the base solver's pinned detector
 (`dropRadiusMin` argv 7, persistence argv 8). `DETACH_STOP=0` freezes the

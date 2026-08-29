@@ -1,13 +1,16 @@
 /**
 # jetFoot.h — outer-surface jet base and base fluxes
 
-Inlined copy of the singular-bursting-bubbles `getBase.c` protocol plus the
-`getJetFoot.c` flux definition, with one VOF inversion for this solver.
+Ported from `comphy-lab/Bursting-Bubble` (`getBase.c` protocol plus the
+`getJetFoot.c` flux definition).
 
-Bursting-bubble (Bo=0) uses $f=1$ as liquid. Drop-injection
-`coalescenceBubble.c` uses $f=1$ as gas (`rho1 = RhoIn`). Set
-`JETFOOT_F_IS_LIQUID` to 1 only if this header is included from a
-liquid-is-$f=1$ code. The default is 0.
+**VOF sense flipped as part of that port.** The source repository uses
+$f=1$ as liquid; this repository standardises on $f=1$ as the bubble/gas
+phase in every code (see `AGENTS.md`), so the liquid/gas tags below are
+inverted relative to the original. There is no compile-time switch: a
+liquid-is-$f=1$ caller does not exist in this repository, and the former
+`JETFOOT_F_IS_LIQUID` toggle was removed so the convention cannot fork
+silently.
 
 Protocol (Vatsal / Bursting-Bubble `getBase.c`):
 
@@ -42,10 +45,6 @@ MPI-safe: size tallies are `Allreduce`'d; the base uses Basilisk
 #ifndef JETFOOT_R_TIP
 #define JETFOOT_R_TIP 0.25
 #endif
-#ifndef JETFOOT_F_IS_LIQUID
-#define JETFOOT_F_IS_LIQUID 0
-#endif
-
 typedef struct {
   double r_base, z_base, q_jet, q_l;
   double r_tip, z_tip;
@@ -79,13 +78,10 @@ static JetFoot measure_jet_foot (void)
 
   scalar dl[], dg[];
   foreach() {
-#if JETFOOT_F_IS_LIQUID
-    dl[] = (f[] > 1. - 1e-4);
-    dg[] = (f[] < 1e-4);
-#else
+    /* repository convention: f = 1 is the bubble/gas phase (flipped from
+       the Bursting-Bubble original as part of the port) */
     dl[] = (f[] < 1e-4);
     dg[] = (f[] > 1. - 1e-4);
-#endif
   }
   int nliq = tag (dl), ngas = tag (dg);
   int MainLiq = jetfoot_largest_tag (dl, nliq);
