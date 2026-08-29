@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fit K_q from a halfspaceJet foot.dat (bursting-bubble log columns).
+"""Fit K_q from a burstingBubbleInfiniteRr (né halfspaceJet) foot.dat (bursting-bubble log columns).
 
 Paper identities (singular-bursting-bubbles Fig. 2 / make_fig2_flux_scalings.py):
 

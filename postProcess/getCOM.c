@@ -3,7 +3,8 @@
 
 Utility for extracting center of mass (COM) position and velocity from
 Basilisk VOF snapshots. Uses axisymmetric volume integration weighted by
-the VOF field `f[]`.
+the VOF field `f[]`. In this repository `f = 1` is the bubble/gas phase,
+so the COM and velocity reported here are the bubble's.
 
 ## Coordinate System
 

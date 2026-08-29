@@ -51,9 +51,12 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
   [drillRegionalOnly] [geometryMode] [wallClearance] [interfaceFloor]
 ```
 
-The χ → 0 half-space jet-foot build is `halfspaceJet.c` (defines
-`ENABLE_JET_FOOT` and `FORCE_GEOMETRY_HALFSPACE`, writes `foot.dat`).
-Finite-$R_r$ Oh$_c$ ladders stay on this file with those flags unset.
+The $R_r \to \infty$ build (any $\chi$, near wall or bulk) is
+`burstingBubbleInfiniteRr.c`: it defines `ENABLE_JET_FOOT`,
+`FORCE_GEOMETRY_HALFSPACE` and `DETACH_STOP=0`, writes `foot.dat`,
+`components.log` and `jet.log`, and supersedes the former `halfspaceJet.c`
+and `burstingBubbleDropMap.c`. Finite-$R_r$ Oh$_c$ ladders stay on this file
+with those flags unset.
 
 ## Solver Stacks
 
@@ -201,6 +204,15 @@ Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #endif
 #ifndef FORCE_GEOMETRY_HALFSPACE
 #define FORCE_GEOMETRY_HALFSPACE 0
+#endif
+/**
+`DETACH_STOP=0` (set by a wrapper such as `burstingBubbleInfiniteRr.c`) keeps
+the run going after the pinned detector confirms its verdict: the first
+classification is written and frozen, and the case runs to its declared
+horizon so the full drop sequence is observed. Default 1 preserves the
+contour-campaign behaviour of stopping at the classified event. */
+#ifndef DETACH_STOP
+#define DETACH_STOP 1
 #endif
 #if ENABLE_JET_FOOT
 #include "jetFoot.h"
@@ -1551,6 +1563,12 @@ event detectDetachedDrop (t = 0.05; t += 2.*tsnap; t <= tmax + tsnap) {
   else
     dropConsecutive = 0;
 
+#if !DETACH_STOP
+  /* The first confirmed verdict is frozen; do not overwrite it with
+     "running" on later checks, and never terminate. */
+  if (dropDetected)
+    return 0;
+#endif
   write_classification_status (-1, "running");
   if (dropConsecutive >= dropPersistence) {
     dropDetected = true;
@@ -1561,11 +1579,15 @@ event detectDetachedDrop (t = 0.05; t += 2.*tsnap; t <= tmax + tsnap) {
     write_classification_status (injected,
       injected ? "ejected_end_pinchoff_drop" : "end_pinchoff_not_ejected");
     fprintf (ferr, "End pinch-off classified at t=%g: id=%d, volume=%g, "
-             "radius=%g, x=%g, ux=%g (threshold=%g, consecutive=%d). "
-             "Stopping.\n", t, injected, largestDetachedVolume,
+             "radius=%g, x=%g, ux=%g (threshold=%g, consecutive=%d). %s\n",
+             t, injected, largestDetachedVolume,
              largestDetachedRadius, detachedAxialPosition,
-             detachedAxialVelocity, dropRadiusMin, dropConsecutive);
+             detachedAxialVelocity, dropRadiusMin, dropConsecutive,
+             DETACH_STOP ? "Stopping."
+                         : "Continuing to the horizon (DETACH_STOP=0).");
+#if DETACH_STOP
     return 1;
+#endif
   }
   return 0;
 }
