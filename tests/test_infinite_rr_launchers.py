@@ -1,4 +1,8 @@
-"""Invariants of the two R_r -> infinity launchers.
+"""Invariants of the three R_r -> infinity launchers.
+
+`runBurstingBubbleInfiniteRr.sbatch` is the production ladder,
+`runInfiniteRrStackProbe.sbatch` the stack/viscosity discriminator, and
+`runInfiniteRrDeltaAnchor.sbatch` the Delta-convergence anchor across stacks.
 
 These are the properties whose violation has already cost this project
 measurements, so they are asserted rather than reviewed:
@@ -9,8 +13,11 @@ measurements, so they are asserted rather than reviewed:
 * the gas-to-liquid viscosity ratio is passed explicitly, because the
   drill-solver drop-map ladder ran 2e-2 against the manuscript's 1e-2 and
   nothing in its argv or run directory recorded the difference;
-* the discriminator's parallel arrays stay aligned, since a silent
-  off-by-one there would attribute a divergence to the wrong solver stack.
+* the discriminator's and anchor's parallel arrays stay aligned, since a
+  silent off-by-one there would attribute a divergence, or a convergence
+  trend, to the wrong solver stack;
+* the anchor varies exactly one thing per comparison -- one Oh, one gas
+  viscosity, stacks and MAXlevel the only free axes.
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 LADDER = ROOT / "runBurstingBubbleInfiniteRr.sbatch"
 PROBE = ROOT / "runInfiniteRrStackProbe.sbatch"
+ANCHOR = ROOT / "runInfiniteRrDeltaAnchor.sbatch"
 SOLVER_ARGS = ROOT / "src-local" / "solver_args.sh"
 
 # The one value AGENTS.md forbids changing without explicit instruction.
@@ -42,6 +50,34 @@ ARGV_GEOMETRY = 22
 ARGV_MURIN = 25
 
 BASILISK_REF = "v2026-07-20"
+
+
+def bash_array_body(source: str, name: str) -> str:
+    """The text between `name=(` and its matching `)`.
+
+    A non-greedy `\\((.*?)\\)` stops at the first close paren, which for
+    STACK_NAMES is the one inside the quoted label
+    `"filtered+conserving (ALLOW_FILTERED_CONSERVING)"` -- silently returning
+    two of four entries. Bash has no such trouble; the test parser did. So
+    scan, tracking quote state.
+    """
+    start = source.index(f"{name}=(") + len(name) + 2
+    depth, quote, index = 1, None, start
+    while index < len(source):
+        char = source[index]
+        if quote:
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return source[start:index]
+        index += 1
+    raise AssertionError(f"unterminated {name}=( ... ) array")
 
 
 def bash_array(source: str, name: str) -> list[str]:
@@ -177,19 +213,31 @@ class LauncherContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.ladder = LADDER.read_text()
         self.probe = PROBE.read_text()
+        self.anchor = ANCHOR.read_text()
 
-    def test_both_launchers_parse(self) -> None:
-        for script in (LADDER, PROBE):
+    def test_every_launcher_parses(self) -> None:
+        for script in (LADDER, PROBE, ANCHOR):
             result = subprocess.run(
                 ["bash", "-n", str(script)], capture_output=True, text=True, check=False
             )
             self.assertEqual(result.returncode, 0, f"{script.name}: {result.stderr}")
 
     def test_detector_radius_is_pinned_not_mesh_derived(self) -> None:
-        for name, source in (("ladder", self.ladder), ("probe", self.probe)):
+        for name, source in (("ladder", self.ladder), ("probe", self.probe),
+                             ("anchor", self.anchor)):
             with self.subTest(launcher=name):
                 self.assertIn(f'"dropRadiusMin={PINNED_DETECTOR}"', source)
                 self.assertNotIn('"dropRadiusMin=0"', source)
+
+    def test_basilisk_ref_mismatch_fails_loudly(self) -> None:
+        """`set -e` on a bare `grep -qx` aborts with no diagnostic at all,
+        making a wrong solver ref indistinguishable from a missing file."""
+        for name, source in (("ladder", self.ladder), ("probe", self.probe),
+                             ("anchor", self.anchor)):
+            with self.subTest(launcher=name):
+                self.assertIn("expected Basilisk ref=", source)
+                self.assertNotRegex(
+                    source, r"^grep -qx \"ref=")
 
     def test_gas_viscosity_ratio_is_passed_explicitly(self) -> None:
         self.assertIn('"MuRin=$MURIN"', self.ladder)
@@ -197,7 +245,8 @@ class LauncherContractTests(unittest.TestCase):
         self.assertIn('"MuRin=$murin"', self.probe)
 
     def test_launchers_record_the_resolved_argv_beside_the_outputs(self) -> None:
-        for name, source in (("ladder", self.ladder), ("probe", self.probe)):
+        for name, source in (("ladder", self.ladder), ("probe", self.probe),
+                             ("anchor", self.anchor)):
             with self.subTest(launcher=name):
                 self.assertIn("case.params", source)
                 self.assertIn("argv=%s", source)
@@ -227,13 +276,12 @@ class LauncherContractTests(unittest.TestCase):
     def probe_columns(self) -> dict[str, list[str]]:
         # STACK_FLAGS holds an empty string for Stack 1, which `split()` drops,
         # so it is read with a quote-aware scan instead.
-        body = re.search(r"STACK_FLAGS=\(([^)]*)\)", self.probe)
-        self.assertIsNotNone(body, "STACK_FLAGS array not found")
         return {
             "CASE_IDS": bash_array(self.probe, "CASE_IDS"),
             "OH_VALUES": bash_array(self.probe, "OH_VALUES"),
             "MURIN_VALUES": bash_array(self.probe, "MURIN_VALUES"),
-            "STACK_FLAGS": re.findall(r'"([^"]*)"', body.group(1)),
+            "STACK_FLAGS": re.findall(
+                r'"([^"]*)"', bash_array_body(self.probe, "STACK_FLAGS")),
         }
 
     def probe_design(self) -> list[tuple[str, str, str, str]]:
@@ -270,14 +318,81 @@ class LauncherContractTests(unittest.TestCase):
         self.assertIn(("0.0280", "2e-2"), pairs)
         self.assertIn(("0.0280", "1e-2"), pairs)
 
+
+    # The Delta-convergence anchor: one Oh, one gas viscosity, three stacks at
+    # a coarse rung plus the fine rung on the production stack. Its whole
+    # value is that only ONE thing varies per comparison, so the design is
+    # pinned rather than described.
+    EXPECTED_ANCHOR_DESIGN = [
+        # case,  ML,   qcc flags,                     recorded solverStack
+        ("6561", "12", "", "filtered+double-projection"),
+        ("6562", "12", "-DUSE_CONSERVING=1", "conserving"),
+        ("6563", "12",
+         "-DUSE_CONSERVING=1 -DFILTERED=1 -DALLOW_FILTERED_CONSERVING=1",
+         "filtered+conserving (ALLOW_FILTERED_CONSERVING)"),
+        ("6564", "14", "", "filtered+double-projection"),
+    ]
+
+    def anchor_design(self) -> list[tuple[str, str, str, str]]:
+        def quoted(name: str) -> list[str]:
+            return re.findall(r'"([^"]*)"', bash_array_body(self.anchor, name))
+
+        cases = bash_array(self.anchor, "CASE_IDS")
+        levels = bash_array(self.anchor, "MAXLEVELS")
+        flags = quoted("STACK_FLAGS")
+        names = quoted("STACK_NAMES")
+        lengths = {"CASE_IDS": len(cases), "MAXLEVELS": len(levels),
+                   "STACK_FLAGS": len(flags), "STACK_NAMES": len(names)}
+        self.assertEqual(len(set(lengths.values())), 1, lengths)
+        return list(zip(cases, levels, flags, names))
+
+    def test_anchor_design_is_exactly_the_intended_experiment(self) -> None:
+        self.assertEqual(self.anchor_design(), self.EXPECTED_ANCHOR_DESIGN)
+
+    def test_anchor_holds_oh_and_viscosity_fixed_across_stacks(self) -> None:
+        """A convergence anchor that also varied Oh would measure nothing."""
+        self.assertIn('OH="${OH:-0.0280}"', self.anchor)
+        self.assertIn('MURIN="${MURIN:-1e-2}"', self.anchor)
+        self.assertIn('"OhOut=$OH"', self.anchor)
+        self.assertIn('"MuRin=$MURIN"', self.anchor)
+        # Exactly one Oh and one MuRin reach the solver, for every case.
+        self.assertNotIn("OH_VALUES=(", self.anchor)
+        self.assertNotIn("MURIN_VALUES=(", self.anchor)
+
+    def test_anchor_spans_a_delta_ratio_of_four(self) -> None:
+        levels = sorted({int(ml) for _, ml, _, _ in self.anchor_design()})
+        self.assertEqual(levels, [12, 14])
+
+    def test_anchor_uses_the_override_for_the_drill_pairing(self) -> None:
+        """The drill stack is reachable only through the explicit override."""
+        drill = [(flags, name) for _, _, flags, name in self.anchor_design()
+                 if "USE_CONSERVING" in flags and "FILTERED" in flags]
+        self.assertEqual(len(drill), 1)
+        flags, name = drill[0]
+        self.assertIn("-DALLOW_FILTERED_CONSERVING=1", flags)
+        # The label must name the override, matching the solver's own banner,
+        # so no such run can later be mistaken for plain `conserving`.
+        self.assertIn("ALLOW_FILTERED_CONSERVING", name)
+
+    def test_anchor_stack_labels_match_their_flags(self) -> None:
+        """STACK_NAMES lands in case.params; a reordering mislabels results."""
+        for case, _, flags, name in self.anchor_design():
+            with self.subTest(case=case):
+                if "USE_CONSERVING" in flags:
+                    self.assertIn("conserving", name)
+                    self.assertEqual("FILTERED" in flags,
+                                     name.startswith("filtered+"))
+                else:
+                    self.assertEqual(name, "filtered+double-projection")
+
     def test_probe_arrays_are_aligned(self) -> None:
         lengths = {name: len(values) for name, values in self.probe_columns().items()}
         self.assertEqual(len(set(lengths.values())), 1, lengths)
         self.assertEqual(next(iter(lengths.values())), 4)
         # STACK_NAMES only labels the summary table, but a mislabelled summary
         # is how a correct experiment gets read backwards.
-        self.assertEqual(len(re.findall(r'"([^"]*)"', re.search(
-            r"STACK_NAMES=\((.*?)\)", self.probe, re.S).group(1))), 4)
+        self.assertEqual(len(re.findall(
+            r'"([^"]*)"', bash_array_body(self.probe, "STACK_NAMES"))), 4)
 
 
 class LauncherExecutionTests(unittest.TestCase):
@@ -407,6 +522,34 @@ class LauncherExecutionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, "a divergence is a result, not a failure")
             self.assertRegex(result.stdout, r"6554.*DIVERGED")
             self.assertRegex(result.stdout, r"6551.*reached horizon")
+
+
+    def test_anchor_reaches_the_solver_with_the_right_level_and_stack(self) -> None:
+        with LauncherHarness(ANCHOR, {"TMAX": "0.60"}) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for case_id, maxlevel, flags, stack in \
+                    LauncherContractTests.EXPECTED_ANCHOR_DESIGN:
+                with self.subTest(case=case_id):
+                    argv = harness.case_argv(case_id)
+                    # One Oh and one gas viscosity across every rung and stack.
+                    self.assertEqual(argv[ARGV_OH], "0.0280")
+                    self.assertEqual(argv[ARGV_MURIN], "1e-2")
+                    self.assertEqual(argv[ARGV_MAXLEVEL], maxlevel)
+                    self.assertEqual(argv[ARGV_DROP_RADIUS_MIN], PINNED_DETECTOR)
+
+                    params = harness.case_params(case_id)
+                    self.assertEqual(params["MAXlevel"], maxlevel)
+                    self.assertEqual(params["qccFlags"], flags)
+                    self.assertEqual(params["solverStack"], stack)
+                    self.assertEqual(params["argv"].split(), argv)
+
+            binaries = {
+                (harness.root / "simulationCases" / case / "solver_binary.txt")
+                .read_text().strip()
+                for case, *_ in LauncherContractTests.EXPECTED_ANCHOR_DESIGN
+            }
+            self.assertEqual(len(binaries), 4, binaries)
 
 
 if __name__ == "__main__":

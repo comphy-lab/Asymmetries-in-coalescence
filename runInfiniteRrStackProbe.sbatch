@@ -116,9 +116,20 @@ BASILISK_ROOT="${BASILISK_ROOT:-${HOME}/basilisk}"
 EXPECTED_BASILISK_REF="${EXPECTED_BASILISK_REF:-v2026-07-20}"
 export BASILISK="${BASILISK_ROOT}/src"
 export PATH="${BASILISK}:${PATH}"
-test -x "${BASILISK}/qcc"
-test -f "${BASILISK_ROOT}/.comphy-lock"
-grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"
+# Fail loudly: `set -e` on a bare `grep -qx` aborts the job with no
+# diagnostic, so a ref mismatch looks identical to a missing file.
+if [[ ! -x "${BASILISK}/qcc" ]]; then
+  echo "ERROR: no qcc at ${BASILISK}/qcc" >&2; exit 1
+fi
+if [[ ! -f "${BASILISK_ROOT}/.comphy-lock" ]]; then
+  echo "ERROR: no ${BASILISK_ROOT}/.comphy-lock; Basilisk install is not ref-locked" >&2
+  exit 1
+fi
+if ! grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"; then
+  echo "ERROR: expected Basilisk ref=${EXPECTED_BASILISK_REF}, lock file has:" >&2
+  grep '^ref=' "${BASILISK_ROOT}/.comphy-lock" >&2 || echo "  (no ref= line)" >&2
+  exit 1
+fi
 
 echo "mode=$MODE tmax=$TMAX MAXlevel=$MAXLEVEL zWall=$ZWALL threads_per_case=$THREADS"
 echo "cases=${CASE_IDS[*]}"
@@ -178,34 +189,54 @@ for index in 0 1 2 3; do
   pids+=("$!")
 done
 
-# A case that dies the way 6326 and 6330 died exits on its own through the ke
-# gate, so this job needs no watchdog: the question it asks is precisely
-# "does it die", and both answers are recorded.
-rc=0
-for pid in "${pids[@]}"; do
-  wait "$pid" || rc=1
+# Two outcomes here are RESULTS, not failures: a divergence through the ke
+# gate (precisely what this job asks about) and the `conserving` case running
+# out of walltime, since it advances with dt pinned ~13x below Stack 1's at
+# this MAXlevel. Everything else must reach Slurm as a failure rather than be
+# swallowed by a blanket `exit 0`.
+worker_rc=()
+for index in 0 1 2 3; do
+  if wait "${pids[$index]}"; then worker_rc[$index]=0; else worker_rc[$index]=$?; fi
 done
 
 echo
 echo "=== discriminator summary ==="
 printf '%-6s %-8s %-7s %-28s %-9s %s\n' case Oh MuRin stack reached verdict
+unexplained=0
 for index in 0 1 2 3; do
   case_id="${CASE_IDS[$index]}"
   d="$ROOT/simulationCases/$case_id"
   last_t="nodata"
   [[ -s "$d/jet.log" ]] && last_t=$(tail -1 "$d/jet.log" | cut -d, -f1)
-  verdict="reached horizon"
-  if grep -q 'kinetic energy blew up' "$d/runner.err" 2>/dev/null; then
-    verdict="DIVERGED (ke gate)"
-  elif [[ "$last_t" == "nodata" ]] || \
-       awk -v t="$last_t" -v h="$TMAX" 'BEGIN {exit !(t < h - 0.02)}'; then
-    verdict="stopped short"
+
+  ke_gate=0
+  grep -q 'kinetic energy blew up' "$d/runner.err" 2>/dev/null && ke_gate=1
+
+  short=0
+  if [[ "$last_t" == "nodata" ]] || \
+     awk -v t="$last_t" -v h="$TMAX" 'BEGIN {exit !(t < h - 0.02)}'; then
+    short=1
   fi
+
+  if (( ke_gate )); then
+    verdict="DIVERGED (ke gate) — a result"
+  elif (( ! short )); then
+    verdict="reached horizon"
+  elif [[ "${STACK_NAMES[$index]}" == *conserving* ]]; then
+    verdict="stopped short at t=$last_t (walltime-permitted: dt-limited stack)"
+  else
+    verdict="STOPPED SHORT with no benign explanation"
+    unexplained=1
+  fi
+
+  if (( worker_rc[index] != 0 && ! ke_gate )); then
+    verdict="$verdict; worker exit ${worker_rc[index]}"
+    unexplained=1
+  fi
+
   printf '%-6s %-8s %-7s %-28s %-9s %s\n' \
     "$case_id" "${OH_VALUES[$index]}" "${MURIN_VALUES[$index]}" \
     "${STACK_NAMES[$index]}" "$last_t" "$verdict"
 done
 
-# The job's own exit code is deliberately not tied to a case diverging: a
-# divergence here is a result, not a failure.
-exit 0
+exit "$unexplained"

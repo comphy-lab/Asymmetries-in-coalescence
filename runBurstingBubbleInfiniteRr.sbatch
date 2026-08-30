@@ -27,11 +27,14 @@
 # The 2026-08-28/29 campaign (jobs 26162496-98, 26165434/35) ran the drill
 # solver `burstingBubble-drillResolution.c`, whose stack is
 # `FILTERED` + `two-phase.h` + `navier-stokes/conserving.h` with a single
-# projection. That pairing is rejected at compile time by this repository's
-# own `coalescenceBubble.c` -- `conserving.h` supplies its own consistent face
-# density, so `FILTERED` is inconsistent with it -- and OPERATIONAL-NOTES.md
-# records `conserving.h` exhausting NITERMAX from MAXlevel 13 upwards. The
-# ladder ran at MAXlevel 13 and lost four of twelve points; the group-D
+# projection. `coalescenceBubble.c` rejects that pairing at compile time as
+# PROJECT POLICY (Basilisk itself compiles it): conserving.h reconstructs
+# u = (q1+q2)/rho(f) with the sharp volume fraction while FILTERED gives the
+# projection and viscous operators smoothed-sf properties -- one momentum
+# balance, two densities -- and no upstream example or test pairs them.
+# Separately, conserving.h at MAXlevel 13 runs with dt pinned ~13x below
+# Stack 1's (measured, case 6554). The ladder ran at MAXlevel 13 and lost
+# four of twelve points; the group-D
 # remediation (drillAMR=0, i.e. full level 13 everywhere) rescued the
 # under-resolved point but reproduced both divergences, which disproves the
 # regional-under-resolution diagnosis and leaves the stack as the cause.
@@ -99,9 +102,20 @@ BASILISK_ROOT="${BASILISK_ROOT:-${HOME}/basilisk}"
 EXPECTED_BASILISK_REF="${EXPECTED_BASILISK_REF:-v2026-07-20}"
 export BASILISK="${BASILISK_ROOT}/src"
 export PATH="${BASILISK}:${PATH}"
-test -x "${BASILISK}/qcc"
-test -f "${BASILISK_ROOT}/.comphy-lock"
-grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"
+# Fail loudly: `set -e` on a bare `grep -qx` aborts the job with no
+# diagnostic, so a ref mismatch looks identical to a missing file.
+if [[ ! -x "${BASILISK}/qcc" ]]; then
+  echo "ERROR: no qcc at ${BASILISK}/qcc" >&2; exit 1
+fi
+if [[ ! -f "${BASILISK_ROOT}/.comphy-lock" ]]; then
+  echo "ERROR: no ${BASILISK_ROOT}/.comphy-lock; Basilisk install is not ref-locked" >&2
+  exit 1
+fi
+if ! grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"; then
+  echo "ERROR: expected Basilisk ref=${EXPECTED_BASILISK_REF}, lock file has:" >&2
+  grep '^ref=' "${BASILISK_ROOT}/.comphy-lock" >&2 || echo "  (no ref= line)" >&2
+  exit 1
+fi
 
 echo "mode=$MODE group=$GROUP tmax=$TMAX snapshotInterval=$SNAPINT MAXlevel=$MAXLEVEL zWall=$ZWALL wallClearance=$WALLCLEARANCE MuRin=$MURIN threads_per_case=$THREADS"
 echo "cases=${CASE_IDS[*]} oh=${OH_VALUES[*]}"
