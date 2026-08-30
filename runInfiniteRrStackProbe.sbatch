@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --cpus-per-task=48
-#SBATCH --time=12:00:00
+#SBATCH --time=36:00:00
 #SBATCH --output=slurm-stackprobe-%j.out
 #SBATCH --error=slurm-stackprobe-%j.err
 
@@ -45,8 +45,12 @@
 #   2. the gas-to-liquid viscosity ratio -- 2e-2 on the drill ladder against
 #      the 1e-2 the manuscript states and this solver defaults to.
 #
-# Four cases, one node, horizon t=0.75 (past the death window at t~0.49-0.51
-# and past the first pinch at t~0.61):
+# Four cases, one node, horizon t=0.75. That clears the death window at
+# t ~ 0.49-0.51 and the first pinch at t ~ 0.61, so the job answers both
+# "does it survive" and "does it pinch at the same time". Measured on the
+# running crossdriver group B, 48 threads per case advance ~0.043 t/hour at
+# this Oh and MAXlevel, so t=0.75 is about 17 h; the 36 h walltime is the
+# margin, not the estimate.
 #
 #   6551  Oh=0.0325  Stack 1   MuRin=2e-2   the decisive case: identical
 #                                           physics to the dead 6330, only
