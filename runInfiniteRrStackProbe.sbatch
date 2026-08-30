@@ -132,7 +132,9 @@ for index in 0 1 2 3; do
   murin="${MURIN_VALUES[$index]}"
   flags="${STACK_FLAGS[$index]}"
   stack="${STACK_NAMES[$index]}"
-  binary="burstingBubbleInfiniteRr-$case_id"
+  # Per case *and* per job: the case ids are unique across the design,
+  # but two probe jobs sharing a staging root would still collide.
+  binary="burstingBubbleInfiniteRr-$case_id-${SLURM_JOB_ID:-$$}"
   case_dir="$ROOT/simulationCases/$case_id"
 
   # One binary per case: the stacks are mutually exclusive at compile time,

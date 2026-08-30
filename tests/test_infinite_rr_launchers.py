@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -135,7 +136,7 @@ class LauncherHarness:
     def __exit__(self, *exception: object) -> None:
         self._directory.cleanup()
 
-    def run(self) -> subprocess.CompletedProcess[str]:
+    def run(self, **overrides: str) -> subprocess.CompletedProcess[str]:
         environment = dict(os.environ)
         environment.update(
             {
@@ -147,7 +148,8 @@ class LauncherHarness:
             }
         )
         environment.update(self.environment)
-        environment["LAUNCHER_TEST_TMAX"] = self.environment.get("TMAX", "1.5")
+        environment.update(overrides)
+        environment["LAUNCHER_TEST_TMAX"] = environment.get("TMAX", "1.5")
         return subprocess.run(
             ["bash", str(self.root / self.launcher.name)],
             capture_output=True,
@@ -348,6 +350,42 @@ class LauncherExecutionTests(unittest.TestCase):
                 for case, *_ in LauncherContractTests.EXPECTED_PROBE_DESIGN
             }
             self.assertEqual(len(binaries), 4, binaries)
+
+    def test_concurrent_groups_do_not_share_a_build_output(self) -> None:
+        """Groups share one staging root, so a fixed binary name races.
+
+        Submitted together on 2026-08-30, group C died 32 s in with
+        `cp: cannot open 'burstingBubbleInfiniteRr' for reading` because
+        another group's `qcc` was rewriting the file it was copying.
+        """
+        groups = (("A", "6501", "111"), ("C", "6509", "222"))
+        with LauncherHarness(LADDER, {"TMAX": "1.5"}) as harness:
+            # Both launchers run at once, against one staging root, which is
+            # the situation that actually broke. With a per-job build output
+            # the two share no mutable file, so this stays deterministic.
+            with ThreadPoolExecutor(max_workers=len(groups)) as pool:
+                futures = {
+                    group: pool.submit(harness.run, GROUP=group, SLURM_JOB_ID=job)
+                    for group, _, job in groups
+                }
+                results = {group: future.result() for group, future in futures.items()}
+
+            names: dict[str, str] = {}
+            for group, case, _ in groups:
+                result = results[group]
+                self.assertEqual(
+                    result.returncode, 0,
+                    f"group {group}:\n{result.stdout}{result.stderr}",
+                )
+                names[group] = (
+                    harness.root / "simulationCases" / case / "solver_binary.txt"
+                ).read_text().strip()
+
+            self.assertNotEqual(
+                names["A"], names["C"], f"both groups built into {names['A']}"
+            )
+            for group, name in names.items():
+                self.assertIn(group, name)
 
     def test_probe_summary_reports_a_divergence_rather_than_failing(self) -> None:
         """A case dying the way 6326 and 6330 died is this job's result."""

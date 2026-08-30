@@ -107,8 +107,15 @@ echo "mode=$MODE group=$GROUP tmax=$TMAX snapshotInterval=$SNAPINT MAXlevel=$MAX
 echo "cases=${CASE_IDS[*]} oh=${OH_VALUES[*]}"
 
 cd simulationCases
+
+# The build output is named per job. Groups share one staging root, so two
+# groups submitted together compile the same source into the same directory:
+# with a fixed name, one job's `qcc` truncates the file the other job's `cp`
+# is reading, and the second dies with "cannot open ... for reading". That is
+# exactly how group C failed 32 s in on 2026-08-30 while A and F survived.
+BINARY="burstingBubbleInfiniteRr-${GROUP}-${SLURM_JOB_ID:-$$}"
 qcc -I. -I../src-local -O2 -Wall -disable-dimensions -fopenmp \
-  burstingBubbleInfiniteRr.c -o burstingBubbleInfiniteRr -lm
+  burstingBubbleInfiniteRr.c -o "$BINARY" -lm
 
 pids=()
 for index in 0 1 2 3; do
@@ -116,7 +123,7 @@ for index in 0 1 2 3; do
   oh="${OH_VALUES[$index]}"
   case_dir="$ROOT/simulationCases/$case_id"
   mkdir -p "$case_dir/intermediate"
-  cp burstingBubbleInfiniteRr "$case_dir/"
+  cp "$BINARY" "$case_dir/"
   ln -sfn "$ROOT/simulationCases/DataFiles" "$case_dir/DataFiles"
 
   # Build argv 1..25 through the canonical contract in
@@ -150,7 +157,7 @@ for index in 0 1 2 3; do
     export OMP_PROC_BIND=close
     export OMP_PLACES=cores
     srun --exclusive --exact -N1 -n1 -c "$THREADS" --cpu-bind=cores \
-      ./burstingBubbleInfiniteRr "${solver_args[@]}" \
+      "./$BINARY" "${solver_args[@]}" \
         > runner.out 2> runner.err &
     echo $! > .srun.pid
     wait $!
@@ -186,7 +193,7 @@ watchdog() {
     pid=$(cat "$dir/.srun.pid" 2>/dev/null) || true
     [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null || return 0
     tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null \
-      | grep -q 'burstingBubbleInfiniteRr' || return 0
+      | grep -q -- "$BINARY" || return 0
     row=$(grep -E '^[0-9]+ ' "$dir/log" 2>/dev/null | tail -1) || continue
     [[ -n "$row" ]] || continue
     t=$(awk '{print $3}' <<< "$row")
