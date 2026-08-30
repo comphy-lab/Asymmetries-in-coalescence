@@ -160,10 +160,33 @@ Last updated: Jan 2026
 Reject every invalid stack combination before anything is included. These must
 precede the `FILTERED` definition below, which is part of Stack 1 itself. */
 #if defined(USE_CONSERVING) && defined(DOUBLE_PROJECTION)
-#error "USE_CONSERVING and DOUBLE_PROJECTION are mutually exclusive: conserving.h sets stokes=true and advects momentum in the vof event, so double-projection's Af would omit the advective update. Pick one stack."
+/**
+Source-verified inconsistency, not a style rule: `centered.h` declares the
+`vof` event (where `conserving.h` advects momentum under `stokes = true`)
+BEFORE `advection_term`, where `double-projection.h` takes its baseline
+snapshot `Af = -fm*face_value(u,0)`. The momentum advected in `vof` therefore
+never enters the update that the second projection acts on, and the centred
+pressure gradient `g` is built from a pressure that is missing the advective
+term entirely. */
+#error "USE_CONSERVING and DOUBLE_PROJECTION are mutually exclusive: conserving.h advects momentum in the vof event, which runs before double-projection.h snapshots Af in advection_term, so the second pressure omits the advective update. Pick one stack."
 #endif
-#if defined(USE_CONSERVING) && defined(FILTERED)
-#error "USE_CONSERVING excludes FILTERED: conserving.h supplies its own consistent face density. Do not define FILTERED for the conserving stack."
+#if defined(USE_CONSERVING) && defined(FILTERED) && !defined(ALLOW_FILTERED_CONSERVING)
+/**
+Project policy, not an upstream rule -- Basilisk compiles this pairing and
+`coalescenceBubble-tag.c` (swimming-bubbles) uses it. The objection is a
+density inconsistency read from the source: `conserving.h` reconstructs the
+velocity as `u = (q1+q2)/rho(f)` with the SHARP volume fraction, while
+`FILTERED` hands the projection and viscous operators face properties built
+from the vertex-smoothed `sf`. One momentum balance, two densities. No
+upstream example or test pairs them (FILTERED: rising.c, oscillation.c;
+conserving: tangaroa.c, axi_rising_bubble.c, rt.c, stokes-ns.c, large-ns.c;
+overlap: none, checked v2026-07-20). Empirically, the drill solver -- exactly
+this pairing, single projection -- diverged at the capillary-focusing event
+on 2 of 16 ladder rungs at MAXlevel 13 with the neck 33-130 cells wide, and
+measured 1.55-1.77x lower peak jet speed than Stack 1 at matched Oh and
+Delta. Define ALLOW_FILTERED_CONSERVING to run it anyway as a controlled
+experiment; the banner will carry the stack name either way. */
+#error "USE_CONSERVING + FILTERED mixes a sharp-density momentum reconstruction with smoothed-density projection/viscous operators; this pairing diverged on 2/16 ladder rungs at ML13. Define ALLOW_FILTERED_CONSERVING to run it as a controlled experiment."
 #endif
 #if defined(USE_CONSERVING) && defined(SINGLE_PROJECTION)
 #error "USE_CONSERVING already runs a single projection: conserving.h never includes double-projection.h. Do not combine it with SINGLE_PROJECTION; pick one stack."
@@ -193,7 +216,14 @@ Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #endif
 #include "tension.h"
 #ifdef USE_CONSERVING
+/* The experimental override pairing must be visible in every banner and
+   case.params: a run of the forbidden-by-default stack that identified
+   itself as plain "conserving" would poison any later comparison. */
+#ifdef FILTERED
+#define SOLVER_STACK "filtered+conserving (ALLOW_FILTERED_CONSERVING)"
+#else
 #define SOLVER_STACK "conserving"
+#endif
 #define DUAL_PROJECTION 0
 #elif defined(SINGLE_PROJECTION)
 #define SOLVER_STACK "filtered+single-projection"

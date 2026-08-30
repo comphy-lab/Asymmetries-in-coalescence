@@ -101,14 +101,46 @@ and enforces the exclusions with `#error`:
 | `-DUSE_CONSERVING=1` | 2: `navier-stokes/conserving.h`, no `FILTERED` |
 
 Stack 1 is the default and the production choice for asymmetric coalescence.
-`FILTERED` combined with `conserving.h` is rejected at compile time:
-`conserving.h` supplies its own consistent face density, so the two are
-inconsistent. Any solver imported from another project must be checked against
-this table before its results are put on the same axes as this repository's —
-the drill solver `burstingBubble-drillResolution.c`, used for the 2026-08
-bulk drop-map ladder, is `FILTERED` + `conserving.h` with a single projection,
-and lost four of twelve ladder points to divergences that Stack 1 does not
-reproduce at the same Ohnesorge number and the same cell size.
+
+Two exclusions, with different standing (verified against Basilisk
+`v2026-07-20` source, 2026-08-30):
+
+- **`conserving.h` + `double-projection.h` is inconsistent by construction.**
+  `centered.h` declares the `vof` event (where `conserving.h` advects
+  momentum under `stokes = true`) before `advection_term`, where
+  `double-projection.h` snapshots its baseline `Af`. The advective update
+  therefore never enters the second projection, and the centred pressure
+  gradient is built from a pressure missing that term.
+- **`FILTERED` + `conserving.h` is a project policy, not an upstream rule.**
+  Basilisk compiles it, and `coalescenceBubble-tag.c` (swimming-bubbles)
+  uses it. The objection: `conserving.h` reconstructs
+  `u = (q1+q2)/rho(f)` with the sharp volume fraction, while `FILTERED`
+  hands the projection and viscous operators properties built from the
+  smoothed `sf` — one momentum balance, two densities. No upstream example
+  or test pairs them. Empirically here, the drill solver (exactly this
+  pairing, single projection) diverged at the capillary-focusing event on
+  2 of 16 ladder rungs at MAXlevel 13 and measured 1.55–1.77× lower peak
+  jet speed than Stack 1 at matched Oh and Δ.
+  `-DALLOW_FILTERED_CONSERVING` overrides the guard for controlled
+  experiments; the banner then reports
+  `filtered+conserving (ALLOW_FILTERED_CONSERVING)`.
+
+For calibration: *no* composite stack here is upstream-endorsed for two-phase
+work — upstream pairs `FILTERED` only with plain `two-phase.h`
+(`rising.c`, `oscillation.c`), `conserving.h` only unfiltered
+(`axi_rising_bubble.c`, `rt.c`, `tangaroa.c`), and `double-projection.h`
+only single-phase (`starting.c`). Stack choices are settled by matched-Δ
+cross-checks and Δ-convergence, not by appeal to upstream authority.
+
+Any solver imported from another project must be checked against the table
+above before its results are put on the same axes as this repository's — the
+drill solver `burstingBubble-drillResolution.c`, used for the 2026-08 bulk
+drop-map ladder, is `FILTERED` + `conserving.h` with a single projection.
+
+Cost note (measured 2026-08-30, case 6554): pure `conserving.h` at
+MAXlevel 13 runs with dt pinned ≈13× below Stack 1's at the same cell size
+and settings — timestep-limited, not NITERMAX-limited; no convergence
+warnings. A conserving ladder at this resolution costs ~13× Stack 1's.
 
 ## Gas-to-liquid viscosity ratio
 
