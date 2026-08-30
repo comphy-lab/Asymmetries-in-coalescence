@@ -65,6 +65,7 @@ COALESCENCE_SOLVER_ARG_KEYS=(
     geometryMode        # argv 23
     wallClearance       # argv 24
     interfaceFloor      # argv 25
+    MuRin               # argv 26
 )
 
 # Compiled defaults for argv 7..25. A key absent from this map is required:
@@ -90,6 +91,11 @@ declare -gA COALESCENCE_SOLVER_ARG_DEFAULTS=(
     [geometryMode]="finite"
     [wallClearance]="-1"
     [interfaceFloor]="1"
+    # Gas-to-liquid viscosity ratio, i.e. Oh_gas/Oh_liquid. 1e-2 is the value
+    # the manuscript states. Pass it explicitly on any campaign that will be
+    # compared against another: the drill-solver drop-map ladder ran 2e-2 and
+    # nothing in its argv made that visible.
+    [MuRin]="1e-2"
 )
 
 # Fallbacks the sweep launchers have always applied to the six required

@@ -89,6 +89,36 @@ convention cannot fork) and the drop-map instrumentation in
 `simulationCases/burstingBubbleInfiniteRr.c`. Every liquid measurement in
 this repository is a `1 - f` measurement.
 
+## Solver stack (repository standard)
+
+`simulationCases/coalescenceBubble.c` offers three mutually exclusive stacks
+and enforces the exclusions with `#error`:
+
+| flags | stack |
+|---|---|
+| (none) | 1: `FILTERED` property averaging + `navier-stokes/double-projection.h` |
+| `-DSINGLE_PROJECTION=1` | 1S: `FILTERED`, single projection |
+| `-DUSE_CONSERVING=1` | 2: `navier-stokes/conserving.h`, no `FILTERED` |
+
+Stack 1 is the default and the production choice for asymmetric coalescence.
+`FILTERED` combined with `conserving.h` is rejected at compile time:
+`conserving.h` supplies its own consistent face density, so the two are
+inconsistent. Any solver imported from another project must be checked against
+this table before its results are put on the same axes as this repository's —
+the drill solver `burstingBubble-drillResolution.c`, used for the 2026-08
+bulk drop-map ladder, is `FILTERED` + `conserving.h` with a single projection,
+and lost four of twelve ladder points to divergences that Stack 1 does not
+reproduce at the same Ohnesorge number and the same cell size.
+
+## Gas-to-liquid viscosity ratio
+
+`MuRin` (equivalently $Oh_g/Oh_l$) is **argv 26**, defaulting to `1e-2`, the
+value the manuscript states. It was a compiled constant until 2026-08-30,
+which is how the drop-map ladder came to run at `2e-2` — through a separate
+parameter file — without the difference appearing anywhere in the argv, the
+run directory or the logs. Pass it explicitly on any campaign whose points
+will be plotted against another campaign's.
+
 ## Testing
 
 Run tests using Basilisk's testing framework:

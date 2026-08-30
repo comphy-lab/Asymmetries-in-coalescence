@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -16,12 +17,19 @@ RUNNER = ROOT / "BayesianWorkflow" / "run_one_contour_case.sh"
 # `OhOut = atof(argv[1]);` and `snprintf (geometryMode, sizeof(geometryMode), "%s", argv[23]);`
 DIRECT_ARGV = re.compile(r"^\s*(\w+)\s*=\s*ato[fi]\s*\(argv\[(\d+)\]\)")
 SNPRINTF_ARGV = re.compile(r"^\s*snprintf\s*\(\s*(\w+),.*argv\[(\d+)\]")
+# `if (argc > 26 && !parse_positive_double (argv[26], "MuRin", &MuRin))` --
+# the strictly validated form used where a bad value would otherwise be silent.
+VALIDATED_ARGV = re.compile(r"parse_\w+\s*\(\s*argv\[(\d+)\]\s*,\s*\"(\w+)\"")
 
 
 def solver_argv_order() -> list[str]:
     """Read the solver's own argv assignments as the authoritative order."""
     found: dict[int, str] = {}
     for line in SOLVER.read_text().splitlines():
+        validated = VALIDATED_ARGV.search(line)
+        if validated:
+            found[int(validated.group(1))] = validated.group(2)
+            continue
         match = DIRECT_ARGV.match(line) or SNPRINTF_ARGV.match(line)
         if match:
             found[int(match.group(2))] = match.group(1)
@@ -46,6 +54,17 @@ class SolverArgumentContractTests(unittest.TestCase):
         """The shared contract is the reason four launchers drifted out of date."""
         self.assertEqual(self.library_keys(), solver_argv_order())
 
+    def test_the_viscosity_ratio_uses_the_strict_parser(self) -> None:
+        """`StrictNumericParserTests` shows the parser rejects bad input; this
+        shows argv 26 actually goes through it and not through `atof`."""
+        code = re.sub(r"/\*.*?\*/|//[^\n]*", "", SOLVER.read_text(), flags=re.DOTALL)
+        self.assertRegex(
+            code,
+            r'\bparse_positive_double\s*\(\s*argv\[26\]\s*,\s*"MuRin"\s*,\s*&MuRin\s*\)',
+        )
+        self.assertNotRegex(code, r"\bMuRin\s*=\s*atof\b")
+
+
     def test_builds_every_argument_from_a_parameter_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             params = Path(temporary) / "case.params"
@@ -60,7 +79,7 @@ class SolverArgumentContractTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         count, oh, tmax, geometry, floor = result.stdout.split()
-        self.assertEqual(count, "25")
+        self.assertEqual(count, "26")
         self.assertEqual(oh, "0.03")
         self.assertEqual(tmax, "1.0")
         # Unset keys fall back to the solver's own compiled defaults.
@@ -207,17 +226,21 @@ class ContourRunnerTests(unittest.TestCase):
         )
         return result, case_dir
 
-    def test_forwards_all_twenty_five_arguments(self) -> None:
+    def test_forwards_all_twenty_six_arguments(self) -> None:
         result, case_dir = self.run_case(dict(self.PARAMS))
         self.assertEqual(result.returncode, 0, result.stderr)
         recorded = (case_dir / "argv.txt").read_text().split()
-        self.assertEqual(recorded[0], "25")
+        self.assertEqual(recorded[0], "26")
         argv = recorded[1:]
         self.assertEqual(argv[22], "finite")
         self.assertEqual(argv[23], "0.027")
         # argv 25 is absent from older case tables and defaults to the
         # solver's compiled value.
         self.assertEqual(argv[24], "1")
+        # argv 26 likewise. Its default is the gas-to-liquid viscosity ratio
+        # the manuscript states; the drill-solver ladder ran 2e-2 with nothing
+        # in argv to show it, which is why the value is passed at all.
+        self.assertEqual(argv[25], "1e-2")
 
     def test_honours_an_explicit_interface_floor(self) -> None:
         params = dict(self.PARAMS)
@@ -226,6 +249,16 @@ class ContourRunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         argv = (case_dir / "argv.txt").read_text().split()[1:]
         self.assertEqual(argv[24], "0")
+
+    def test_honours_an_explicit_gas_viscosity_ratio(self) -> None:
+        """The default alone would pass even if the key were never wired up."""
+        params = dict(self.PARAMS)
+        params["MuRin"] = "2e-2"
+        result, case_dir = self.run_case(params)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recorded = (case_dir / "argv.txt").read_text().split()
+        self.assertEqual(recorded[0], "26")
+        self.assertEqual(recorded[1:][25], "2e-2")
 
     def test_rejects_a_truncated_case_table(self) -> None:
         params = dict(self.PARAMS)
@@ -237,3 +270,104 @@ class ContourRunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StrictNumericParserTests(unittest.TestCase):
+    """Exercise `parse_positive_double` itself.
+
+    `atof` would accept `1e-2x` as 0.01 and `1e9999` as an infinity that passes
+    an ordinary positivity test. Every other solver argument shows a wrong
+    value immediately -- in the banner, the domain size or the first snapshot.
+    A wrong property ratio does not: the run looks entirely normal and simply
+    answers a different question, which is how the drop-map ladder came to sit
+    at a gas viscosity the manuscript never states. So the parser is compiled
+    and run rather than pattern-matched.
+
+    The function is plain C, so it is lifted out of the Basilisk source and
+    built with the system compiler; `ferr` is Basilisk's stderr alias and is
+    stubbed.
+    """
+
+    HARNESS = """
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <math.h>
+#include <stdbool.h>
+static FILE * ferr;
+%s
+int main (int argc, char ** argv) {
+  ferr = stderr;
+  double value = -12345.;
+  bool ok = parse_positive_double (argc > 1 ? argv[1] : NULL, "MuRin", &value);
+  printf ("%%d %%.17g\\n", (int) ok, value);
+  return ok ? 0 : 1;
+}
+"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        compiler = shutil.which("cc") or shutil.which("gcc")
+        if compiler is None:
+            raise unittest.SkipTest("no C compiler available")
+
+        source = SOLVER.read_text()
+        start = source.index("static bool parse_positive_double")
+        end = source.index("\n}\n", start) + len("\n}\n")
+        function = source[start:end]
+
+        cls._directory = tempfile.TemporaryDirectory()
+        root = Path(cls._directory.name)
+        (root / "harness.c").write_text(cls.HARNESS % function)
+        cls.binary = root / "harness"
+        build = subprocess.run(
+            [compiler, "-std=c11", "-Wall", "-Werror", str(root / "harness.c"),
+             "-o", str(cls.binary), "-lm"],
+            capture_output=True, text=True, check=False,
+        )
+        if build.returncode != 0:
+            raise AssertionError(f"harness did not build:\n{build.stderr}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._directory.cleanup()
+
+    def parse(self, text: str | None) -> subprocess.CompletedProcess[str]:
+        command = [str(self.binary)] + ([] if text is None else [text])
+        return subprocess.run(command, capture_output=True, text=True, check=False)
+
+    def test_accepts_well_formed_positive_values(self) -> None:
+        for text, expected in (("2e-2", 0.02), ("1e-2", 0.01), ("0.018", 0.018)):
+            with self.subTest(text=text):
+                result = self.parse(text)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                accepted, value = result.stdout.split()
+                self.assertEqual(accepted, "1")
+                self.assertAlmostEqual(float(value), expected, places=15)
+
+    def test_rejects_values_atof_would_have_swallowed(self) -> None:
+        cases = {
+            "1e-2x": "is not a number",     # atof returns 0.01
+            "abc": "is not a number",       # atof returns 0
+            "": "empty argument",           # atof returns 0
+            "1e9999": "is not a finite number",  # atof returns +inf, which is > 0
+            "nan": "is not a finite number",      # and NaN fails every comparison
+            "1e-9999": "is out of range",         # underflows to a denormal or 0
+            "-1": "must be strictly positive",
+            "0": "must be strictly positive",
+        }
+        for text, message in cases.items():
+            with self.subTest(text=text):
+                result = self.parse(text)
+                self.assertNotEqual(result.returncode, 0, f"{text!r} was accepted")
+                self.assertIn(message, result.stderr)
+                # A rejected parse must leave the caller's value untouched, so
+                # a compiled default survives a bad argument rather than being
+                # half-overwritten.
+                self.assertEqual(result.stdout.split(), ["0", "-12345"])
+
+    def test_rejects_a_missing_argument(self) -> None:
+        result = self.parse(None)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("empty argument", result.stderr)

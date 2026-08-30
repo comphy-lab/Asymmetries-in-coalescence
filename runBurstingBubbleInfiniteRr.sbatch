@@ -22,10 +22,25 @@
 # the drill ceiling silently released to level 8 in the Oh=0.0100 case and
 # regionally capped the neck in the two diverged cases.
 #
-# NOTE: the campaign of 2026-08-28/29 (jobs 26162496-98, 26165434/35) ran the
-# drill-solver drop-map driver from its staged bundle; this launcher is for
-# subsequent ladders. Cross-driver consistency at matched Delta is a required
-# check before mixing points from the two drivers on one curve.
+# WHY THIS LAUNCHER SUPERSEDES THE DRILL-SOLVER LADDER (2026-08-30)
+#
+# The 2026-08-28/29 campaign (jobs 26162496-98, 26165434/35) ran the drill
+# solver `burstingBubble-drillResolution.c`, whose stack is
+# `FILTERED` + `two-phase.h` + `navier-stokes/conserving.h` with a single
+# projection. That pairing is rejected at compile time by this repository's
+# own `coalescenceBubble.c` -- `conserving.h` supplies its own consistent face
+# density, so `FILTERED` is inconsistent with it -- and OPERATIONAL-NOTES.md
+# records `conserving.h` exhausting NITERMAX from MAXlevel 13 upwards. The
+# ladder ran at MAXlevel 13 and lost four of twelve points; the group-D
+# remediation (drillAMR=0, i.e. full level 13 everywhere) rescued the
+# under-resolved point but reproduced both divergences, which disproves the
+# regional-under-resolution diagnosis and leaves the stack as the cause.
+# Group B of this launcher crossed the same Oh at the same Delta on Stack 1
+# without incident, so the whole ladder is re-measured here.
+#
+# The drill ladder also ran a gas-to-liquid viscosity ratio of 2e-2 through
+# its own parameter file, against the 1e-2 the manuscript states. MuRin is now
+# argv 26 so the value is explicit in argv and in `case.params`.
 #
 # Four cases x 48 threads = 192 CPUs = one full genoa node per group.
 # MODE=preflight runs the same quartet to a short horizon first.
@@ -37,17 +52,22 @@ GROUP="${GROUP:-A}"
 MAXLEVEL="${MAXLEVEL:-13}"
 ZWALL="${ZWALL:-4.0}"          # Ldomain = min(zWall+6, 16) = 10 -> matched Delta
 WALLCLEARANCE="${WALLCLEARANCE:--1}"  # -1 = bulk (far from wall); chi<<1 passes e.g. 0.027
+MURIN="${MURIN:-1e-2}"         # Oh_gas/Oh_liquid; 1e-2 is the manuscript value
 THREADS="${SLURM_CPUS_PER_TASK:-48}"
 
 case "$GROUP" in
   A) CASE_IDS=(6501 6502 6503 6504); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
   B) CASE_IDS=(6505 6506 6507 6508); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
   C) CASE_IDS=(6509 6510 6511 6512); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
+  # F closes the gap between C's 0.0333 and 0.0365, where the forward-injection
+  # boundary Oh_c^(U) sits. The drill-solver bracket (0.0345, 0.0355] was
+  # measured on the superseded stack and at MuRin=2e-2, so it is re-measured
+  # rather than extended.
+  F) CASE_IDS=(6513 6514 6515 6516); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
   # E is reserved for the refinement quartet around the measured turning
-  # point; fill the Oh values in once groups A-D of the drill-solver ladder
-  # have located it.
+  # point; fill the Oh values in once the ladder above has located it.
   E) CASE_IDS=(6521 6522 6523 6524); OH_VALUES=("${OH_E1:?set OH_E1..OH_E4}" "${OH_E2:?}" "${OH_E3:?}" "${OH_E4:?}") ;;
-  *) echo "ERROR: GROUP must be A, B, C or E" >&2; exit 2 ;;
+  *) echo "ERROR: GROUP must be A, B, C, E or F" >&2; exit 2 ;;
 esac
 
 case "$MODE" in
@@ -83,7 +103,7 @@ test -x "${BASILISK}/qcc"
 test -f "${BASILISK_ROOT}/.comphy-lock"
 grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"
 
-echo "mode=$MODE group=$GROUP tmax=$TMAX snapshotInterval=$SNAPINT MAXlevel=$MAXLEVEL zWall=$ZWALL wallClearance=$WALLCLEARANCE threads_per_case=$THREADS"
+echo "mode=$MODE group=$GROUP tmax=$TMAX snapshotInterval=$SNAPINT MAXlevel=$MAXLEVEL zWall=$ZWALL wallClearance=$WALLCLEARANCE MuRin=$MURIN threads_per_case=$THREADS"
 echo "cases=${CASE_IDS[*]} oh=${OH_VALUES[*]}"
 
 cd simulationCases
@@ -110,8 +130,19 @@ for index in 0 1 2 3; do
     "dropRadiusMin=0.021005127" "dropPersistence=3" \
     "snapshotInterval=$SNAPINT" "drillAMR=0" \
     "geometryMode=halfspace" "wallClearance=$WALLCLEARANCE" \
-    "interfaceFloor=1"
+    "interfaceFloor=1" "MuRin=$MURIN"
   solver_args=("${COALESCENCE_SOLVER_ARGS[@]}")
+
+  # Record the resolved argv beside the outputs. The drill ladder's gas
+  # viscosity differed from the manuscript's and nothing in the run directory
+  # said so; this file is the fix.
+  {
+    printf 'CaseNo=%s\nOh=%s\nMuRin=%s\nMAXlevel=%s\ntmax=%s\nzWall=%s\n' \
+      "$case_id" "$oh" "$MURIN" "$MAXLEVEL" "$TMAX" "$ZWALL"
+    printf 'drillAMR=0\ngeometryMode=halfspace\nwallClearance=%s\n' "$WALLCLEARANCE"
+    printf 'dropRadiusMin=0.021005127\ndropPersistence=3\nsnapshotInterval=%s\n' "$SNAPINT"
+    printf 'solverStack=filtered+double-projection\nargv=%s\n' "${solver_args[*]}"
+  } > "$case_dir/case.params"
 
   (
     cd "$case_dir"
@@ -128,6 +159,22 @@ for index in 0 1 2 3; do
   pids+=("$!")
 done
 
+# Sleep for $2 seconds, but wake as soon as the case exits. A plain
+# `sleep 600` inside a backgrounded shell function cannot be interrupted --
+# bash defers the signal until the foreground `sleep` returns -- so the
+# watchdogs would hold the job (and its stdout) open for up to ten minutes
+# after the last case finished.
+watchdog_nap() {
+  local dir="$1" remaining="$2" chunk
+  while (( remaining > 0 )); do
+    [[ -e "$dir/.srun.pid" ]] || return 1
+    chunk=$(( remaining < 15 ? remaining : 15 ))
+    sleep "$chunk"
+    remaining=$(( remaining - chunk ))
+  done
+  return 0
+}
+
 # dt/progress watchdog: terminate a case only when t is unchanged AND
 # dt < 1e-9 on three consecutive samples ten minutes apart. A converging run
 # advances t every step and cannot trip this. The log's columns are
@@ -135,7 +182,7 @@ done
 watchdog() {
   local dir="$1" last_t="" stalls=0 row t dt pid
   while :; do
-    sleep 600
+    watchdog_nap "$dir" 600 || return 0
     pid=$(cat "$dir/.srun.pid" 2>/dev/null) || true
     [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null || return 0
     tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null \

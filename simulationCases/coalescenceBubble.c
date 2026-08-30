@@ -124,13 +124,21 @@ Stack 1. It is rejected when combined with `-DUSE_CONSERVING` or
   placement. Use `0.027` to match the finite-map `zWall=0.05` clearance.
 - `interfaceFloor`: Enforce the unconditional `MAXlevel` refinement floor on
   every interfacial cell after each adaptation (`1` by default, `0` disables).
+- `MuRin`: Gas-to-liquid dynamic viscosity ratio, equivalently $Oh_b/Oh_s$
+  (`1e-2` by default, matching the manuscript's stated property ratios).
+  It was a compiled constant until 2026-08-30; the drill-solver drop-map
+  ladder had meanwhile been run at `2e-2` through a separate parameter file,
+  so the two campaigns silently differed by a factor of two in gas viscosity.
+  Making it an argument means the value now appears in `case.params`, in the
+  configuration banner and in this contract, where a mismatch is visible.
 
 ## Nondimensional Mapping Used in This Code
 
 - The small-bubble radius is the reference length ($R_s=1$).
 - The large-bubble radius is `R_l = Rr`.
-- The bubble viscosity ratio is fixed as `MuRin = 1e-2`, so
-  $Oh_b/Oh_s = 0.01$ with $Oh_b = \mu_b/\sqrt{\rho_s \sigma R_s}$.
+- The bubble viscosity ratio defaults to `MuRin = 1e-2`, so
+  $Oh_b/Oh_s = 0.01$ with $Oh_b = \mu_b/\sqrt{\rho_s \sigma R_s}$; argv 26
+  overrides it.
 - Confinement is controlled via `zWall`: smaller `zWall` places the small
   bubble closer to the wall, corresponding to smaller $\chi = d/R_s$.
 
@@ -198,6 +206,7 @@ Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #include "adapt_wavelet_limited.h"
 #include <float.h>
 #include <string.h>
+#include <errno.h>
 
 #ifndef ENABLE_JET_FOOT
 #define ENABLE_JET_FOOT 0
@@ -519,6 +528,49 @@ static DetachedComponent detached_tip_component (void)
 }
 
 /**
+## Strict numeric argument parsing
+
+`atof` reports nothing: it returns `0` for junk, silently accepts a numeric
+prefix (`1e-2x` becomes `0.01`), and returns an infinity on overflow that
+passes an ordinary positivity test. That is tolerable for the geometric and
+drill controls, whose wrong values show up immediately in the banner and the
+first snapshot, but not for a property ratio: a mistyped `MuRin` changes the
+physics and nothing downstream looks unusual. This parser rejects an empty
+string, trailing characters, an out-of-range magnitude and a non-finite
+result, and is used wherever a bad value would be silent.
+*/
+
+static bool parse_positive_double (const char * text, const char * name,
+                                   double * out)
+{
+  if (text == NULL || *text == '\0') {
+    fprintf (ferr, "%s: expected a number, got an empty argument\n", name);
+    return false;
+  }
+  errno = 0;
+  char * end = NULL;
+  double value = strtod (text, &end);
+  if (end == text || *end != '\0') {
+    fprintf (ferr, "%s: '%s' is not a number\n", name, text);
+    return false;
+  }
+  if (!isfinite (value)) {
+    fprintf (ferr, "%s: '%s' is not a finite number\n", name, text);
+    return false;
+  }
+  if (errno == ERANGE) {
+    fprintf (ferr, "%s: '%s' is out of range\n", name, text);
+    return false;
+  }
+  if (!(value > 0.)) {
+    fprintf (ferr, "%s: '%s' must be strictly positive\n", name, text);
+    return false;
+  }
+  *out = value;
+  return true;
+}
+
+/**
 ## Main Function
 
 Initialize simulation parameters from command line and configure the domain.
@@ -578,6 +630,8 @@ int main(int argc, char const *argv[]) {
     wallClearance = atof(argv[24]);
   if (argc > 25)
     interfaceFloor = atoi(argv[25]);
+  if (argc > 26 && !parse_positive_double (argv[26], "MuRin", &MuRin))
+    return 1;
 #if FORCE_GEOMETRY_HALFSPACE
   snprintf (geometryMode, sizeof(geometryMode), "%s", "halfspace");
 #endif
@@ -610,19 +664,20 @@ int main(int argc, char const *argv[]) {
       drillFireX >= drillRegionMaxX || drillTipRadius <= 0. ||
       drillTipRadius > drillRegionRadius || wallClearance == 0. ||
       (drillRegionalOnly != 0 && drillRegionalOnly != 1) ||
-      (interfaceFloor != 0 && interfaceFloor != 1)) {
+      (interfaceFloor != 0 && interfaceFloor != 1) ||
+      !(MuRin > 0.)) {
     fprintf (ferr, "Invalid contour controls: dropRadiusMin=%g, "
              "dropPersistence=%d, snapshotInterval=%g, drillAMR=%d, "
              "drillStart=%d, drillFocus=%d, drillNcells=%g, "
              "drillRegionMinX=%g, drillArmSteps=%d, drillArmTime=%g, "
              "drillCoarsenTime=%g, drillRegionMaxX=%g, "
              "drillRegionRadius=%g, drillFireX=%g, drillTipRadius=%g, "
-             "drillRegionalOnly=%d, interfaceFloor=%d\n",
+             "drillRegionalOnly=%d, interfaceFloor=%d, MuRin=%g\n",
              dropRadiusMin, dropPersistence, snapshotInterval, drillAMR,
              drillMaxlevelStart, drillMaxlevelFocus, drillNcells,
              drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime,
              drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius,
-             drillRegionalOnly, interfaceFloor);
+             drillRegionalOnly, interfaceFloor, MuRin);
     return 1;
   }
 

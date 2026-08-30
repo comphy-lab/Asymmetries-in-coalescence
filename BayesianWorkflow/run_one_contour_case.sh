@@ -16,7 +16,7 @@ fi
 source "${script_dir}/../src-local/solver_args.sh"
 
 # A materialised case table carries every control explicitly, so anything the
-# contour campaign is meant to pin must be present. The three keys that
+# contour campaign is meant to pin must be present. The four keys that
 # postdate the earliest case tables fall back to the solver's compiled default
 # instead, which keeps older batches reproducible.
 case_param() {
@@ -25,7 +25,7 @@ case_param() {
   value=$(awk -F= -v key="$key" '$1 == key {print $2; exit}' "$params")
   if [[ -z "$value" ]]; then
     case "$key" in
-      geometryMode | wallClearance | interfaceFloor) return 0 ;;
+      geometryMode | wallClearance | interfaceFloor | MuRin) return 0 ;;
       *)
         echo "Missing $key in $params" >&2
         return 1
