@@ -20,9 +20,10 @@ Pre-registered drop selection (frozen 2026-08-29, BEFORE the ladder landed)
 A tracked component is the *first visible forward drop* when ALL hold:
 
 1. it is not the main component in any frame of its life;
-2. its track is born at or after ``t_focus``, the global minimum of
-   ``z_tip``. Components born during focusing but before the x=0 crossing are
-   jet products; only pre-focus components are excluded;
+2. its track is born at or after ``t_focus = argmin(z_tip)``. This is an
+   end-of-initial-transient landmark, not literally the jet-birth instant;
+   its sole purpose is to exclude IC-era detached components while retaining
+   collapse-born components before the x=0 crossing;
 3. its equivalent radius satisfies ``r_eq >= R_VISIBLE`` (0.021005127 — an
    arbitrary but FIXED resolution gate whose job is to discard unresolved or
    intermittent fragments) on ``PERSISTENCE`` (3) consecutive frames;
