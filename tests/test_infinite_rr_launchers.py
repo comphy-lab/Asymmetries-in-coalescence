@@ -36,6 +36,7 @@ ROOT = Path(__file__).parents[1]
 LADDER = ROOT / "runBurstingBubbleInfiniteRr.sbatch"
 PROBE = ROOT / "runInfiniteRrStackProbe.sbatch"
 ANCHOR = ROOT / "runInfiniteRrDeltaAnchor.sbatch"
+RESTART = ROOT / "runInfiniteRrRestart.sbatch"
 SOLVER_ARGS = ROOT / "src-local" / "solver_args.sh"
 
 # The one value AGENTS.md forbids changing without explicit instruction.
@@ -216,7 +217,7 @@ class LauncherContractTests(unittest.TestCase):
         self.anchor = ANCHOR.read_text()
 
     def test_every_launcher_parses(self) -> None:
-        for script in (LADDER, PROBE, ANCHOR):
+        for script in (LADDER, PROBE, ANCHOR, RESTART):
             result = subprocess.run(
                 ["bash", "-n", str(script)], capture_output=True, text=True, check=False
             )
@@ -233,7 +234,7 @@ class LauncherContractTests(unittest.TestCase):
         """`set -e` on a bare `grep -qx` aborts with no diagnostic at all,
         making a wrong solver ref indistinguishable from a missing file."""
         for name, source in (("ladder", self.ladder), ("probe", self.probe),
-                             ("anchor", self.anchor)):
+                             ("anchor", self.anchor), ("restart", RESTART.read_text())):
             with self.subTest(launcher=name):
                 self.assertIn("expected Basilisk ref=", source)
                 self.assertNotRegex(
@@ -550,6 +551,100 @@ class LauncherExecutionTests(unittest.TestCase):
                 for case, *_ in LauncherContractTests.EXPECTED_ANCHOR_DESIGN
             }
             self.assertEqual(len(binaries), 4, binaries)
+
+
+class RestartLauncherTests(unittest.TestCase):
+    """The continuation launcher replays the recorded argv with ONE change.
+
+    Its whole claim to satisfy the dispatch gate is that nothing except tmax
+    is recomputable, so these tests run it for real (stubbed scheduler and
+    compiler) and diff the argv the solver receives against the record.
+    """
+
+    RECORDED_ARGV = (
+        "0.0280 1e-3 1000 14 0.60 4.0 0.021005127 3 0.05 0 -1 -1 5 -2.1 5 "
+        "0 0 3 1.5 0.25 0.25 0 halfspace -1 1 1e-2"
+    )
+
+    def make_case(self, harness: LauncherHarness, case: str = "6564",
+                  *, restart: bool = True, argv: str | None = None,
+                  old_restart: bool = True) -> Path:
+        case_dir = harness.root / "simulationCases" / case
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "case.params").write_text(
+            f"CaseNo={case}\nOh=0.0280\nMuRin=1e-2\nMAXlevel=14\n"
+            f"tmax=0.60\nsolverStack=filtered+double-projection\n"
+            f"qccFlags=\nargv={argv or self.RECORDED_ARGV}\n"
+        )
+        if restart:
+            (case_dir / "restart").write_bytes(b"dump")
+            if old_restart:
+                stale = os.path.getmtime(case_dir / "restart") - 3600
+                os.utime(case_dir / "restart", (stale, stale))
+        return case_dir
+
+    def test_replays_recorded_argv_with_only_tmax_changed(self) -> None:
+        with LauncherHarness(RESTART, {"CASE": "6564", "TMAX": "0.80"}) as h:
+            self.make_case(h)
+            result = h.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            argv = h.case_argv("6564")
+            recorded = self.RECORDED_ARGV.split()
+            self.assertEqual(argv[4], "0.80")
+            self.assertEqual(argv[:4], recorded[:4])
+            self.assertEqual(argv[5:], recorded[5:])
+            # Continuation provenance under distinct keys: the ORIGINAL
+            # tmax= record stays exactly once, and no duplicate is appended
+            # whose value would depend on the reader's parser (first-match
+            # awk vs last-wins dict both exist in this project).
+            params = (h.root / "simulationCases" / "6564" / "case.params").read_text()
+            self.assertEqual(params.count("tmax=0.60"), 1)
+            self.assertEqual(params.count("\ntmax="), 1)
+            self.assertIn("restartTmax=0.80", params)
+            self.assertIn("restartArgv=", params)
+
+    def test_refuses_without_a_restart_dump(self) -> None:
+        with LauncherHarness(RESTART, {"CASE": "6564", "TMAX": "0.80"}) as h:
+            self.make_case(h, restart=False)
+            result = h.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("nothing to restore", result.stderr)
+
+    def test_refuses_a_fresh_restart_file(self) -> None:
+        """A dump younger than the guard window means the owner may still be
+        writing it; two writers on one restart file corrupt the run."""
+        with LauncherHarness(RESTART, {"CASE": "6564", "TMAX": "0.80"}) as h:
+            self.make_case(h, old_restart=False)
+            result = h.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("may still be running", result.stderr)
+
+    def test_refuses_a_non_extending_horizon(self) -> None:
+        with LauncherHarness(RESTART, {"CASE": "6564", "TMAX": "0.60"}) as h:
+            self.make_case(h)
+            result = h.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not extend", result.stderr)
+
+    def test_refuses_a_params_file_without_an_argv_record(self) -> None:
+        """Under pipefail, a bare grep for a missing argv= line would kill
+        the script silently instead of printing the intended diagnostic."""
+        with LauncherHarness(RESTART, {"CASE": "6564", "TMAX": "0.80"}) as h:
+            case_dir = self.make_case(h)
+            params = case_dir / "case.params"
+            params.write_text(
+                "\n".join(line for line in params.read_text().splitlines()
+                          if not line.startswith("argv=")) + "\n")
+            result = h.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("cannot pin the configuration", result.stderr)
+
+    def test_refuses_a_truncated_argv_record(self) -> None:
+        with LauncherHarness(RESTART, {"CASE": "6564", "TMAX": "0.80"}) as h:
+            self.make_case(h, argv="0.0280 1e-3 1000 14 0.60")
+            result = h.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("expected 26", result.stderr)
 
 
 if __name__ == "__main__":
