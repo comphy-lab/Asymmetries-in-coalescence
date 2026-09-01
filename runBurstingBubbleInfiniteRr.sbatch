@@ -67,10 +67,19 @@ case "$GROUP" in
   # measured on the superseded stack and at MuRin=2e-2, so it is re-measured
   # rather than extended.
   F) CASE_IDS=(6513 6514 6515 6516); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
+  # G extends the boundary search upward: the completed 16-point Stack 1
+  # ladder is forward-ejecting EVERYWHERE, with U_d = +17.9 still at
+  # Oh = 0.0365, so Oh_c^(U) > 0.0365 on this stack at MuRin = 1e-2 and the
+  # F-group window (designed around the retired drill-era bracket at 2e-2)
+  # sits entirely below the boundary. The spread covers the plausible window
+  # up to and past the Walls et al. (2015) low-Bo reading (~0.037-0.045 for
+  # mu_g/mu_l = 1e-2..1e-3): if all four still eject forward, the boundary
+  # exceeds 0.046 and that disagreement is itself the result.
+  G) CASE_IDS=(6517 6518 6519 6520); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
   # E is reserved for the refinement quartet around the measured turning
   # point; fill the Oh values in once the ladder above has located it.
   E) CASE_IDS=(6521 6522 6523 6524); OH_VALUES=("${OH_E1:?set OH_E1..OH_E4}" "${OH_E2:?}" "${OH_E3:?}" "${OH_E4:?}") ;;
-  *) echo "ERROR: GROUP must be A, B, C, E or F" >&2; exit 2 ;;
+  *) echo "ERROR: GROUP must be A, B, C, E, F or G" >&2; exit 2 ;;
 esac
 
 case "$MODE" in

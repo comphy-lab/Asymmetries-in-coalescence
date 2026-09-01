@@ -257,10 +257,18 @@ class LauncherContractTests(unittest.TestCase):
         self.assertEqual(sorted(ids), sorted(set(ids)), "case id reused between groups")
 
     def test_ladder_covers_the_forward_injection_boundary(self) -> None:
-        """Group F exists to re-measure Oh_c^(U) on the corrected stack."""
+        """Group F re-measured Oh_c^(U) on the corrected stack; the completed
+        ladder then ejected forward everywhere (U_d=+17.9 at Oh=0.0365), so
+        group G extends the search above the sampled range."""
         values = {v for v in bash_array(self.ladder, "OH_VALUES") if v[0].isdigit()}
-        for oh in ("0.0340", "0.0345", "0.0350", "0.0355"):
+        for oh in ("0.0340", "0.0345", "0.0350", "0.0355",
+                   "0.0375", "0.0400", "0.0430", "0.0460"):
             self.assertIn(oh, values)
+        # Every G rung sits strictly above the highest all-forward point.
+        g_block = re.search(r"G\) CASE_IDS=\(([^)]*)\); OH_VALUES=\(([^)]*)\)",
+                            self.ladder)
+        self.assertIsNotNone(g_block, "group G not found")
+        self.assertTrue(all(float(v) > 0.0365 for v in g_block.group(2).split()))
 
     # The design the job is meant to run. A reordering of any one array would
     # attribute a divergence to the wrong solver stack or the wrong viscosity
