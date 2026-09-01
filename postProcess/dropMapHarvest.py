@@ -20,10 +20,13 @@ Pre-registered drop selection (frozen 2026-08-29, BEFORE the ladder landed)
 A tracked component is the *first visible forward drop* when ALL hold:
 
 1. it is not the main component in any frame of its life;
-2. its equivalent radius satisfies ``r_eq >= R_VISIBLE`` (0.021005127 — an
+2. its track is born at or after ``t_focus``, the global minimum of
+   ``z_tip``. Components born during focusing but before the x=0 crossing are
+   jet products; only pre-focus components are excluded;
+3. its equivalent radius satisfies ``r_eq >= R_VISIBLE`` (0.021005127 — an
    arbitrary but FIXED resolution gate whose job is to discard unresolved or
    intermittent fragments) on ``PERSISTENCE`` (3) consecutive frames;
-3. its volume-weighted axial velocity is positive on the frame the
+4. its volume-weighted axial velocity is positive on the frame the
    persistence count completes.
 
 The *first topological pinch* is simply the first frame at which any
@@ -246,24 +249,51 @@ def track_components(frames: list[list[Component]]) -> list[Track]:
 # per-case measurements
 # --------------------------------------------------------------------------
 
-def first_topological_pinch(frames: list[list[Component]]) -> dict | None:
-    """First frame holding any non-main component, and that component's
-    radius: the 'first pinch' definition of drop size."""
+def born_after_focus(track: Track, t_focus: float | None) -> bool:
+    """Whether a candidate is born during or after jet formation."""
+    return t_focus is not None and track.born.t >= t_focus - FRAME_TOL
+
+
+def first_topological_pinch_all(frames: list[list[Component]]) -> dict | None:
+    """Frozen 2026-08-29 definition: first non-main component of any origin."""
     for frame in frames:
         detached = [c for c in frame if not c.is_main]
         if detached:
             biggest = max(detached, key=lambda c: c.volume)
-            return {"t_pinch_topo": frame[0].t,
-                    "r_pinch_topo": biggest.r_eq,
-                    "u_pinch_topo": biggest.u_x_mean,
-                    "cells_pinch_topo": biggest.cells}
+            return {"t_pinch_topo_all": frame[0].t,
+                    "r_pinch_topo_all": biggest.r_eq}
     return None
 
 
-def first_visible_drop(tracks: list[Track]) -> dict | None:
+def first_topological_pinch_jet(tracks: list[Track],
+                                t_focus: float | None) -> dict | None:
+    """First non-main component whose track is born after focusing starts.
+
+    The two-clock model uses this definition because its clock is the jet's
+    pinch, not an initial-condition component. The frozen all-component
+    definition remains reported independently.
+    """
+    candidates = [tr for tr in tracks if not tr.ever_main
+                  and born_after_focus(tr, t_focus)]
+    if candidates:
+        first_time = min(tr.born.t for tr in candidates)
+        first_frame = [tr for tr in candidates
+                       if abs(tr.born.t - first_time) <= FRAME_TOL]
+        tr = max(first_frame, key=lambda item: item.born.volume)
+        born = tr.born
+        return {"t_pinch_topo_jet": born.t,
+                "r_pinch_topo_jet": born.r_eq,
+                "u_pinch_topo": born.u_x_mean,
+                "cells_pinch_topo": born.cells}
+    return None
+
+
+def first_visible_drop(tracks: list[Track],
+                       t_focus: float | None) -> dict | None:
     """Earliest confirmed track under the pre-registered selector."""
     confirmed = [tr for tr in tracks
                  if tr.confirmed_at is not None and not tr.ever_main
+                 and born_after_focus(tr, t_focus)
                  and tr.confirmed_at.u_x_mean > 0.]
     if not confirmed:
         return None
@@ -325,7 +355,8 @@ def jet_metrics(rows: list[dict]) -> dict:
     - v_max:     max tip-cap velocity over trustworthy frames after
                  t_cross, with the frame time
     """
-    out: dict = {"t_cross": None, "v_jet0": None, "v_jet0_interpolated": None,
+    out: dict = {"t_focus": None, "t_cross": None,
+                 "v_jet0": None, "v_jet0_interpolated": None,
                  "r_jet0": None, "t_rjet0": None, "v_max": None,
                  "t_vmax": None}
     if not rows:
@@ -346,6 +377,7 @@ def jet_metrics(rows: list[dict]) -> dict:
     if not zvals:
         return out
     i_zmin = min(zvals)[1]
+    out["t_focus"] = ts[i_zmin]
 
     t_cross = _interp_crossing(ts[i_zmin:], ztip[i_zmin:], 0.0)
     out["t_cross"] = t_cross
@@ -397,16 +429,24 @@ def harvest_case(case_dir: Path, oh: float, loaded=None) -> dict:
     row: dict = {"case": case_dir.name, "oh": oh,
                  "t_last": frames[-1][0].t if frames else None,
                  "n_frames": len(frames), "n_tracks": len(tracks)}
-    topo = first_topological_pinch(frames)
-    row.update(topo or {"t_pinch_topo": None, "r_pinch_topo": None,
+    metrics = jet_metrics(jrows)
+    t_focus = metrics["t_focus"]
+    topo_all = first_topological_pinch_all(frames)
+    row.update(topo_all or {"t_pinch_topo_all": None,
+                            "r_pinch_topo_all": None})
+    topo = first_topological_pinch_jet(tracks, t_focus)
+    row.update(topo or {"t_pinch_topo_jet": None, "r_pinch_topo_jet": None,
                         "u_pinch_topo": None, "cells_pinch_topo": None})
-    vis = first_visible_drop(tracks)
+    # Compatibility aliases intentionally point to the jet-born clock.
+    row["t_pinch_topo"] = row["t_pinch_topo_jet"]
+    row["r_pinch_topo"] = row["r_pinch_topo_jet"]
+    vis = first_visible_drop(tracks, t_focus)
     row.update(vis or {"t_drop_first_seen": None, "t_drop_confirmed": None,
                        "r_drop_at_birth": None, "r_drop_at_confirm": None,
                        "u_drop_at_birth": None, "u_drop_at_confirm": None,
                        "cells_at_confirm": None, "track_id": None,
                        "n_confirmed_drops": 0})
-    row.update(jet_metrics(jrows))
+    row.update(metrics)
     return row
 
 

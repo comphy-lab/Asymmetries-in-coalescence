@@ -54,6 +54,18 @@ def ladder_case(tmp_path, frames, jet_rows=None, with_rjet=True):
     return d
 
 
+def formed_jet_rows():
+    """Minimal jet history crossing x=0 before candidates are born."""
+    return [
+        {"t": 0.45, "z_tip": -1.0, "u_tip_cap": 2.0,
+         "vol_cap": 0.01, "ke": 1, "n_components": 1},
+        {"t": 0.49, "z_tip": -0.1, "u_tip_cap": 8.0,
+         "vol_cap": 1e-4, "ke": 1, "n_components": 1},
+        {"t": 0.495, "z_tip": 0.1, "u_tip_cap": 10.0,
+         "vol_cap": 1e-4, "ke": 1, "n_components": 1},
+    ]
+
+
 def test_tracking_survives_index_permutation(tmp_path):
     # main body always present; a drop of r=0.05 whose tag() index flips
     # between 2 and 1 across frames must still confirm as ONE track
@@ -66,7 +78,7 @@ def test_tracking_survives_index_permutation(tmp_path):
         else:
             comps = [(2, True, 0.8, -1.0, 0.1), (1, False, 0.05, x, 10.0)]
         frames.append((t, comps))
-    d = ladder_case(tmp_path, frames)
+    d = ladder_case(tmp_path, frames, formed_jet_rows())
     row = h.harvest_case(d, 0.03)
     assert row["n_confirmed_drops"] == 1
     assert abs(row["r_drop_at_confirm"] - 0.05) < 1e-12
@@ -86,7 +98,7 @@ def test_first_pinch_differs_from_first_visible(tmp_path):
         (0.525, [(1, True, 0.8, -1.0, 0.1), (2, False, 0.06, 1.05, 8.0)]),
         (0.530, [(1, True, 0.8, -1.0, 0.1), (2, False, 0.06, 1.10, 8.0)]),
     ]
-    d = ladder_case(tmp_path, frames)
+    d = ladder_case(tmp_path, frames, formed_jet_rows())
     row = h.harvest_case(d, 0.02)
     assert abs(row["t_pinch_topo"] - 0.500) < 1e-12          # fragment
     assert abs(row["r_pinch_topo"] - 0.004) < 1e-12
@@ -98,7 +110,7 @@ def test_backward_moving_blob_never_confirms(tmp_path):
     frames = [(0.5 + 0.005 * k,
                [(1, True, 0.8, -1.0, 0.1),
                 (2, False, 0.05, 1.0 - 0.01 * k, -3.0)]) for k in range(5)]
-    d = ladder_case(tmp_path, frames)
+    d = ladder_case(tmp_path, frames, formed_jet_rows())
     row = h.harvest_case(d, 0.03)
     assert row["n_confirmed_drops"] == 0
     assert row["t_pinch_topo"] is not None  # it still pinched topologically
@@ -235,6 +247,68 @@ def test_restart_replay_rows_are_superseded(tmp_path):
     assert [f[0].t for f in frames] == [0.500, 0.505]
     drops = [c for c in frames[-1] if not c.is_main]
     assert len(drops) == 1 and abs(drops[0].r_eq - 0.05) < 1e-12
+
+
+def test_pre_crossing_component_is_not_a_drop_candidate(tmp_path):
+    """A persistent initial component cannot pre-date the physical jet."""
+    frames = [
+        (0.01, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.01)]),
+        (0.02, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.01)]),
+        (0.03, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.01)]),
+        (0.51, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.01),
+                (3, False, 0.03, 0.30, 8.0)]),
+        (0.52, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.01),
+                (3, False, 0.03, 0.38, 8.0)]),
+        (0.53, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.01),
+                (3, False, 0.03, 0.46, 8.0)]),
+    ]
+    jet = [
+        {"t": 0.45, "z_tip": -1.0, "u_tip_cap": 2.0,
+         "vol_cap": 0.01, "ke": 1, "n_components": 2},
+        {"t": 0.49, "z_tip": -0.1, "u_tip_cap": 8.0,
+         "vol_cap": 1e-4, "ke": 1, "n_components": 2},
+        {"t": 0.50, "z_tip": 0.1, "u_tip_cap": 10.0,
+         "vol_cap": 1e-4, "ke": 1, "n_components": 2},
+        {"t": 0.53, "z_tip": 0.5, "u_tip_cap": 9.0,
+         "vol_cap": 1e-4, "ke": 1, "n_components": 3},
+    ]
+    d = ladder_case(tmp_path, frames, jet, with_rjet=False)
+    row = h.harvest_case(d, 0.03)
+    assert abs(row["t_cross"] - 0.495) < 1e-12
+    assert row["t_pinch_topo_all"] == 0.01
+    assert row["t_pinch_topo_jet"] == 0.51
+    assert row["t_drop_first_seen"] == 0.51
+    assert row["t_drop_confirmed"] == 0.53
+
+
+def test_frozen_and_jet_born_pinch_columns_are_both_reported(tmp_path):
+    frames = [
+        (0.01, [(1, True, 0.8, -1.0, 0.1),
+                (2, False, 0.05, 0.08, 0.0)]),
+        (0.50, [(1, True, 0.8, -1.0, 0.1),
+                (3, False, 0.03, 0.2, 5.0)]),
+    ]
+    d = ladder_case(tmp_path, frames, formed_jet_rows())
+    row = h.harvest_case(d, 0.03)
+    assert row["t_pinch_topo_all"] == 0.01
+    assert row["t_pinch_topo_jet"] == 0.50
+    assert row["t_pinch_topo"] == row["t_pinch_topo_jet"]
+
+
+def test_jet_born_topology_keeps_frozen_largest_component_tiebreak(tmp_path):
+    frames = [(0.50, [(1, True, 0.8, -1.0, 0.1),
+                      (2, False, 0.01, 0.2, 5.0),
+                      (3, False, 0.03, 0.3, 5.0)])]
+    d = ladder_case(tmp_path, frames, formed_jet_rows())
+    row = h.harvest_case(d, 0.03)
+    assert row["t_pinch_topo_all"] == row["t_pinch_topo_jet"] == 0.50
+    assert row["r_pinch_topo_all"] == row["r_pinch_topo_jet"] == 0.03
 
 
 def test_rjet0_not_taken_at_the_crossing(tmp_path):
