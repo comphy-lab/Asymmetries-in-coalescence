@@ -527,6 +527,71 @@ class LauncherExecutionTests(unittest.TestCase):
             self.assertEqual(params["Bond"], "0.01")
             self.assertEqual(params["initialShape"], "Bo0.0100.dat")
 
+    def test_bond_bulk_ml14_forces_level_and_span(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-bulk-ml14", "GROUP": "M", "TMAX": "1.5",
+            "MAXLEVEL": "13",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            expected = {
+                "6641": "0.0100",
+                "6642": "0.0280",
+                "6643": "0.0345",
+                "6644": "0.0460",
+            }
+            for case_id, oh in expected.items():
+                with self.subTest(case=case_id):
+                    argv = harness.case_argv(case_id)
+                    self.assertEqual(argv[ARGV_OH], oh)
+                    self.assertEqual(argv[ARGV_MAXLEVEL], "14")
+                    self.assertEqual(argv[ARGV_BOND], "0.01")
+                    self.assertEqual(argv[5], "4.0")
+                    self.assertEqual(argv[23], "-1")
+                    self.assertEqual(argv[ARGV_DROP_RADIUS_MIN], PINNED_DETECTOR)
+                    self.assertEqual(argv[ARGV_MURIN], "1e-2")
+                    params = harness.case_params(case_id)
+                    self.assertEqual(params["MAXlevel"], "14")
+                    self.assertEqual(params["Bond"], "0.01")
+                    self.assertEqual(params["series"], "bo001-bulk-ml14")
+                    self.assertEqual(params["initialShape"], "Bo0.0100.dat")
+                    self.assertEqual(params["wallClearance"], "-1")
+
+    def test_bond_wall_ml14_forces_level_and_clearance(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-wall-ml14", "GROUP": "M", "TMAX": "1.5",
+            "MAXLEVEL": "13",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            argv = harness.case_argv("6645")
+            self.assertEqual(argv[ARGV_OH], "0.0100")
+            self.assertEqual(argv[ARGV_MAXLEVEL], "14")
+            self.assertEqual(argv[ARGV_BOND], "0.01")
+            self.assertEqual(argv[23], "0.027")
+            self.assertEqual(argv[ARGV_DROP_RADIUS_MIN], PINNED_DETECTOR)
+            params = harness.case_params("6645")
+            self.assertEqual(params["series"], "bo001-wall-ml14")
+            self.assertEqual(params["MAXlevel"], "14")
+            self.assertEqual(params["wallClearance"], "0.027")
+            self.assertEqual(harness.case_params("6648")["Oh"], "0.0460")
+
+    def test_bond_ml14_series_rejects_a_ladder_group(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-bulk-ml14", "GROUP": "A",
+        }) as harness:
+            result = harness.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("GROUP must be M", result.stderr)
+
+    def test_bo001_job_name_refuses_a_defaulted_series(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SLURM_JOB_NAME": "sbbBo001BM",
+        }) as harness:
+            result = harness.run()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("SERIES defaulted to bo0-bulk", result.stderr)
+
     def test_probe_runs_its_declared_design(self) -> None:
         with LauncherHarness(PROBE, {"TMAX": "0.75"}) as harness:
             result = harness.run()

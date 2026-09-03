@@ -57,8 +57,17 @@ GROUP="${GROUP:-A}"
 # (realized south-pole gap ~4.05 R0 — the same bulk half-space as 6501-6520).
 # bo001-wall is the same Oh list at Bo=0.01 with wallClearance=0.027, so the
 # small-bubble south pole sits next to the wall (solver-derived zWall~0.02).
+# bo001-*-ml14 is the Bond=0.01 mesh-sensitivity rung: same geometries and
+# pinned detector, MAXlevel 14. Compare 6641-44 to 6601/6606/6614/6620 and
+# 6645-48 to 6621/6626/6634/6640. Same Ldomain family, Delta halved; do not
+# mix bulk and wall points on one Delta curve. Snellius drops prefix env, so
+# SERIES and GROUP must be passed as `sbatch --export=ALL,SERIES=...,GROUP=...`.
 SERIES="${SERIES:-bo0-bulk}"
 MAXLEVEL="${MAXLEVEL:-13}"
+if [[ "$SERIES" == "bo0-bulk" && "${SLURM_JOB_NAME:-}" == *Bo001* ]]; then
+  echo "ERROR: job name ${SLURM_JOB_NAME} looks like a Bo=0.01 run but SERIES defaulted to bo0-bulk. Pass sbatch --export=ALL,SERIES=...,GROUP=..." >&2
+  exit 2
+fi
 MURIN="${MURIN:-1e-2}"         # Oh_gas/Oh_liquid; 1e-2 is the manuscript value
 THREADS="${SLURM_CPUS_PER_TASK:-48}"
 
@@ -119,7 +128,31 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo001-bulk or bo001-wall" >&2; exit 2 ;;
+  bo001-bulk-ml14)
+    # Same bulk half-space as bo001-bulk (Ldomain=10). Forcing MAXlevel=14 so
+    # a leftover MAXLEVEL=13 in the batch environment cannot silently rerun
+    # the production rung. Oh span: vigorous jet, Bo=0 Delta-anchor, near the
+    # Bo=0 Oh_c^(U) window, and the Bo=0.01 probe that returned the jet.
+    BOND="${BOND:-0.01}"
+    MAXLEVEL=14
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      M) CASE_IDS=(6641 6642 6643 6644); OH_VALUES=(0.0100 0.0280 0.0345 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
+    esac
+    ;;
+  bo001-wall-ml14)
+    BOND="${BOND:-0.01}"
+    MAXLEVEL=14
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:-0.027}"
+    case "$GROUP" in
+      M) CASE_IDS=(6645 6646 6647 6648); OH_VALUES=(0.0100 0.0280 0.0345 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
+    esac
+    ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo001-bulk, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in
