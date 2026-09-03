@@ -2,7 +2,7 @@
 # ==============================================================================
 # solver_args.sh - Canonical command-line contract for coalescenceBubble
 #
-# `simulationCases/coalescenceBubble.c` reads 25 positional arguments. Every
+# `simulationCases/coalescenceBubble.c` reads 27 positional arguments. Every
 # launcher used to spell that list out for itself, which is how four of them
 # drifted back to the retired six-argument call while the solver grew nineteen
 # more controls. The order and the per-argument defaults live here instead, so
@@ -66,6 +66,7 @@ COALESCENCE_SOLVER_ARG_KEYS=(
     wallClearance       # argv 24
     interfaceFloor      # argv 25
     MuRin               # argv 26
+    Bond                # argv 27
 )
 
 # Compiled defaults for argv 7..25. A key absent from this map is required:
@@ -96,6 +97,9 @@ declare -gA COALESCENCE_SOLVER_ARG_DEFAULTS=(
     # compared against another: the drill-solver drop-map ladder ran 2e-2 and
     # nothing in its argv made that visible.
     [MuRin]="1e-2"
+    # Bond number Bo = rho_l g R^2 / sigma. Zero keeps the existing
+    # sphere-plane halfspace file Bo0.0000.dat and applies no body force.
+    [Bond]="0"
 )
 
 # Fallbacks the sweep launchers have always applied to the six required

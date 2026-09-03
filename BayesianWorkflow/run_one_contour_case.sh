@@ -25,7 +25,7 @@ case_param() {
   value=$(awk -F= -v key="$key" '$1 == key {print $2; exit}' "$params")
   if [[ -z "$value" ]]; then
     case "$key" in
-      geometryMode | wallClearance | interfaceFloor | MuRin) return 0 ;;
+      geometryMode | wallClearance | interfaceFloor | MuRin | Bond) return 0 ;;
       *)
         echo "Missing $key in $params" >&2
         return 1

@@ -52,34 +52,74 @@ set -euo pipefail
 
 MODE="${MODE:-production}"
 GROUP="${GROUP:-A}"
+# bo0-bulk is the existing Stack-1 Bo=0 ladder (6501-6524).
+# bo001-bulk repeats that Oh list at Bo=0.01, zWall=4, wallClearance=-1
+# (realized south-pole gap ~4.05 R0 — the same bulk half-space as 6501-6520).
+# bo001-wall is the same Oh list at Bo=0.01 with wallClearance=0.027, so the
+# small-bubble south pole sits next to the wall (solver-derived zWall~0.02).
+SERIES="${SERIES:-bo0-bulk}"
 MAXLEVEL="${MAXLEVEL:-13}"
-ZWALL="${ZWALL:-4.0}"          # Ldomain = min(zWall+6, 16) = 10 -> matched Delta
-WALLCLEARANCE="${WALLCLEARANCE:--1}"  # -1 = bulk (far from wall); chi<<1 passes e.g. 0.027
 MURIN="${MURIN:-1e-2}"         # Oh_gas/Oh_liquid; 1e-2 is the manuscript value
 THREADS="${SLURM_CPUS_PER_TASK:-48}"
 
-case "$GROUP" in
-  A) CASE_IDS=(6501 6502 6503 6504); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
-  B) CASE_IDS=(6505 6506 6507 6508); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
-  C) CASE_IDS=(6509 6510 6511 6512); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
-  # F closes the gap between C's 0.0333 and 0.0365, where the forward-injection
-  # boundary Oh_c^(U) sits. The drill-solver bracket (0.0345, 0.0355] was
-  # measured on the superseded stack and at MuRin=2e-2, so it is re-measured
-  # rather than extended.
-  F) CASE_IDS=(6513 6514 6515 6516); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
-  # G extends the boundary search upward: the completed 16-point Stack 1
-  # ladder is forward-ejecting EVERYWHERE, with U_d = +17.9 still at
-  # Oh = 0.0365, so Oh_c^(U) > 0.0365 on this stack at MuRin = 1e-2 and the
-  # F-group window (designed around the retired drill-era bracket at 2e-2)
-  # sits entirely below the boundary. The spread covers the plausible window
-  # up to and past the Walls et al. (2015) low-Bo reading (~0.037-0.045 for
-  # mu_g/mu_l = 1e-2..1e-3): if all four still eject forward, the boundary
-  # exceeds 0.046 and that disagreement is itself the result.
-  G) CASE_IDS=(6517 6518 6519 6520); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
-  # E is reserved for the refinement quartet around the measured turning
-  # point; fill the Oh values in once the ladder above has located it.
-  E) CASE_IDS=(6521 6522 6523 6524); OH_VALUES=("${OH_E1:?set OH_E1..OH_E4}" "${OH_E2:?}" "${OH_E3:?}" "${OH_E4:?}") ;;
-  *) echo "ERROR: GROUP must be A, B, C, E, F or G" >&2; exit 2 ;;
+case "$SERIES" in
+  bo0-bulk)
+    BOND="${BOND:-0}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      A) CASE_IDS=(6501 6502 6503 6504); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
+      B) CASE_IDS=(6505 6506 6507 6508); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
+      C) CASE_IDS=(6509 6510 6511 6512); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
+      # F closes the gap between C's 0.0333 and 0.0365, where the forward-injection
+      # boundary Oh_c^(U) sits. The drill-solver bracket (0.0345, 0.0355] was
+      # measured on the superseded stack and at MuRin=2e-2, so it is re-measured
+      # rather than extended.
+      F) CASE_IDS=(6513 6514 6515 6516); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
+      # G extends the boundary search upward: the completed 16-point Stack 1
+      # ladder is forward-ejecting EVERYWHERE, with U_d = +17.9 still at
+      # Oh = 0.0365, so Oh_c^(U) > 0.0365 on this stack at MuRin = 1e-2 and the
+      # F-group window (designed around the retired drill-era bracket at 2e-2)
+      # sits entirely below the boundary. The spread covers the plausible window
+      # up to and past the Walls et al. (2015) low-Bo reading (~0.037-0.045 for
+      # mu_g/mu_l = 1e-2..1e-3): if all four still eject forward, the boundary
+      # exceeds 0.046 and that disagreement is itself the result.
+      G) CASE_IDS=(6517 6518 6519 6520); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      # E is reserved for the refinement quartet around the measured turning
+      # point; fill the Oh values in once the ladder above has located it.
+      E) CASE_IDS=(6521 6522 6523 6524); OH_VALUES=("${OH_E1:?set OH_E1..OH_E4}" "${OH_E2:?}" "${OH_E3:?}" "${OH_E4:?}") ;;
+      *) echo "ERROR: GROUP must be A, B, C, E, F or G" >&2; exit 2 ;;
+    esac
+    ;;
+  bo001-bulk)
+    BOND="${BOND:-0.01}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      A) CASE_IDS=(6601 6602 6603 6604); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
+      B) CASE_IDS=(6605 6606 6607 6608); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
+      C) CASE_IDS=(6609 6610 6611 6612); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
+      F) CASE_IDS=(6613 6614 6615 6616); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
+      G) CASE_IDS=(6617 6618 6619 6620); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
+    esac
+    ;;
+  bo001-wall)
+    BOND="${BOND:-0.01}"
+    # argv zWall is a placeholder: wallClearance>0 resets origin from the
+    # Young-Laplace south pole so the film gap is the physical 0.027 R0.
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:-0.027}"
+    case "$GROUP" in
+      A) CASE_IDS=(6621 6622 6623 6624); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
+      B) CASE_IDS=(6625 6626 6627 6628); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
+      C) CASE_IDS=(6629 6630 6631 6632); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
+      F) CASE_IDS=(6633 6634 6635 6636); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
+      G) CASE_IDS=(6637 6638 6639 6640); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
+    esac
+    ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo001-bulk or bo001-wall" >&2; exit 2 ;;
 esac
 
 case "$MODE" in
@@ -126,8 +166,15 @@ if ! grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"; th
   exit 1
 fi
 
-echo "mode=$MODE group=$GROUP tmax=$TMAX snapshotInterval=$SNAPINT MAXlevel=$MAXLEVEL zWall=$ZWALL wallClearance=$WALLCLEARANCE MuRin=$MURIN threads_per_case=$THREADS"
+echo "mode=$MODE series=$SERIES group=$GROUP tmax=$TMAX snapshotInterval=$SNAPINT MAXlevel=$MAXLEVEL zWall=$ZWALL wallClearance=$WALLCLEARANCE Bond=$BOND MuRin=$MURIN threads_per_case=$THREADS"
 echo "cases=${CASE_IDS[*]} oh=${OH_VALUES[*]}"
+
+for header in adapt_wavelet_limited.h jetFoot.h; do
+  if [[ ! -f "$ROOT/src-local/$header" ]]; then
+    echo "ERROR: staged tree is missing src-local/$header" >&2
+    exit 1
+  fi
+done
 
 cd simulationCases
 
@@ -136,7 +183,7 @@ cd simulationCases
 # with a fixed name, one job's `qcc` truncates the file the other job's `cp`
 # is reading, and the second dies with "cannot open ... for reading". That is
 # exactly how group C failed 32 s in on 2026-08-30 while A and F survived.
-BINARY="burstingBubbleInfiniteRr-${GROUP}-${SLURM_JOB_ID:-$$}"
+BINARY="burstingBubbleInfiniteRr-${SERIES}-${GROUP}-${SLURM_JOB_ID:-$$}"
 qcc -I. -I../src-local -O2 -Wall -disable-dimensions -fopenmp \
   burstingBubbleInfiniteRr.c -o "$BINARY" -lm
 
@@ -160,16 +207,18 @@ for index in 0 1 2 3; do
     "dropRadiusMin=0.021005127" "dropPersistence=3" \
     "snapshotInterval=$SNAPINT" "drillAMR=0" \
     "geometryMode=halfspace" "wallClearance=$WALLCLEARANCE" \
-    "interfaceFloor=1" "MuRin=$MURIN"
+    "interfaceFloor=1" "MuRin=$MURIN" "Bond=$BOND"
   solver_args=("${COALESCENCE_SOLVER_ARGS[@]}")
 
   # Record the resolved argv beside the outputs. The drill ladder's gas
   # viscosity differed from the manuscript's and nothing in the run directory
   # said so; this file is the fix.
   {
-    printf 'CaseNo=%s\nOh=%s\nMuRin=%s\nMAXlevel=%s\ntmax=%s\nzWall=%s\n' \
-      "$case_id" "$oh" "$MURIN" "$MAXLEVEL" "$TMAX" "$ZWALL"
+    printf 'CaseNo=%s\nOh=%s\nBond=%s\nMuRin=%s\nMAXlevel=%s\ntmax=%s\nzWall=%s\n' \
+      "$case_id" "$oh" "$BOND" "$MURIN" "$MAXLEVEL" "$TMAX" "$ZWALL"
     printf 'drillAMR=0\ngeometryMode=halfspace\nwallClearance=%s\n' "$WALLCLEARANCE"
+    printf 'series=%s\n' "$SERIES"
+    printf 'initialShape=Bo%5.4f.dat\n' "$BOND"
     printf 'dropRadiusMin=0.021005127\ndropPersistence=3\nsnapshotInterval=%s\n' "$SNAPINT"
     printf 'solverStack=filtered+double-projection\nargv=%s\n' "${solver_args[*]}"
   } > "$case_dir/case.params"

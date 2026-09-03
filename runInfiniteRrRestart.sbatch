@@ -106,8 +106,8 @@ if [[ -z "$recorded_argv_line" ]]; then
   exit 1
 fi
 read -r -a solver_args <<< "$recorded_argv_line"
-if [[ "${#solver_args[@]}" -ne 26 ]]; then
-  echo "ERROR: recorded argv has ${#solver_args[@]} fields, expected 26" >&2
+if [[ "${#solver_args[@]}" -ne 26 && "${#solver_args[@]}" -ne 27 ]]; then
+  echo "ERROR: recorded argv has ${#solver_args[@]} fields, expected 26 or 27" >&2
   exit 1
 fi
 

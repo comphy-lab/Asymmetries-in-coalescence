@@ -48,7 +48,8 @@ $\kappa$ is interface curvature, and $\delta_s$ is the interface delta function.
   [drillMaxlevelStart] [drillMaxlevelFocus] [drillNcells] \
   [drillRegionMinX] [drillArmSteps] [drillArmTime] [drillCoarsenTime] \
   [drillRegionMaxX] [drillRegionRadius] [drillFireX] [drillTipRadius] \
-  [drillRegionalOnly] [geometryMode] [wallClearance] [interfaceFloor]
+  [drillRegionalOnly] [geometryMode] [wallClearance] [interfaceFloor] \
+  [MuRin] [Bond]
 ```
 
 The $R_r \to \infty$ build (any $\chi$, near wall or bulk) is
@@ -117,8 +118,9 @@ Stack 1. It is rejected when combined with `-DUSE_CONSERVING` or
   The drill ramps from `drillMaxlevelStart`, arms on persistent target-region
   curvature demand, then gives full `MAXlevel` only to the end-pinchoff side.
 - `geometryMode`: `finite` loads `InitialConditionRr-*.dat`; `halfspace`
-  loads the Bursting-Bubble `Bo0.0000.dat` sphere-plane geometry and represents
-  the true $R_r\to\infty$ limit.
+  loads the Bursting-Bubble `Bo%5.4f.dat` free-surface geometry
+  (`Bo0.0000.dat` at the default $Bo=0$) and represents the true
+  $R_r\to\infty$ limit.
 - `wallClearance`: Optional physical distance from the bubble south pole to
   the left wall. A negative value preserves the legacy nominal `zWall`
   placement. Use `0.027` to match the finite-map `zWall=0.05` clearance.
@@ -131,6 +133,12 @@ Stack 1. It is rejected when combined with `-DUSE_CONSERVING` or
   so the two campaigns silently differed by a factor of two in gas viscosity.
   Making it an argument means the value now appears in `case.params`, in the
   configuration banner and in this contract, where a mismatch is visible.
+- `Bond`: Bond number $Bo=\rho_l g R_s^2/\sigma$ (`0` by default). In
+  `halfspace` geometry this selects `DataFiles/Bo%5.4f.dat`, the Young--Laplace
+  equilibrium cavity from `comphy-lab/Bursting-Bubble`
+  `simulationCases/initialConditions`. $Bo>0$ also sets $G_x=-Bo$ in
+  `reduced.h` (into the pool). $Bo=0$ leaves $\mathbf{G}=0$, so existing
+  ladders are unchanged.
 
 ## Nondimensional Mapping Used in This Code
 
@@ -215,6 +223,7 @@ Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #include "navier-stokes/conserving.h"
 #endif
 #include "tension.h"
+#include "reduced.h"
 #ifdef USE_CONSERVING
 /* The experimental override pairing must be visible in every banner and
    case.params: a run of the forbidden-by-default stack that identified
@@ -310,7 +319,7 @@ p[right] = dirichlet(0.0);
 Physical parameters and output configuration:
 */
 
-double tmax, MuRin, OhOut, RhoIn;
+double tmax, MuRin, OhOut, RhoIn, Bond;
 double Rr, zWall;
 double Ldomain;
 double wallClearance = -1.;
@@ -600,6 +609,36 @@ static bool parse_positive_double (const char * text, const char * name,
   return true;
 }
 
+static bool parse_nonnegative_double (const char * text, const char * name,
+                                      double * out)
+{
+  if (text == NULL || *text == '\0') {
+    fprintf (ferr, "%s: expected a number, got an empty argument\n", name);
+    return false;
+  }
+  errno = 0;
+  char * end = NULL;
+  double value = strtod (text, &end);
+  if (end == text || *end != '\0') {
+    fprintf (ferr, "%s: '%s' is not a number\n", name, text);
+    return false;
+  }
+  if (!isfinite (value)) {
+    fprintf (ferr, "%s: '%s' is not a finite number\n", name, text);
+    return false;
+  }
+  if (errno == ERANGE) {
+    fprintf (ferr, "%s: '%s' is out of range\n", name, text);
+    return false;
+  }
+  if (!(value >= 0.)) {
+    fprintf (ferr, "%s: '%s' must be non-negative\n", name, text);
+    return false;
+  }
+  *out = value;
+  return true;
+}
+
 /**
 ## Main Function
 
@@ -615,6 +654,7 @@ int main(int argc, char const *argv[]) {
   /**
   Parse command-line arguments: */
   MuRin = 1e-2;
+  Bond = 0.;
 
   OhOut = atof(argv[1]);
   RhoIn = atof(argv[2]);
@@ -662,6 +702,8 @@ int main(int argc, char const *argv[]) {
     interfaceFloor = atoi(argv[25]);
   if (argc > 26 && !parse_positive_double (argv[26], "MuRin", &MuRin))
     return 1;
+  if (argc > 27 && !parse_nonnegative_double (argv[27], "Bond", &Bond))
+    return 1;
 #if FORCE_GEOMETRY_HALFSPACE
   snprintf (geometryMode, sizeof(geometryMode), "%s", "halfspace");
 #endif
@@ -675,7 +717,7 @@ int main(int argc, char const *argv[]) {
   }
   if (halfspace)
     snprintf (initialConditionFile, sizeof(initialConditionFile),
-              "Bo0.0000.dat");
+              "Bo%5.4f.dat", Bond);
   else
     snprintf (initialConditionFile, sizeof(initialConditionFile),
               "InitialConditionRr-%3.2f.dat", Rr);
@@ -751,7 +793,7 @@ int main(int argc, char const *argv[]) {
   origin(originX, 0.0);
   init_grid (1 << (10));
 
-  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d, interfaceFloor %d, solverStack %s\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly, interfaceFloor, SOLVER_STACK);
+  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, Bond %g, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d, interfaceFloor %d, solverStack %s\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, Bond, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly, interfaceFloor, SOLVER_STACK);
 
   /**
   Set fluid properties:
@@ -761,6 +803,11 @@ int main(int argc, char const *argv[]) {
   rho1 = RhoIn; mu1 = MuRin*OhOut;
   rho2 = 1e0; mu2 = OhOut;
   f.sigma = 1.0;
+  /**
+  $f=1$ is the gas ($\rho_1=\rho_g$), $f=0$ the liquid ($\rho_2=1$).
+  `reduced.h` applies $[\rho]\mathbf{G}=(\rho_2-\rho_1)\mathbf{G}$ at the
+  interface only. $G_x=-Bo$ pulls liquid into the pool. $Bo=0$ is $\mathbf{G}=0$. */
+  G.x = -Bond;
 
   char comm[80];
   sprintf (comm, "mkdir -p intermediate");
@@ -1625,9 +1672,9 @@ static void write_contour_pulse (void)
   }
   FILE * meta = fopen ("interface-latest.meta.tmp", "w");
   if (meta) {
-    fprintf (meta, "t=%.8g\nRr=%.8g\nOh=%.8g\nzWall=%.8g\n"
+    fprintf (meta, "t=%.8g\nRr=%.8g\nOh=%.8g\nBond=%.8g\nzWall=%.8g\n"
              "geometry=%s\nwallClearance=%.8g\n",
-             t, Rr, OhOut, zWall, geometryMode, wallClearance);
+             t, Rr, OhOut, Bond, zWall, geometryMode, wallClearance);
     fclose (meta);
     rename ("interface-latest.meta.tmp", "interface-latest.meta");
   }
@@ -1701,7 +1748,7 @@ event stopAtObservationHorizon (t = tmax) {
 }
 
 event end (t = end) {
-  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, Oh2 %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
+  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, Oh2 %3.2e, Rho21 %4.3f, Rr %f, Bond %g\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, Bond);
   if (dropRadiusMin >= 0. && !dropDetected) {
     write_contour_pulse();
     if (simulationInitialised && t >= tmax - 1e-8)
@@ -1756,7 +1803,7 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
     if (i == 0) {
       fprintf (ferr, "i dt t ke Xc Vcm maxlevel drillArmed drillFired\n");
       fp = fopen ("log", "w");
-      fprintf(fp, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr);
+      fprintf(fp, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, Bond %g\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, Bond);
       fprintf (fp, "i dt t ke Xc Vcm maxlevel drillArmed drillFired\n");
       fprintf (fp, "%d %g %g %g %g %g %d %d %d\n", i, dt, t, ke,
                xCOM, Vcm/wt, maxlevelLocal, drillArmed, drillFired);
@@ -1777,9 +1824,9 @@ event logWriting (t = 0; t += tsnap2; t <= tmax+tsnap) {
         footfp = fopen ("foot.dat", "w");
         if (footfp) {
           fprintf (footfp,
-                   "MAXlevel %d, Oh %g, Oha %g, Bo 0, zWall %g, Ldomain %g, "
+                   "MAXlevel %d, Oh %g, Oha %g, Bo %g, zWall %g, Ldomain %g, "
                    "wallClearance %g, geometry halfspace\n",
-                   MAXlevel, OhOut, MuRin*OhOut, zWall, Ldomain, wallClearance);
+                   MAXlevel, OhOut, MuRin*OhOut, Bond, zWall, Ldomain, wallClearance);
           fprintf (footfp,
                    "i dt t ke maxlevel r_b z_b r_base z_base q_jet q_l\n");
         }

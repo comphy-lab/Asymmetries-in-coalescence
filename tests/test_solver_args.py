@@ -64,6 +64,15 @@ class SolverArgumentContractTests(unittest.TestCase):
         )
         self.assertNotRegex(code, r"\bMuRin\s*=\s*atof\b")
 
+    def test_the_bond_number_uses_the_nonnegative_parser(self) -> None:
+        """Bond = 0 is the existing ladder; a negative value is not a Bond."""
+        code = re.sub(r"/\*.*?\*/|//[^\n]*", "", SOLVER.read_text(), flags=re.DOTALL)
+        self.assertRegex(
+            code,
+            r'\bparse_nonnegative_double\s*\(\s*argv\[27\]\s*,\s*"Bond"\s*,\s*&Bond\s*\)',
+        )
+        self.assertNotRegex(code, r"\bBond\s*=\s*atof\b")
+
 
     def test_builds_every_argument_from_a_parameter_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -79,7 +88,7 @@ class SolverArgumentContractTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         count, oh, tmax, geometry, floor = result.stdout.split()
-        self.assertEqual(count, "26")
+        self.assertEqual(count, "27")
         self.assertEqual(oh, "0.03")
         self.assertEqual(tmax, "1.0")
         # Unset keys fall back to the solver's own compiled defaults.
@@ -226,11 +235,11 @@ class ContourRunnerTests(unittest.TestCase):
         )
         return result, case_dir
 
-    def test_forwards_all_twenty_six_arguments(self) -> None:
+    def test_forwards_all_twenty_seven_arguments(self) -> None:
         result, case_dir = self.run_case(dict(self.PARAMS))
         self.assertEqual(result.returncode, 0, result.stderr)
         recorded = (case_dir / "argv.txt").read_text().split()
-        self.assertEqual(recorded[0], "26")
+        self.assertEqual(recorded[0], "27")
         argv = recorded[1:]
         self.assertEqual(argv[22], "finite")
         self.assertEqual(argv[23], "0.027")
@@ -241,6 +250,8 @@ class ContourRunnerTests(unittest.TestCase):
         # the manuscript states; the drill-solver ladder ran 2e-2 with nothing
         # in argv to show it, which is why the value is passed at all.
         self.assertEqual(argv[25], "1e-2")
+        # argv 27 is Bond. Zero keeps Bo0.0000.dat and G.x = 0 in reduced.h.
+        self.assertEqual(argv[26], "0")
 
     def test_honours_an_explicit_interface_floor(self) -> None:
         params = dict(self.PARAMS)
@@ -257,7 +268,7 @@ class ContourRunnerTests(unittest.TestCase):
         result, case_dir = self.run_case(params)
         self.assertEqual(result.returncode, 0, result.stderr)
         recorded = (case_dir / "argv.txt").read_text().split()
-        self.assertEqual(recorded[0], "26")
+        self.assertEqual(recorded[0], "27")
         self.assertEqual(recorded[1:][25], "2e-2")
 
     def test_rejects_a_truncated_case_table(self) -> None:

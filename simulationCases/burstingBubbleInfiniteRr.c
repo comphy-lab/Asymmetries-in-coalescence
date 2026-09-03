@@ -87,7 +87,8 @@ qcc -I. -I../src-local -O2 -Wall -disable-dimensions -fopenmp \
 ## Usage
 
 Same argv contract as `coalescenceBubble.c`. `geometryMode` is forced to
-`halfspace` (the $R_r \to \infty$ initial condition, `Bo0.0000.dat`).
+`halfspace` (the $R_r \to \infty$ initial condition, `Bo%5.4f.dat`;
+default $Bo=0$ is `Bo0.0000.dat`).
 $\chi$ is set at run time:
 
 - **bulk / far from wall**: leave `wallClearance` (argv 24) unset (`-1`);
@@ -103,7 +104,7 @@ Always pass the pinned detector radius explicitly (argv 7
 ~~~bash
 ./burstingBubbleInfiniteRr <OhOut> <RhoIn> <Rr-placeholder> <MAXlevel> \
   <tmax> <zWall> 0.021005127 3 <snapshotInterval> <drillAMR> ... \
-  halfspace <wallClearance|-1> <interfaceFloor>
+  halfspace <wallClearance|-1> <interfaceFloor> <MuRin> <Bond>
 ~~~
 */
 

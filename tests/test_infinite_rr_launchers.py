@@ -37,18 +37,20 @@ LADDER = ROOT / "runBurstingBubbleInfiniteRr.sbatch"
 PROBE = ROOT / "runInfiniteRrStackProbe.sbatch"
 ANCHOR = ROOT / "runInfiniteRrDeltaAnchor.sbatch"
 RESTART = ROOT / "runInfiniteRrRestart.sbatch"
+BOND_PROBE = ROOT / "runInfiniteRrBondProbe.sbatch"
 SOLVER_ARGS = ROOT / "src-local" / "solver_args.sh"
 
 # The one value AGENTS.md forbids changing without explicit instruction.
 PINNED_DETECTOR = "0.021005127"
 
-# argv positions, 0-based, in the 26-argument contract.
+# argv positions, 0-based, in the 27-argument contract.
 ARGV_OH = 0
 ARGV_MAXLEVEL = 3
 ARGV_DROP_RADIUS_MIN = 6
 ARGV_DRILL_AMR = 9
 ARGV_GEOMETRY = 22
 ARGV_MURIN = 25
+ARGV_BOND = 26
 
 BASILISK_REF = "v2026-07-20"
 
@@ -148,6 +150,9 @@ class LauncherHarness:
         (self.root / "simulationCases" / "DataFiles").mkdir(parents=True)
         (self.root / "src-local").mkdir()
         shutil.copy(SOLVER_ARGS, self.root / "src-local" / "solver_args.sh")
+        # The Bond-probe launcher refuses to qcc without these headers.
+        (self.root / "src-local" / "adapt_wavelet_limited.h").write_text("")
+        (self.root / "src-local" / "jetFoot.h").write_text("")
         # The stub compiler ignores the source, but the launcher expects it.
         (self.root / "simulationCases" / "burstingBubbleInfiniteRr.c").write_text("")
         shutil.copy(self.launcher, self.root / self.launcher.name)
@@ -200,7 +205,9 @@ class LauncherHarness:
         recorded = (self.root / "simulationCases" / case_id / "argv.txt").read_text()
         fields = recorded.split()
         count, argv = int(fields[0]), fields[1:]
-        assert count == len(argv) == 26, f"case {case_id}: {count} arguments, {argv}"
+        assert count == len(argv) and count in (26, 27), (
+            f"case {case_id}: {count} arguments, {argv}"
+        )
         return argv
 
     def case_params(self, case_id: str) -> dict[str, str]:
@@ -217,7 +224,7 @@ class LauncherContractTests(unittest.TestCase):
         self.anchor = ANCHOR.read_text()
 
     def test_every_launcher_parses(self) -> None:
-        for script in (LADDER, PROBE, ANCHOR, RESTART):
+        for script in (LADDER, PROBE, ANCHOR, RESTART, BOND_PROBE):
             result = subprocess.run(
                 ["bash", "-n", str(script)], capture_output=True, text=True, check=False
             )
@@ -225,7 +232,8 @@ class LauncherContractTests(unittest.TestCase):
 
     def test_detector_radius_is_pinned_not_mesh_derived(self) -> None:
         for name, source in (("ladder", self.ladder), ("probe", self.probe),
-                             ("anchor", self.anchor)):
+                             ("anchor", self.anchor),
+                             ("bond", BOND_PROBE.read_text())):
             with self.subTest(launcher=name):
                 self.assertIn(f'"dropRadiusMin={PINNED_DETECTOR}"', source)
                 self.assertNotIn('"dropRadiusMin=0"', source)
@@ -234,7 +242,8 @@ class LauncherContractTests(unittest.TestCase):
         """`set -e` on a bare `grep -qx` aborts with no diagnostic at all,
         making a wrong solver ref indistinguishable from a missing file."""
         for name, source in (("ladder", self.ladder), ("probe", self.probe),
-                             ("anchor", self.anchor), ("restart", RESTART.read_text())):
+                             ("anchor", self.anchor), ("restart", RESTART.read_text()),
+                             ("bond", BOND_PROBE.read_text())):
             with self.subTest(launcher=name):
                 self.assertIn("expected Basilisk ref=", source)
                 self.assertNotRegex(
@@ -247,7 +256,8 @@ class LauncherContractTests(unittest.TestCase):
 
     def test_launchers_record_the_resolved_argv_beside_the_outputs(self) -> None:
         for name, source in (("ladder", self.ladder), ("probe", self.probe),
-                             ("anchor", self.anchor)):
+                             ("anchor", self.anchor),
+                             ("bond", BOND_PROBE.read_text())):
             with self.subTest(launcher=name):
                 self.assertIn("case.params", source)
                 self.assertIn("argv=%s", source)
@@ -427,9 +437,35 @@ class LauncherExecutionTests(unittest.TestCase):
                     self.assertEqual(argv[ARGV_DRILL_AMR], "0")
                     self.assertEqual(argv[ARGV_GEOMETRY], "halfspace")
                     self.assertEqual(argv[ARGV_MURIN], "1e-2")
+                    self.assertEqual(argv[ARGV_BOND], "0")
 
                     params = harness.case_params(case_id)
                     self.assertEqual(params["Oh"], oh)
+                    self.assertEqual(params["MuRin"], "1e-2")
+                    self.assertEqual(params["solverStack"],
+                                     "filtered+double-projection")
+                    self.assertEqual(params["argv"].split(), argv)
+
+    def test_bond_probe_reaches_the_solver_intact(self) -> None:
+        with LauncherHarness(BOND_PROBE, {"TMAX": "1.5"}) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            expected = {"6571": "0.001", "6572": "0.01"}
+            for case_id, bond in expected.items():
+                with self.subTest(case=case_id):
+                    argv = harness.case_argv(case_id)
+                    self.assertEqual(argv[ARGV_OH], "0.0460")
+                    self.assertEqual(argv[ARGV_MAXLEVEL], "13")
+                    self.assertEqual(argv[ARGV_DROP_RADIUS_MIN], PINNED_DETECTOR)
+                    self.assertEqual(argv[ARGV_DRILL_AMR], "0")
+                    self.assertEqual(argv[ARGV_GEOMETRY], "halfspace")
+                    self.assertEqual(argv[ARGV_MURIN], "1e-2")
+                    self.assertEqual(argv[ARGV_BOND], bond)
+
+                    params = harness.case_params(case_id)
+                    self.assertEqual(params["Oh"], "0.0460")
+                    self.assertEqual(params["Bond"], bond)
                     self.assertEqual(params["MuRin"], "1e-2")
                     self.assertEqual(params["solverStack"],
                                      "filtered+double-projection")
@@ -447,6 +483,49 @@ class LauncherExecutionTests(unittest.TestCase):
             result = harness.run()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("GROUP must be", result.stderr)
+
+    def test_bond_bulk_series_reaches_the_solver_intact(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-bulk", "GROUP": "G", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            expected = {
+                "6617": "0.0375",
+                "6618": "0.0400",
+                "6619": "0.0430",
+                "6620": "0.0460",
+            }
+            for case_id, oh in expected.items():
+                with self.subTest(case=case_id):
+                    argv = harness.case_argv(case_id)
+                    self.assertEqual(argv[ARGV_OH], oh)
+                    self.assertEqual(argv[ARGV_BOND], "0.01")
+                    self.assertEqual(argv[5], "4.0")
+                    self.assertEqual(argv[23], "-1")
+                    self.assertEqual(argv[ARGV_DROP_RADIUS_MIN], PINNED_DETECTOR)
+                    self.assertEqual(argv[ARGV_MURIN], "1e-2")
+                    params = harness.case_params(case_id)
+                    self.assertEqual(params["Bond"], "0.01")
+                    self.assertEqual(params["series"], "bo001-bulk")
+                    self.assertEqual(params["initialShape"], "Bo0.0100.dat")
+                    self.assertEqual(params["wallClearance"], "-1")
+
+    def test_bond_wall_series_pins_the_south_pole_clearance(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-wall", "GROUP": "A", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            argv = harness.case_argv("6621")
+            self.assertEqual(argv[ARGV_OH], "0.0100")
+            self.assertEqual(argv[ARGV_BOND], "0.01")
+            self.assertEqual(argv[23], "0.027")
+            params = harness.case_params("6621")
+            self.assertEqual(params["series"], "bo001-wall")
+            self.assertEqual(params["wallClearance"], "0.027")
+            self.assertEqual(params["Bond"], "0.01")
+            self.assertEqual(params["initialShape"], "Bo0.0100.dat")
 
     def test_probe_runs_its_declared_design(self) -> None:
         with LauncherHarness(PROBE, {"TMAX": "0.75"}) as harness:
@@ -510,6 +589,7 @@ class LauncherExecutionTests(unittest.TestCase):
             )
             for group, name in names.items():
                 self.assertIn(group, name)
+                self.assertIn("bo0-bulk", name)
 
     def test_probe_summary_reports_a_divergence_rather_than_failing(self) -> None:
         """A case dying the way 6326 and 6330 died is this job's result."""
