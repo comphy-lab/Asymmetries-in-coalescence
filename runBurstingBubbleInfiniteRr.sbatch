@@ -95,10 +95,14 @@ case "$SERIES" in
       # mu_g/mu_l = 1e-2..1e-3): if all four still eject forward, the boundary
       # exceeds 0.046 and that disagreement is itself the result.
       G) CASE_IDS=(6517 6518 6519 6520); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      # H/I extend Bo=0 past 0.0460, where every completed rung still ejects.
+      # E remains the turning-point refinement quartet (6521-6524).
+      H) CASE_IDS=(6531 6532 6533 6534); OH_VALUES=(0.0500 0.0550 0.0600 0.0650) ;;
+      I) CASE_IDS=(6535 6536 6537 6538); OH_VALUES=(0.0700 0.0800 0.0900 0.1000) ;;
       # E is reserved for the refinement quartet around the measured turning
       # point; fill the Oh values in once the ladder above has located it.
       E) CASE_IDS=(6521 6522 6523 6524); OH_VALUES=("${OH_E1:?set OH_E1..OH_E4}" "${OH_E2:?}" "${OH_E3:?}" "${OH_E4:?}") ;;
-      *) echo "ERROR: GROUP must be A, B, C, E, F or G" >&2; exit 2 ;;
+      *) echo "ERROR: GROUP must be A, B, C, E, F, G, H or I" >&2; exit 2 ;;
     esac
     ;;
   bo0001-bulk)
@@ -140,6 +144,15 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
     esac
     ;;
+  bo001-bulk-densify)
+    BOND="${BOND:-0.01}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      D) CASE_IDS=(6651 6652 6653 6654); OH_VALUES=(0.0440 0.0445 0.0450 0.0455) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be D" >&2; exit 2 ;;
+    esac
+    ;;
   bo001-wall)
     BOND="${BOND:-0.01}"
     # argv zWall is a placeholder: wallClearance>0 resets origin from the
@@ -179,7 +192,7 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo0001-bulk, bo001-bulk, bo010-bulk, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo0001-bulk, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in

@@ -542,6 +542,36 @@ class LauncherExecutionTests(unittest.TestCase):
             self.assertEqual(params["initialShape"], "Bo0.1000.dat")
             self.assertEqual(harness.case_params("6804")["Oh"], "0.0250")
 
+    def test_bo0_upward_groups_reach_the_solver(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo0-bulk", "GROUP": "H", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_argv("6531")[ARGV_OH], "0.0500")
+            self.assertEqual(harness.case_argv("6531")[ARGV_BOND], "0")
+            self.assertEqual(harness.case_params("6534")["Oh"], "0.0650")
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo0-bulk", "GROUP": "I", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_params("6535")["Oh"], "0.0700")
+            self.assertEqual(harness.case_params("6538")["Oh"], "0.1000")
+            self.assertEqual(harness.case_params("6538")["Bond"], "0")
+
+    def test_bo001_densify_group_reaches_the_solver(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-bulk-densify", "GROUP": "D", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_argv("6651")[ARGV_OH], "0.0440")
+            self.assertEqual(harness.case_argv("6651")[ARGV_BOND], "0.01")
+            self.assertEqual(harness.case_params("6654")["Oh"], "0.0455")
+            self.assertEqual(harness.case_params("6654")["series"], "bo001-bulk-densify")
+            self.assertEqual(harness.case_params("6654")["initialShape"], "Bo0.0100.dat")
+
     def test_bond_wall_series_pins_the_south_pole_clearance(self) -> None:
         with LauncherHarness(LADDER, {
             "SERIES": "bo001-wall", "GROUP": "A", "TMAX": "1.5",
