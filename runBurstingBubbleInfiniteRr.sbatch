@@ -52,9 +52,10 @@ set -euo pipefail
 
 MODE="${MODE:-production}"
 GROUP="${GROUP:-A}"
-# bo0-bulk is the existing Stack-1 Bo=0 ladder (6501-6524).
-# bo001-bulk repeats that Oh list at Bo=0.01, zWall=4, wallClearance=-1
-# (realized south-pole gap ~4.05 R0 — the same bulk half-space as 6501-6520).
+# bo0-bulk is the existing Stack-1 Bo=0 ladder (6501-6520).
+# bo0001-bulk / bo001-bulk / bo010-bulk repeat that Oh list at Bo=0.001,
+# 0.01 and 0.1 (Young-Laplace Bo%5.4f.dat, reduced.h G.x=-Bo).
+# bo001-bulk is the production Bond (experiments rounded up).
 # bo001-wall is the same Oh list at Bo=0.01 with wallClearance=0.027, so the
 # small-bubble south pole sits next to the wall (solver-derived zWall~0.02).
 # bo001-*-ml14 is the Bond=0.01 mesh-sensitivity rung: same geometries and
@@ -100,6 +101,19 @@ case "$SERIES" in
       *) echo "ERROR: GROUP must be A, B, C, E, F or G" >&2; exit 2 ;;
     esac
     ;;
+  bo0001-bulk)
+    BOND="${BOND:-0.001}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      A) CASE_IDS=(6701 6702 6703 6704); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
+      B) CASE_IDS=(6705 6706 6707 6708); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
+      C) CASE_IDS=(6709 6710 6711 6712); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
+      F) CASE_IDS=(6713 6714 6715 6716); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
+      G) CASE_IDS=(6717 6718 6719 6720); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
+    esac
+    ;;
   bo001-bulk)
     BOND="${BOND:-0.01}"
     ZWALL="${ZWALL:-4.0}"
@@ -110,6 +124,19 @@ case "$SERIES" in
       C) CASE_IDS=(6609 6610 6611 6612); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
       F) CASE_IDS=(6613 6614 6615 6616); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
       G) CASE_IDS=(6617 6618 6619 6620); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
+    esac
+    ;;
+  bo010-bulk)
+    BOND="${BOND:-0.1}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      A) CASE_IDS=(6801 6802 6803 6804); OH_VALUES=(0.0100 0.0150 0.0200 0.0250) ;;
+      B) CASE_IDS=(6805 6806 6807 6808); OH_VALUES=(0.0270 0.0280 0.0290 0.0300) ;;
+      C) CASE_IDS=(6809 6810 6811 6812); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
+      F) CASE_IDS=(6813 6814 6815 6816); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
+      G) CASE_IDS=(6817 6818 6819 6820); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
       *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
     esac
     ;;
@@ -152,7 +179,7 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo001-bulk, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo0001-bulk, bo001-bulk, bo010-bulk, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in

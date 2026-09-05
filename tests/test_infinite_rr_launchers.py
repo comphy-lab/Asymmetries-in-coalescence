@@ -511,6 +511,37 @@ class LauncherExecutionTests(unittest.TestCase):
                     self.assertEqual(params["initialShape"], "Bo0.0100.dat")
                     self.assertEqual(params["wallClearance"], "-1")
 
+    def test_bond_0p001_bulk_series_reaches_the_solver_intact(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo0001-bulk", "GROUP": "G", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            argv = harness.case_argv("6720")
+            self.assertEqual(argv[ARGV_OH], "0.0460")
+            self.assertEqual(argv[ARGV_BOND], "0.001")
+            self.assertEqual(argv[23], "-1")
+            params = harness.case_params("6717")
+            self.assertEqual(params["Bond"], "0.001")
+            self.assertEqual(params["series"], "bo0001-bulk")
+            self.assertEqual(params["initialShape"], "Bo0.0010.dat")
+            self.assertEqual(harness.case_params("6719")["Oh"], "0.0430")
+
+    def test_bond_0p1_bulk_series_reaches_the_solver_intact(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo010-bulk", "GROUP": "A", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            argv = harness.case_argv("6801")
+            self.assertEqual(argv[ARGV_OH], "0.0100")
+            self.assertEqual(argv[ARGV_BOND], "0.1")
+            params = harness.case_params("6801")
+            self.assertEqual(params["Bond"], "0.1")
+            self.assertEqual(params["series"], "bo010-bulk")
+            self.assertEqual(params["initialShape"], "Bo0.1000.dat")
+            self.assertEqual(harness.case_params("6804")["Oh"], "0.0250")
+
     def test_bond_wall_series_pins_the_south_pole_clearance(self) -> None:
         with LauncherHarness(LADDER, {
             "SERIES": "bo001-wall", "GROUP": "A", "TMAX": "1.5",
