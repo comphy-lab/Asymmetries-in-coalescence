@@ -572,6 +572,54 @@ class LauncherExecutionTests(unittest.TestCase):
             self.assertEqual(harness.case_params("6654")["series"], "bo001-bulk-densify")
             self.assertEqual(harness.case_params("6654")["initialShape"], "Bo0.0100.dat")
 
+    def test_bo0001_upward_groups_reach_the_solver(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo0001-bulk", "GROUP": "H", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_argv("6731")[ARGV_OH], "0.0500")
+            self.assertEqual(harness.case_argv("6731")[ARGV_BOND], "0.001")
+            self.assertEqual(harness.case_params("6734")["Oh"], "0.0650")
+            self.assertEqual(harness.case_params("6731")["initialShape"], "Bo0.0010.dat")
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo0001-bulk", "GROUP": "I", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_params("6735")["Oh"], "0.0700")
+            self.assertEqual(harness.case_params("6738")["Oh"], "0.1000")
+            self.assertEqual(harness.case_params("6738")["Bond"], "0.001")
+
+    def test_boundary_densify_groups_reach_the_solver(self) -> None:
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo0-bulk-densify", "GROUP": "D", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_argv("6541")[ARGV_OH], "0.0560")
+            self.assertEqual(harness.case_argv("6541")[ARGV_BOND], "0")
+            self.assertEqual(harness.case_params("6544")["Oh"], "0.0590")
+            self.assertEqual(harness.case_params("6544")["series"], "bo0-bulk-densify")
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo010-bulk-densify", "GROUP": "D", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_argv("6821")[ARGV_OH], "0.0334")
+            self.assertEqual(harness.case_argv("6821")[ARGV_BOND], "0.1")
+            self.assertEqual(harness.case_params("6824")["Oh"], "0.0337")
+            self.assertEqual(harness.case_params("6824")["initialShape"], "Bo0.1000.dat")
+        with LauncherHarness(LADDER, {
+            "SERIES": "bo001-bulk-densify", "GROUP": "N", "TMAX": "1.5",
+        }) as harness:
+            result = harness.run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(harness.case_argv("6661")[ARGV_OH], "0.0441")
+            self.assertEqual(harness.case_argv("6661")[ARGV_BOND], "0.01")
+            self.assertEqual(harness.case_params("6664")["Oh"], "0.0444")
+            self.assertEqual(harness.case_params("6664")["series"], "bo001-bulk-densify")
+
     def test_bond_wall_series_pins_the_south_pole_clearance(self) -> None:
         with LauncherHarness(LADDER, {
             "SERIES": "bo001-wall", "GROUP": "A", "TMAX": "1.5",

@@ -115,7 +115,11 @@ case "$SERIES" in
       C) CASE_IDS=(6709 6710 6711 6712); OH_VALUES=(0.0310 0.0325 0.0333 0.0365) ;;
       F) CASE_IDS=(6713 6714 6715 6716); OH_VALUES=(0.0340 0.0345 0.0350 0.0355) ;;
       G) CASE_IDS=(6717 6718 6719 6720); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
-      *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F or G" >&2; exit 2 ;;
+      # H/I: every 6701-6720 rung ejected, including Oh=0.0460. Same upward
+      # window as bo0-bulk H/I. E/6521-24 stays the turning-point quartet.
+      H) CASE_IDS=(6731 6732 6733 6734); OH_VALUES=(0.0500 0.0550 0.0600 0.0650) ;;
+      I) CASE_IDS=(6735 6736 6737 6738); OH_VALUES=(0.0700 0.0800 0.0900 0.1000) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F, G, H or I" >&2; exit 2 ;;
     esac
     ;;
   bo001-bulk)
@@ -150,6 +154,28 @@ case "$SERIES" in
     WALLCLEARANCE="${WALLCLEARANCE:--1}"
     case "$GROUP" in
       D) CASE_IDS=(6651 6652 6653 6654); OH_VALUES=(0.0440 0.0445 0.0450 0.0455) ;;
+      # N tightens (0.0440, 0.0445]: 6651 ejected, 6652 at t>1.4 with no drop.
+      N) CASE_IDS=(6661 6662 6663 6664); OH_VALUES=(0.0441 0.0442 0.0443 0.0444) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be D or N" >&2; exit 2 ;;
+    esac
+    ;;
+  bo0-bulk-densify)
+    BOND="${BOND:-0}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      # 6532 Oh=0.055 ejected; 6533 Oh=0.060 at t>1.3 with no drop.
+      D) CASE_IDS=(6541 6542 6543 6544); OH_VALUES=(0.0560 0.0570 0.0580 0.0590) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be D" >&2; exit 2 ;;
+    esac
+    ;;
+  bo010-bulk-densify)
+    BOND="${BOND:-0.1}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      # 6811 Oh=0.0333 ejected; 6813 Oh=0.0340 at t>1.3 with no drop.
+      D) CASE_IDS=(6821 6822 6823 6824); OH_VALUES=(0.0334 0.0335 0.0336 0.0337) ;;
       *) echo "ERROR: SERIES=$SERIES GROUP must be D" >&2; exit 2 ;;
     esac
     ;;
@@ -192,7 +218,7 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo0001-bulk, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0001-bulk, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in
