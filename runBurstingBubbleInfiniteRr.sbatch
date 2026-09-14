@@ -61,8 +61,13 @@ GROUP="${GROUP:-A}"
 # bo001-*-ml14 is the Bond=0.01 mesh-sensitivity rung: same geometries and
 # pinned detector, MAXlevel 14. Compare 6641-44 to 6601/6606/6614/6620 and
 # 6645-48 to 6621/6626/6634/6640. Same Ldomain family, Delta halved; do not
-# mix bulk and wall points on one Delta curve. Snellius drops prefix env, so
-# SERIES and GROUP must be passed as `sbatch --export=ALL,SERIES=...,GROUP=...`.
+# mix bulk and wall points on one Delta curve.
+# bo0-bulk J/K fills the harvested Oh gap 0.0365-0.050 (G 6517-6520 exists
+# but was not in the dropmap harvest). bo0-bulk-ml14 P/Q and bo001-bulk-ml14
+# P/Q are the Oh* / just-above strips; do not reuse 6641-44. Submit ML14
+# with sbatch --time=5-00:00:00 (header default is 72h). Snellius drops
+# prefix env, so SERIES and GROUP must be passed as
+# `sbatch --export=ALL,SERIES=...,GROUP=...`.
 SERIES="${SERIES:-bo0-bulk}"
 MAXLEVEL="${MAXLEVEL:-13}"
 if [[ "$SERIES" == "bo0-bulk" && "${SLURM_JOB_NAME:-}" == *Bo001* ]]; then
@@ -99,10 +104,15 @@ case "$SERIES" in
       # E remains the turning-point refinement quartet (6521-6524).
       H) CASE_IDS=(6531 6532 6533 6534); OH_VALUES=(0.0500 0.0550 0.0600 0.0650) ;;
       I) CASE_IDS=(6535 6536 6537 6538); OH_VALUES=(0.0700 0.0800 0.0900 0.1000) ;;
+      # J/K densify the Bo=0 plateau window between harvested 6512 (0.0365)
+      # and 6531 (0.050). G (6517-6520) already ran 0.0375/0.0400/0.0430/0.0460;
+      # these rungs sit between those points. Do not reuse 6517-6520.
+      J) CASE_IDS=(6581 6582 6583 6584); OH_VALUES=(0.0380 0.0410 0.0440 0.0470) ;;
+      K) CASE_IDS=(6585 6586 6587 6588); OH_VALUES=(0.0390 0.0420 0.0450 0.0480) ;;
       # E is reserved for the refinement quartet around the measured turning
       # point; fill the Oh values in once the ladder above has located it.
       E) CASE_IDS=(6521 6522 6523 6524); OH_VALUES=("${OH_E1:?set OH_E1..OH_E4}" "${OH_E2:?}" "${OH_E3:?}" "${OH_E4:?}") ;;
-      *) echo "ERROR: GROUP must be A, B, C, E, F, G, H or I" >&2; exit 2 ;;
+      *) echo "ERROR: GROUP must be A, B, C, E, F, G, H, I, J or K" >&2; exit 2 ;;
     esac
     ;;
   bo0001-bulk)
@@ -205,7 +215,25 @@ case "$SERIES" in
     WALLCLEARANCE="${WALLCLEARANCE:--1}"
     case "$GROUP" in
       M) CASE_IDS=(6641 6642 6643 6644); OH_VALUES=(0.0100 0.0280 0.0345 0.0460) ;;
-      *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
+      # P/Q: Oh* neighbourhood and just above, through Oh_c^(U). New case
+      # IDs; do not reuse 6641-44 (those timed out at 5d).
+      P) CASE_IDS=(6671 6672 6673 6674); OH_VALUES=(0.0280 0.0300 0.0325 0.0345) ;;
+      Q) CASE_IDS=(6675 6676 6677 6678); OH_VALUES=(0.0365 0.0400 0.0442 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be M, P or Q" >&2; exit 2 ;;
+    esac
+    ;;
+  bo0-bulk-ml14)
+    # Bo=0 ML14 strip around the untrusted 4-cell Oh* spike and just above
+    # it. Same bulk half-space as bo0-bulk. Forcing MAXlevel=14. Submit with
+    # --time=5-00:00:00. Do not mix onto a wall curve.
+    BOND="${BOND:-0}"
+    MAXLEVEL=14
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      P) CASE_IDS=(6591 6592 6593 6594); OH_VALUES=(0.0333 0.0345 0.0355 0.0365) ;;
+      Q) CASE_IDS=(6595 6596 6597 6598); OH_VALUES=(0.0375 0.0400 0.0430 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be P or Q" >&2; exit 2 ;;
     esac
     ;;
   bo001-wall-ml14)
@@ -218,7 +246,7 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0001-bulk, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0-bulk-ml14, bo0001-bulk, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in
