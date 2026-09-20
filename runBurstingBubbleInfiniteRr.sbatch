@@ -132,6 +132,18 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be A, B, C, F, G, H or I" >&2; exit 2 ;;
     esac
     ;;
+  bo0001-bulk-densify)
+    # Re-run the Bo=0.001 Oh_c^(U) edges 0.0460/0.0500 with new case IDs and
+    # fill the 0.004 gap plus two rungs above 0.050. Do not reuse 6720/6731.
+    BOND="${BOND:-0.001}"
+    ZWALL="${ZWALL:-4.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:--1}"
+    case "$GROUP" in
+      D) CASE_IDS=(6741 6742 6743 6744); OH_VALUES=(0.0460 0.0470 0.0480 0.0490) ;;
+      N) CASE_IDS=(6745 6746 6747 6748); OH_VALUES=(0.0500 0.0510 0.0520 0.0530) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be D or N" >&2; exit 2 ;;
+    esac
+    ;;
   bo001-bulk)
     BOND="${BOND:-0.01}"
     ZWALL="${ZWALL:-4.0}"
@@ -186,7 +198,10 @@ case "$SERIES" in
     case "$GROUP" in
       # 6811 Oh=0.0333 ejected; 6813 Oh=0.0340 at t>1.3 with no drop.
       D) CASE_IDS=(6821 6822 6823 6824); OH_VALUES=(0.0334 0.0335 0.0336 0.0337) ;;
-      *) echo "ERROR: SERIES=$SERIES GROUP must be D" >&2; exit 2 ;;
+      # P/Q fill the Oh* window 0.020-0.027 (6803/6804/6805). Do not reuse 6804.
+      P) CASE_IDS=(6831 6832 6833 6834); OH_VALUES=(0.0210 0.0220 0.0230 0.0240) ;;
+      Q) CASE_IDS=(6835 6836 6837 6838); OH_VALUES=(0.0255 0.0260 0.0265 0.0275) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be D, P or Q" >&2; exit 2 ;;
     esac
     ;;
   bo001-wall)
@@ -246,7 +261,7 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0-bulk-ml14, bo0001-bulk, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0-bulk-ml14, bo0001-bulk, bo0001-bulk-densify, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in
