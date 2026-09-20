@@ -251,6 +251,22 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be P or Q" >&2; exit 2 ;;
     esac
     ;;
+  bo001-bulk-farfloor)
+    # Bo=0.01 bulk, south-pole-to-floor twice the zWall=4 ladder (~4 -> 8).
+    # LDOMAIN=20 and MAXlevel 14 keep Delta = 20/2^14 = 10/2^13.
+    # P: Oh* neighbourhood (ladder max v_max at 0.0310). Q: Oh_c^(U)
+    # edges (0.0442, 0.0443]. Do not mix onto a wall curve.
+    BOND="${BOND:-0.01}"
+    MAXLEVEL=14
+    ZWALL="${ZWALL:-8.0}"
+    WALLCLEARANCE="${WALLCLEARANCE:-8.0}"
+    export LDOMAIN="${LDOMAIN:-20}"
+    case "$GROUP" in
+      P) CASE_IDS=(6681 6682 6683 6684); OH_VALUES=(0.0280 0.0300 0.0310 0.0325) ;;
+      Q) CASE_IDS=(6685 6686 6687 6688); OH_VALUES=(0.0440 0.0442 0.0443 0.0460) ;;
+      *) echo "ERROR: SERIES=$SERIES GROUP must be P or Q" >&2; exit 2 ;;
+    esac
+    ;;
   bo001-wall-ml14)
     BOND="${BOND:-0.01}"
     MAXLEVEL=14
@@ -261,7 +277,7 @@ case "$SERIES" in
       *) echo "ERROR: SERIES=$SERIES GROUP must be M" >&2; exit 2 ;;
     esac
     ;;
-  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0-bulk-ml14, bo0001-bulk, bo0001-bulk-densify, bo001-bulk, bo001-bulk-densify, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
+  *) echo "ERROR: SERIES must be bo0-bulk, bo0-bulk-densify, bo0-bulk-ml14, bo0001-bulk, bo0001-bulk-densify, bo001-bulk, bo001-bulk-densify, bo001-bulk-farfloor, bo010-bulk, bo010-bulk-densify, bo001-wall, bo001-bulk-ml14 or bo001-wall-ml14" >&2; exit 2 ;;
 esac
 
 case "$MODE" in

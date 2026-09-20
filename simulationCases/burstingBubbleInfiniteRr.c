@@ -94,7 +94,9 @@ $\chi$ is set at run time:
 - **bulk / far from wall**: leave `wallClearance` (argv 24) unset (`-1`);
   `zWall` (argv 6) alone sets the domain, `Ldomain = min(zWall+6, 16)`
   (zWall=4 gives Ldomain=10, $\Delta = 10/2^{13}$ at MAXlevel 13 — the
-  matched-$\Delta$ ladder spacing);
+  matched-$\Delta$ ladder spacing). South-pole-to-floor clearance is
+  \(\approx 4\) at zWall=4. Doubling that gap uses `wallClearance=8`,
+  `LDOMAIN=20`, MAXlevel 14 so \(\Delta\) is unchanged;
 - **near wall** ($\chi \ll 1$): pass the physical clearance, e.g.
   `wallClearance = 0.027`, as in the $K_q$ measurement.
 

@@ -244,6 +244,7 @@ Stack 2: momentum-conserving VOF advection. Must follow `two-phase.h`. */
 #include "tag.h"
 #include "adapt_wavelet_limited.h"
 #include <float.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -779,6 +780,25 @@ int main(int argc, char const *argv[]) {
   comment above). */
   Ldomain = halfspace ? fmin(zWall + 6.0, 16.) :
     zWall + 2. + 2.*Rr + 4.0;
+  /**
+  Optional `LDOMAIN` override so a far-floor half-space can keep the same
+  \(\Delta = L_0/2^{\mathrm{MAXlevel}}\) as the zWall=4, L0=10, MAXlevel-13
+  ladder (L0=20 at MAXlevel 14). Unset, the formula above is unchanged. */
+  {
+    const char * ldomain_env = getenv ("LDOMAIN");
+    if (ldomain_env && *ldomain_env) {
+      double l_override = 0.;
+      if (!parse_positive_double (ldomain_env, "LDOMAIN", &l_override))
+        return 1;
+      if (!halfspace && l_override < Ldomain) {
+        fprintf (ferr,
+                 "LDOMAIN=%g is smaller than the finite-geometry domain %g\n",
+                 l_override, Ldomain);
+        return 1;
+      }
+      Ldomain = l_override;
+    }
+  }
   if (argc > 7 && dropRadiusMin == 0.)
     // exp2 avoids the int shift (1 << MAXlevel), which is UB/overflow for large
     // MAXlevel; the result is the same 2^MAXlevel for the levels used here.
