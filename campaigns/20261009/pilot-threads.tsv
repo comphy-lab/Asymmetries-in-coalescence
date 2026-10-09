@@ -1,0 +1,14 @@
+# Thread-scaling pilot: identical ML14 Bo=0.01 Oh=0.031 case at 48/24/16/8 threads, node fully loaded (192 cores)
+# case_id series bond oh maxlevel zwall wallclearance ldomain threads
+6981 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 48
+6982 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 24
+6983 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 24
+6984 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 16
+6985 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 16
+6986 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 16
+6987 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 8
+6988 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 8
+6989 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 8
+6990 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 8
+6991 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 8
+6992 bo001-bulk-ml14-pilot 0.01 0.0310 14 4.0 -1 10 8
