@@ -413,12 +413,16 @@ keep `MAXlevel`. Unset, the AMR policy is unchanged. */
 double farFloorRadius = 0.;
 int farFloorDrop = 0;
 /**
-`IC_BAND_REFINE` (environment, default 1): before the volume fractions are
-computed at $t=0$, refine every cell within $2\Delta$ of the initial
-interface to its floor level (`MAXlevel`, or the far-field floor) and
-recompute the distance field. The wavelet pass alone leaves a nearly planar
-interface coarse at $t=0$; set 0 only to reproduce pre-fix behaviour. */
-int icBandRefine = 1;
+`IC_BAND_REFINE` (environment, default 0 = the validated legacy IC). Set 1 to
+refine every interfacial cell to its floor level at $t=0$ and recompute its
+volume fraction from the exact distance. That removes the far-field ring the
+ML14 half-space IC sheds and conserves the liquid volume exactly, **but it
+raised the regridded face divergence 10-40x** in a 16 Oct A/B (Bo=0 bulk,
+Oh 0.056, ML14: mean maxDivU 4 legacy vs 40 band-before-fractions vs 144
+cut-cells-after-fractions, all near the neck), and a $\chi=0.5$ strip built
+on the first variant failed its projection at $t\approx0.006$. Not for
+production until that is understood. */
+int icBandRefine = 0;
 /**
 `MIN_LEVEL` (environment): the coarsest level the wavelet pass may coarsen
 to. Default `MAXlevel - 6`, i.e. a far-field cell of $64\Delta$. For a large
@@ -1165,15 +1169,17 @@ event init(t = 0){
     The wavelet pass above refines only where `f` or `d` has wavelet error,
     and `d` is exactly linear beside a plane, so a flat interface is left
     coarse at $t=0$ (level 5 at MAXlevel 14 on the half-space free surface).
-    The first `adapt` then prolongates that coarse volume fraction onto the
-    floor, which is the likely origin of the ML14 Bo=0 shed ring. Refine the
-    band $|d| < 2\Delta$ to the floor level here so the AMR contract holds
-    from $t = 0$. `distance()` installs `refine_distance()` as the refinement
-    callback of `d`, so every new child gets the exact distance from the
-    stored segments, and `refine()` repeats until no cell qualifies. Do not
-    call `distance()` again: it frees its segment list a second time. */
-    if (icBandRefine)
-      refine (level < floor_level_at (y) && fabs (d[]) < 2.*Delta);
+    The interfacial floor in the first `adapt` then refines it by
+    *prolongating* that coarse volume fraction, which shed the ML14 Bo=0 ring
+    and changed the liquid volume by 1e-3. The fix is applied after the
+    fractions are computed (see `IC_BAND_REFINE` below the `fractions()`
+    call): only cells the interface cuts are refined, and their fractions are
+    then recomputed from the exact distance, so the mesh is the one the first
+    `adapt` would produce anyway but with exact fractions. An earlier version
+    refined the whole band $|d| < 2\Delta$ before `fractions()`; that left the
+    initial mesh finer than the wavelet pass keeps, the first `adapt`
+    coarsened ~53k cells around the opening neck, and the face divergence
+    stayed ~10-20x higher for the whole run (16 Oct A/B). */
     if (drillAMR && drillRegionalOnly) {
       /**
       Retained as a no-op accelerator. With `initialLevel = MAXlevel` the
@@ -1194,6 +1200,27 @@ event init(t = 0){
     /**
     We can now initialize the volume fraction of the domain. */
     fractions (phi, f);
+    /**
+    `IC_BAND_REFINE` (default 0; see its declaration): refine every cell the interface cuts to its
+    floor level, then recompute `phi` and `f` from the exact distance (each
+    new child of `d` gets its exact value from `refine_distance()`). Repeat
+    until a pass adds no cell. Only cut cells are refined, so the mesh matches
+    what the interfacial floor of the first `adapt` would build, but `f` is
+    exact instead of prolongated from a coarse cut cell. */
+    if (icBandRefine) {
+      int passes = 0;
+      long cellsBefore;
+      do {
+        cellsBefore = grid->tn;
+        refine (level < floor_level_at (y) &&
+                f[] > interfaceEps && f[] < 1. - interfaceEps);
+        if (grid->tn != cellsBefore) {
+          foreach_vertex()
+            phi[] = (d[] + d[-1] + d[0,-1] + d[-1,-1])/4.;
+          fractions (phi, f);
+        }
+      } while (grid->tn != cellsBefore && ++passes < 2*MAXlevel);
+    }
     foreach(){
       u.x[] = 0.0;
       u.y[] = 0.0;

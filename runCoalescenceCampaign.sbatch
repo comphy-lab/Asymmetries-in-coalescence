@@ -35,7 +35,9 @@
 #
 # Physics and detector: Stack 1 (FILTERED + double projection), pinned
 # dropRadiusMin=0.021005127, dropPersistence=3, MuRin=1e-2, drillAMR=0,
-# interfaceFloor=1, IC band refinement on (solver default).
+# interfaceFloor=1. The IC is the legacy one unless the job exports
+# IC_BAND_REFINE=1 (not for production: it raised the face divergence, see
+# coalescenceBubble.c); case.params records the value used.
 #
 # SUBMISSION
 #   sbatch --export=ALL,MANIFEST=campaign.tsv runCoalescenceCampaign.sbatch
@@ -231,7 +233,7 @@ for i in "${!CASES[@]}"; do
         "$case_id" "$oh" "$bond" "$MURIN" "$level" "$TMAX" "$zwall"
       printf 'Ldomain=%s\ndrillAMR=0\ngeometryMode=%s\nRr=%s\nwallClearance=%s\n' "$ldom" "$geom" "$rr_arg" "$clear"
       printf 'series=%s\ninitialShape=%s\ninitialShapeSha256=%s\n' "$series" "$ic" "$ic_sha"
-      printf 'farFloorRadius=%s\nfarFloorDrop=%s\nminLevel=%s\nicBandRefine=1\n' "$ffr" "$ffd" "$minl"
+      printf 'farFloorRadius=%s\nfarFloorDrop=%s\nminLevel=%s\nicBandRefine=%s\n' "$ffr" "$ffd" "$minl" "${IC_BAND_REFINE:-0}"
       printf 'dropRadiusMin=0.021005127\ndropPersistence=3\nsnapshotInterval=%s\n' "$SNAPINT"
       printf 'solverStack=filtered+double-projection\nqccFlags=\nsourceCommit=%s\n' "$SOURCE_COMMIT"
       printf 'launcher=runCoalescenceCampaign.sbatch\nargv=%s\n' "${solver_args[*]}"
