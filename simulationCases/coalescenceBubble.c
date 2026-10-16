@@ -402,6 +402,44 @@ char nameOut[80], dumpFile[80];
 int interfaceFloor = 1;
 double interfaceEps = 1e-6;
 int interfaceFloorDeficit = 0;
+/**
+Far-field refinement floor (environment, default off). With
+`FAR_FLOOR_RADIUS` = $Y_f > 0$, interfacial cells farther than $Y_f$ from the
+axis are held at `MAXlevel - FAR_FLOOR_DROP` instead of `MAXlevel`, and the
+wavelet ceiling there is the same reduced level. This keeps the large parent
+surface of a finite-$R_r$ case at a resolution set by its own curvature,
+while the small bubble, the neck, the jet and the drops (all at $y \le Y_f$)
+keep `MAXlevel`. Unset, the AMR policy is unchanged. */
+double farFloorRadius = 0.;
+int farFloorDrop = 0;
+/**
+`IC_BAND_REFINE` (environment, default 1): before the volume fractions are
+computed at $t=0$, refine every cell within $2\Delta$ of the initial
+interface to its floor level (`MAXlevel`, or the far-field floor) and
+recompute the distance field. The wavelet pass alone leaves a nearly planar
+interface coarse at $t=0$; set 0 only to reproduce pre-fix behaviour. */
+int icBandRefine = 1;
+/**
+`MIN_LEVEL` (environment): the coarsest level the wavelet pass may coarsen
+to. Default `MAXlevel - 6`, i.e. a far-field cell of $64\Delta$. For a large
+finite-$R_r$ domain at matched $\Delta$ that default is a uniform base grid of
+$4^{\mathrm{MAXlevel}-6}$ cells (17M at MAXlevel 18); an explicit lower level
+keeps the quiescent far field coarse while the wavelet criteria still refine
+wherever the flow needs it. */
+int minLevel = -1;
+
+static inline int floor_level_at (double y)
+{
+  return (farFloorRadius > 0. && y > farFloorRadius) ?
+    MAXlevel - farFloorDrop : MAXlevel;
+}
+
+int far_floor_level (double x, double y, double z)
+{
+  (void) x; (void) z;
+  return floor_level_at (y);
+}
+
 int interfaceFloorPreDeficit = 0;
 int adaptRefined = 0, adaptCoarsened = 0;
 long gridCells = 0;
@@ -722,6 +760,67 @@ int main(int argc, char const *argv[]) {
   else
     snprintf (initialConditionFile, sizeof(initialConditionFile),
               "InitialConditionRr-%3.2f.dat", Rr);
+  /**
+  `INITIAL_SHAPE` (environment) names the polyline in `DataFiles/`
+  explicitly, overriding the Bond/Rr-derived file name. Campaigns use it to
+  give each case its own initial condition (neck size, R_r) without file-name
+  collisions. */
+  {
+    const char * shape_env = getenv ("INITIAL_SHAPE");
+    if (shape_env && *shape_env) {
+      if (strlen (shape_env) >= sizeof(initialConditionFile)) {
+        fprintf (ferr, "INITIAL_SHAPE name too long: %s\n", shape_env);
+        return 1;
+      }
+      snprintf (initialConditionFile, sizeof(initialConditionFile), "%s",
+                shape_env);
+    }
+    const char * ffr = getenv ("FAR_FLOOR_RADIUS");
+    if (ffr && *ffr && !parse_positive_double (ffr, "FAR_FLOOR_RADIUS",
+                                               &farFloorRadius))
+      return 1;
+    const char * ffd = getenv ("FAR_FLOOR_DROP");
+    if (ffd && *ffd) {
+      char * end = NULL;
+      long v = strtol (ffd, &end, 10);
+      /* at most 6 levels: the wavelet minimum level is MAXlevel - 6 */
+      if (end == ffd || *end != '\0' || v < 0 || v > 6) {
+        fprintf (ferr, "FAR_FLOOR_DROP must be an integer in [0,6], got '%s'\n",
+                 ffd);
+        return 1;
+      }
+      farFloorDrop = (int) v;
+    }
+    if (farFloorRadius > 0. && farFloorDrop == 0) {
+      fprintf (ferr, "FAR_FLOOR_RADIUS set but FAR_FLOOR_DROP is 0\n");
+      return 1;
+    }
+    const char * mlv = getenv ("MIN_LEVEL");
+    if (mlv && *mlv) {
+      char * end = NULL;
+      long v = strtol (mlv, &end, 10);
+      if (end == mlv || *end != '\0' || v < 1 || v > MAXlevel) {
+        fprintf (ferr, "MIN_LEVEL must be an integer in [1,MAXlevel], got '%s'\n", mlv);
+        return 1;
+      }
+      minLevel = (int) v;
+    }
+    else
+      minLevel = MAXlevel - 6;
+    if (farFloorRadius > 0. && MAXlevel - farFloorDrop < minLevel) {
+      fprintf (ferr, "far-field floor level %d is below MIN_LEVEL %d\n",
+               MAXlevel - farFloorDrop, minLevel);
+      return 1;
+    }
+    const char * icb = getenv ("IC_BAND_REFINE");
+    if (icb && *icb) {
+      if (strcmp (icb, "0") && strcmp (icb, "1")) {
+        fprintf (ferr, "IC_BAND_REFINE must be 0 or 1, got '%s'\n", icb);
+        return 1;
+      }
+      icBandRefine = atoi (icb);
+    }
+  }
   shapeSouthPole = initial_shape_south_pole (initialConditionFile);
 
   if (drillMaxlevelStart < 0)
@@ -813,7 +912,7 @@ int main(int argc, char const *argv[]) {
   origin(originX, 0.0);
   init_grid (1 << (10));
 
-  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, Bond %g, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d, interfaceFloor %d, solverStack %s\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, Bond, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly, interfaceFloor, SOLVER_STACK);
+  fprintf(ferr, "Level %d, Ldomain %g, tmax %3.2f, MuRin %3.2e, OhOut %3.2e, Rho21 %4.3f, Rr %f, Bond %g, geometry %s, initialShape %s, shapeSouthPole %g, wallClearance %g, zWall %g, dropRadiusMin %g, dropPersistence %d, snapshotInterval %g, drillAMR %d, drillStart %d, drillFocus %d, drillNcells %g, drillRegionMinX %g, drillArmSteps %d, drillArmTime %g, drillCoarsenTime %g, drillRegionMaxX %g, drillRegionRadius %g, drillFireX %g, drillTipRadius %g, drillRegionalOnly %d, interfaceFloor %d, farFloorRadius %g, farFloorDrop %d, icBandRefine %d, minLevel %d, solverStack %s\n", MAXlevel, Ldomain, tmax, MuRin, OhOut, RhoIn, Rr, Bond, geometryMode, initialConditionFile, shapeSouthPole, wallClearance, zWall, dropRadiusMin, dropPersistence, snapshotInterval, drillAMR, drillMaxlevelStart, drillMaxlevelFocus, drillNcells, drillRegionMinX, drillArmSteps, drillArmTime, drillCoarsenTime, drillRegionMaxX, drillRegionRadius, drillFireX, drillTipRadius, drillRegionalOnly, interfaceFloor, farFloorRadius, farFloorDrop, icBandRefine, minLevel, SOLVER_STACK);
 
   /**
   Set fluid properties:
@@ -1062,6 +1161,19 @@ event init(t = 0){
     int initialLevel = MAXlevel;
     while (adapt_wavelet ((scalar *){f, d}, (double[]){1e-8, 1e-8},
                           initialLevel).nf);
+    /**
+    The wavelet pass above refines only where `f` or `d` has wavelet error,
+    and `d` is exactly linear beside a plane, so a flat interface is left
+    coarse at $t=0$ (level 5 at MAXlevel 14 on the half-space free surface).
+    The first `adapt` then prolongates that coarse volume fraction onto the
+    floor, which is the likely origin of the ML14 Bo=0 shed ring. Refine the
+    band $|d| < 2\Delta$ to the floor level here so the AMR contract holds
+    from $t = 0$. `distance()` installs `refine_distance()` as the refinement
+    callback of `d`, so every new child gets the exact distance from the
+    stored segments, and `refine()` repeats until no cell qualifies. Do not
+    call `distance()` again: it frees its segment list a second time. */
+    if (icBandRefine)
+      refine (level < floor_level_at (y) && fabs (d[]) < 2.*Delta);
     if (drillAMR && drillRegionalOnly) {
       /**
       Retained as a no-op accelerator. With `initialLevel = MAXlevel` the
@@ -1205,10 +1317,13 @@ event adapt(i++){
   astats as;
   if (drillAMR && t >= drillCoarsenTime)
     as = adapt_wavelet_limited ((scalar *){f, u.x, u.y},
-      (double[]){fErr, VelErr, VelErr}, drill_level_at, MAXlevel-6);
+      (double[]){fErr, VelErr, VelErr}, drill_level_at, minLevel);
+  else if (farFloorRadius > 0.)
+    as = adapt_wavelet_limited ((scalar *){f, u.x, u.y},
+      (double[]){fErr, VelErr, VelErr}, far_floor_level, minLevel);
   else
     as = adapt_wavelet ((scalar *){f, u.x, u.y},
-      (double[]){fErr, VelErr, VelErr}, maxlevelLocal, MAXlevel-6);
+      (double[]){fErr, VelErr, VelErr}, maxlevelLocal, minLevel);
   adaptRefined = as.nf;
   adaptCoarsened = as.nc;
 
@@ -1228,7 +1343,8 @@ event adapt(i++){
 
   int preFloorDeficit = 0;
   foreach (reduction(+:preFloorDeficit))
-    if (f[] > interfaceEps && f[] < 1. - interfaceEps && level < MAXlevel)
+    if (f[] > interfaceEps && f[] < 1. - interfaceEps &&
+        level < floor_level_at (y))
       preFloorDeficit++;
   interfaceFloorPreDeficit = preFloorDeficit;
 
@@ -1247,7 +1363,7 @@ event adapt(i++){
   `do { ... } while (refined)` loop and refines one level per pass, so a single
   invocation drives the whole band up to `MAXlevel`; no outer loop is needed. */
   if (interfaceFloor)
-    refine (level < MAXlevel &&
+    refine (level < floor_level_at (y) &&
             f[] > interfaceEps && f[] < 1. - interfaceEps);
 
   /**
@@ -1259,7 +1375,8 @@ event adapt(i++){
   without flooding the run log. */
   int deficit = 0;
   foreach (reduction(+:deficit))
-    if (f[] > interfaceEps && f[] < 1. - interfaceEps && level < MAXlevel)
+    if (f[] > interfaceEps && f[] < 1. - interfaceEps &&
+        level < floor_level_at (y))
       deficit++;
   interfaceFloorDeficit = deficit;
 

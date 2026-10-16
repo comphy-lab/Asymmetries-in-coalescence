@@ -128,11 +128,19 @@ def circle_params(delta: float, Rr: float) -> dict:
 
 
 def target_geometry(Rr: float, delta: float, maxlevel: int,
-                     wall_clearance: float = WALL_CLEARANCE_DEFAULT) -> dict:
+                     wall_clearance: float = WALL_CLEARANCE_DEFAULT,
+                     ldomain: float | None = None) -> dict:
     """Reproduce coalescenceBubble.c's zWall / Ldomain / Delta_target for the
-    finite geometry branch (wallClearance > 0)."""
+    finite geometry branch (wallClearance > 0). `ldomain` is the solver's
+    LDOMAIN override; it may only enlarge the formula domain, exactly as in
+    coalescenceBubble.c."""
     zWall = delta + wall_clearance
     Ldomain = zWall + 2.0 + 2.0 * Rr + 4.0
+    if ldomain is not None:
+        if ldomain < Ldomain:
+            raise ValueError(f"ldomain {ldomain} is smaller than the finite-geometry "
+                             f"domain {Ldomain}")
+        Ldomain = ldomain
     Delta_target = Ldomain / (2.0 ** maxlevel)
     h = Delta_target / 2.0
     return dict(zWall=zWall, Ldomain=Ldomain, Delta_target=Delta_target, h=h)
@@ -211,7 +219,7 @@ def dedup_polyline(X: np.ndarray, Y: np.ndarray, seg: np.ndarray,
 
 
 def self_check(X: np.ndarray, Y: np.ndarray, seg: np.ndarray, arcs: list,
-                delta: float, Rr: float, h: float) -> np.ndarray:
+                delta: float, Rr: float, h: float, shift: float = 0.0) -> np.ndarray:
     """Run all built-in self-checks; raise AssertionError (fail loudly) on
     any violation. Returns the array of consecutive-point chord lengths."""
     # 1. max deviation of sampled points from their analytic arc
@@ -221,7 +229,7 @@ def self_check(X: np.ndarray, Y: np.ndarray, seg: np.ndarray, arcs: list,
         if not np.any(m):
             continue
         cx, cy = a["center"]
-        r = np.hypot(X[m] - cx, Y[m] - cy)
+        r = np.hypot(X[m] + shift - cx, Y[m] - cy)
         dev = np.abs(r - a["R"])
         max_dev = max(max_dev, float(dev.max()))
     assert max_dev < 1e-12, f"arc deviation too large: {max_dev:.3e} (limit 1e-12)"
@@ -235,8 +243,8 @@ def self_check(X: np.ndarray, Y: np.ndarray, seg: np.ndarray, arcs: list,
     # 3. endpoints hit the exact analytic tangency points
     assert abs(Y[0]) < 1e-9, f"south pole not on axis: Y[0]={Y[0]:.3e}"
     assert abs(Y[-1]) < 1e-9, f"north pole not on axis: Y[-1]={Y[-1]:.3e}"
-    south_pole_x = -(2.0 + delta)
-    north_pole_x = arcs[2]["center"][0] + Rr
+    south_pole_x = -(2.0 + delta) - shift
+    north_pole_x = arcs[2]["center"][0] + Rr - shift
     assert abs(X[0] - south_pole_x) < 1e-9, \
         f"south pole x mismatch: {X[0]:.10f} vs analytic {south_pole_x:.10f}"
     assert abs(X[-1] - north_pole_x) < 1e-9, \
@@ -254,7 +262,9 @@ def self_check(X: np.ndarray, Y: np.ndarray, seg: np.ndarray, arcs: list,
 
 def generate(Rr: float, delta: float, maxlevel: int, outdir: str,
              wall_clearance: float = WALL_CLEARANCE_DEFAULT,
-             n_min: int = 64, verbose: bool = True) -> dict:
+             n_min: int = 64, verbose: bool = True,
+             ldomain: float | None = None, align_parent_pole: bool = False,
+             name: str | None = None) -> dict:
     """Generate one InitialConditionRr-<Rr>.dat file. Returns a report dict."""
     # Reject degenerate geometry before any trigonometry or allocation: Rr <= 0
     # divides by zero in the large-arc parametrisation, delta <= 0 collapses the
@@ -267,7 +277,7 @@ def generate(Rr: float, delta: float, maxlevel: int, outdir: str,
         raise ValueError(
             f"delta must be finite and satisfy 0 < delta < 0.5 (got {delta!r})")
 
-    tg = target_geometry(Rr, delta, maxlevel, wall_clearance)
+    tg = target_geometry(Rr, delta, maxlevel, wall_clearance, ldomain)
     h = tg["h"]
 
     arcs, params = build_arcs(Rr, delta, h, n_min)
@@ -277,10 +287,19 @@ def generate(Rr: float, delta: float, maxlevel: int, outdir: str,
 
     X, Y, seg = dedup_polyline(X_raw, Y_raw, seg_raw)
 
-    chords = self_check(X, Y, seg, arcs, delta, Rr, h)
+    # --align-parent-pole: translate so the parent's south pole (cx3 - Rr)
+    # sits at x = 0, the half-space convention of Bo0.0000.dat. The small
+    # bubble's south pole then lands at -(2 + delta + Rf) for every Rr.
+    shift = float(params["cx3"] - Rr) if align_parent_pole else 0.0
+    X = X - shift
+
+    chords = self_check(X, Y, seg, arcs, delta, Rr, h, shift)
 
     os.makedirs(outdir, exist_ok=True)
-    filename = f"InitialConditionRr-{Rr:.2f}.dat"
+    if name is not None and (os.path.isabs(name) or os.path.basename(name) != name
+                             or name in ("", ".", "..")):
+        raise ValueError(f"--name must be a plain file name, got {name!r}")
+    filename = name if name else f"InitialConditionRr-{Rr:.2f}.dat"
     filepath = os.path.join(outdir, filename)
     with open(filepath, "w") as fh:
         for x, y in zip(X, Y):
@@ -300,8 +319,13 @@ def generate(Rr: float, delta: float, maxlevel: int, outdir: str,
         n_deduped=len(X_raw) - len(X),
         chord_min=float(chords.min()), chord_max=float(chords.max()),
         filepath=filepath, sha256=digest, size_bytes=size_bytes,
-        Rf=float(params["Rf"]),
+        Rf=float(params["Rf"]), cx3=float(params["cx3"]), Yfc=float(params["Yfc"]),
+        shift=shift, align_parent_pole=align_parent_pole,
+        south_pole_x=float(X[0]), north_pole_x=float(X[-1]),
     )
+    import json
+    with open(os.path.splitext(filepath)[0] + ".json", "w") as fh:
+        json.dump(report, fh, indent=1, sort_keys=True)
 
     if verbose:
         print(f"wrote {filepath}")
@@ -337,12 +361,23 @@ def main():
     ap.add_argument("--wall-clearance", type=float, default=WALL_CLEARANCE_DEFAULT,
                      help=f"wallClearance used to derive zWall = delta + wallClearance "
                           f"(default {WALL_CLEARANCE_DEFAULT}, matches coalescenceBubble.c)")
+    ap.add_argument("--ldomain", type=float, default=None,
+                     help="solver LDOMAIN override used for the chord bound "
+                          "(must be >= the finite-geometry formula domain)")
+    ap.add_argument("--align-parent-pole", action="store_true",
+                     help="translate so the parent south pole is at x = 0 "
+                          "(half-space convention of Bo0.0000.dat)")
+    ap.add_argument("--name", type=str, default=None,
+                     help="output file name (default InitialConditionRr-<Rr>.2f.dat); "
+                          "a .json report with the same stem is written beside it")
     ap.add_argument("--n-min", type=int, default=64,
                      help="minimum points per arc regardless of chord bound (default 64)")
     a = ap.parse_args()
 
     try:
-        generate(a.Rr, a.delta, a.maxlevel, a.outdir, a.wall_clearance, a.n_min)
+        generate(a.Rr, a.delta, a.maxlevel, a.outdir, a.wall_clearance, a.n_min,
+                 ldomain=a.ldomain, align_parent_pole=a.align_parent_pole,
+                 name=a.name)
     except (AssertionError, ValueError) as exc:
         print(f"SELF-CHECK FAILED: {exc}", file=sys.stderr)
         sys.exit(1)
