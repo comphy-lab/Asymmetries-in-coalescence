@@ -16,6 +16,7 @@ import fcntl
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -85,6 +86,51 @@ class Campaign:
 def campaign_config(campaign: Campaign) -> dict[str, object]:
     """Read the immutable campaign configuration."""
     return json.loads((campaign.root / "campaign-config.json").read_text())
+
+
+def contour_pin(project_root: Path) -> str:
+    """Read the explicitly pinned legacy contour version without ambiguity."""
+    pin = project_root / "basilisk-legacy.ref"
+    values = [line.split("#", 1)[0].strip() for line in pin.read_text().splitlines()]
+    values = [value for value in values if value]
+    if len(values) != 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", values[0]):
+        raise ValueError(f"invalid contour Basilisk pin: {pin}")
+    if values[0] != "v2026-01-13":
+        raise ValueError("contour Basilisk version changed without validation")
+    return values[0]
+
+
+def check_contour_binding(campaign: Campaign, *, check_install: bool) -> str:
+    """Refuse an unbound campaign or an installation with another ref."""
+    pin = contour_pin(campaign.project_root)
+    configured = campaign_config(campaign).get("basilisk_ref")
+    if configured != pin:
+        raise ValueError("campaign Basilisk ref is missing or differs from the contour pin")
+    if check_install:
+        lock = campaign.project_root / "basilisk" / ".comphy-lock"
+        try:
+            lines = lock.read_text().splitlines()
+        except OSError as exc:
+            raise ValueError(f"contour Basilisk lock unavailable: {lock}") from exc
+        if [line[4:] for line in lines if line.startswith("ref=")] != [pin]:
+            raise ValueError("contour Basilisk installation differs from the campaign pin")
+    return pin
+
+
+def check_existing_contour_results(campaign: Campaign, expected_ref: str) -> None:
+    """Reject mixed or unproven attempt versions before submit or collection."""
+    for iteration in completed_iterations(campaign):
+        if iteration and not list(iteration_dir(campaign, iteration).glob("attempt-*/results.csv")):
+            raise ValueError(f"iteration {iteration} has completed results with no attempt provenance")
+    for results in campaign.iterations.glob("iteration-*/attempt-*/results.csv"):
+        metadata_path = results.parent / "run-metadata.json"
+        try:
+            metadata = json.loads(metadata_path.read_text())
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"missing or invalid run metadata: {metadata_path}") from exc
+        if (metadata.get("basilisk_ref") != expected_ref or
+                metadata.get("basilisk_pin_file") != "basilisk-legacy.ref"):
+            raise ValueError(f"attempt Basilisk provenance differs: {metadata_path}")
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -251,6 +297,7 @@ def initialise(
         "project_root": str(campaign.project_root),
         "predictor_root": str(campaign.predictor_root),
         "predictor_commit": predictor_commit or "unavailable",
+        "basilisk_ref": contour_pin(campaign.project_root),
     }
 
     destination = campaign.completed / "Sweep-0_completed.csv"
@@ -522,6 +569,8 @@ def merged_resolved_results(
 ) -> dict[str, dict[str, str]]:
     """Merge valid resolved labels across attempts, rejecting stale evidence."""
     root = iteration_dir(campaign, iteration)
+    expected_ref = check_contour_binding(campaign, check_install=False)
+    check_existing_contour_results(campaign, expected_ref)
     canonical = read_rows(root / "cases.csv")
     canonical_by_id = {row["caseId"]: case_key(row) for row in canonical}
     if len(canonical_by_id) != len(canonical):
@@ -554,6 +603,14 @@ def merged_resolved_results(
         results_path = attempt_root / "results.csv"
         if not results_path.exists():
             continue
+        metadata_path = attempt_root / "run-metadata.json"
+        try:
+            metadata = json.loads(metadata_path.read_text())
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"missing or invalid run metadata: {metadata_path}") from exc
+        if (metadata.get("basilisk_ref") != expected_ref or
+                metadata.get("basilisk_pin_file") != "basilisk-legacy.ref"):
+            raise ValueError(f"attempt Basilisk provenance differs: {metadata_path}")
         rows = read_rows(results_path)
         if [case_key(row) for row in rows] != attempt_keys:
             raise ValueError(
@@ -689,6 +746,8 @@ def submit(
     attempt_rows: Sequence[dict[str, str]] | None = None,
 ) -> str:
     """Submit one isolated attempt, idempotently by default."""
+    expected_ref = check_contour_binding(campaign, check_install=True)
+    check_existing_contour_results(campaign, expected_ref)
     target_dir = stage_proposal(campaign, iteration, proposal)
     current_file = target_dir / "current-attempt.json"
     current = json.loads(current_file.read_text()) if current_file.exists() else None

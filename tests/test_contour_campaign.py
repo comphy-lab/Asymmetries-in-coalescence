@@ -28,6 +28,9 @@ class ContourCampaignTests(unittest.TestCase):
         self.predictor_root = self.workspace / "predictor"
         data_dir = self.project_root / "simulationCases" / "DataFiles"
         data_dir.mkdir(parents=True)
+        (self.project_root / "basilisk-legacy.ref").write_text("v2026-01-13\n")
+        (self.project_root / "basilisk").mkdir()
+        (self.project_root / "basilisk" / ".comphy-lock").write_text("ref=v2026-01-13\n")
         self.predictor_root.mkdir()
         for value in (1.0, 2.0, 4.0):
             (data_dir / f"InitialConditionRr-{value:.2f}.dat").write_text("shape\n")
@@ -47,6 +50,10 @@ class ContourCampaignTests(unittest.TestCase):
             writer = csv.DictWriter(stream, fieldnames=tuple(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
+        if path.name == "results.csv":
+            (path.parent / "run-metadata.json").write_text(json.dumps({
+                "basilisk_ref": "v2026-01-13", "basilisk_pin_file": "basilisk-legacy.ref"
+            }))
 
     def create_layout(self) -> None:
         for directory in (
@@ -58,7 +65,7 @@ class ContourCampaignTests(unittest.TestCase):
         ):
             directory.mkdir(parents=True, exist_ok=True)
         (self.campaign.root / "campaign-config.json").write_text(
-            json.dumps({"allowed_x_values": [1.0, 2.0, 4.0]}) + "\n"
+            json.dumps({"allowed_x_values": [1.0, 2.0, 4.0], "basilisk_ref": "v2026-01-13"}) + "\n"
         )
 
     def valid_proposal(self) -> list[dict[str, str]]:
@@ -386,6 +393,62 @@ class ContourCampaignTests(unittest.TestCase):
             },
         )
 
+    def test_submit_rejects_wrong_lock_before_creating_attempt(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        self.write_rows(proposal, self.valid_proposal())
+        (self.project_root / "basilisk" / ".comphy-lock").write_text("ref=v2026-07-20\n")
+        with mock.patch.object(CAMPAIGN_MODULE, "run") as command:
+            with self.assertRaisesRegex(ValueError, "installation differs"):
+                CAMPAIGN_MODULE.submit(self.campaign, 1, proposal)
+        command.assert_not_called()
+        self.assertFalse((self.campaign.iterations / "iteration-01").exists())
+
+    def test_submit_rejects_unbound_existing_campaign(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        self.write_rows(proposal, self.valid_proposal())
+        (self.campaign.root / "campaign-config.json").write_text('{}')
+        with mock.patch.object(CAMPAIGN_MODULE, "run") as command:
+            with self.assertRaisesRegex(ValueError, "missing or differs"):
+                CAMPAIGN_MODULE.submit(self.campaign, 1, proposal)
+        command.assert_not_called()
+        self.assertFalse((self.campaign.iterations / "iteration-01").exists())
+
+    def test_collection_rejects_mixed_attempt_refs(self) -> None:
+        self.create_layout()
+        proposal = self.campaign.proposals / "Sweep-1_proposed.csv"
+        cases = self.valid_proposal()
+        self.write_rows(proposal, cases)
+        iteration = CAMPAIGN_MODULE.stage_proposal(self.campaign, 1, proposal)
+        attempt = iteration / "attempt-01"
+        attempt.mkdir()
+        self.write_rows(attempt / "cases.csv", cases)
+        self.write_rows(attempt / "results.csv", self.result_rows(cases))
+        (attempt / "run-metadata.json").write_text(json.dumps({
+            "basilisk_ref": "v2026-07-20", "basilisk_pin_file": "basilisk.ref"
+        }))
+        with self.assertRaisesRegex(ValueError, "provenance differs"):
+            CAMPAIGN_MODULE.collect(self.campaign, 1, 1)
+        self.assertFalse((self.campaign.completed / "Sweep-1_completed.csv").exists())
+
+    def test_new_attempt_rejects_prior_completed_iteration_with_wrong_ref(self) -> None:
+        self.create_layout()
+        self.mark_completed_through(1)
+        prior = self.campaign.iterations / "iteration-01" / "attempt-01"
+        prior.mkdir(parents=True)
+        self.write_rows(prior / "results.csv", self.result_rows(self.valid_proposal()))
+        (prior / "run-metadata.json").write_text(json.dumps({
+            "basilisk_ref": "v2026-07-20", "basilisk_pin_file": "basilisk.ref"
+        }))
+        proposal = self.campaign.proposals / "Sweep-2_proposed.csv"
+        self.write_rows(proposal, self.valid_proposal())
+        with mock.patch.object(CAMPAIGN_MODULE, "run") as command:
+            with self.assertRaisesRegex(ValueError, "provenance differs"):
+                CAMPAIGN_MODULE.submit(self.campaign, 2, proposal)
+        command.assert_not_called()
+        self.assertFalse((self.campaign.iterations / "iteration-02").exists())
+
     def test_local_submit_uses_bounded_systemd_runner(self) -> None:
         self.create_layout()
         (self.campaign.root / "campaign-config.json").write_text(
@@ -393,6 +456,7 @@ class ContourCampaignTests(unittest.TestCase):
                 {
                     "allowed_x_values": [1.0, 2.0, 4.0],
                     "unit_prefix": "dropinj-l11",
+                    "basilisk_ref": "v2026-01-13",
                     "max_level": 11,
                     "drop_radius_min": 0.015625,
                     "workers": 3,
@@ -470,6 +534,7 @@ class ContourCampaignTests(unittest.TestCase):
                 {
                     "allowed_x_values": [1.0, 2.0, 4.0],
                     "unit_prefix": "dropinj-l11",
+                    "basilisk_ref": "v2026-01-13",
                     "max_level": 11,
                     "drop_radius_min": 0.015625,
                     "workers": 3,

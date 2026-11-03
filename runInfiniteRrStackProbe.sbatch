@@ -113,7 +113,8 @@ module load 2024
 module load OpenMPI/5.0.3-GCC-13.3.0
 
 BASILISK_ROOT="${BASILISK_ROOT:-${HOME}/basilisk}"
-EXPECTED_BASILISK_REF="${EXPECTED_BASILISK_REF:-v2026-07-20}"
+source "$ROOT/src-local/basilisk_pin.sh"
+basilisk_require_campaign_pin "$ROOT"
 export BASILISK="${BASILISK_ROOT}/src"
 export PATH="${BASILISK}:${PATH}"
 # Fail loudly: `set -e` on a bare `grep -qx` aborts the job with no
@@ -125,6 +126,7 @@ if [[ ! -f "${BASILISK_ROOT}/.comphy-lock" ]]; then
   echo "ERROR: no ${BASILISK_ROOT}/.comphy-lock; Basilisk install is not ref-locked" >&2
   exit 1
 fi
+basilisk_require_lock "${BASILISK_ROOT}/.comphy-lock" "$EXPECTED_BASILISK_REF"
 if ! grep -qx "ref=${EXPECTED_BASILISK_REF}" "${BASILISK_ROOT}/.comphy-lock"; then
   echo "ERROR: expected Basilisk ref=${EXPECTED_BASILISK_REF}, lock file has:" >&2
   grep '^ref=' "${BASILISK_ROOT}/.comphy-lock" >&2 || echo "  (no ref= line)" >&2

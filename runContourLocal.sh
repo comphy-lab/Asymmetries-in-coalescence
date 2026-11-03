@@ -101,18 +101,27 @@ PY
 # host-built because a qcc copied from another Linux installation embeds its
 # original include path.
 export BASILISK="${project_root}/basilisk"
-qcc_command=${CONTOUR_QCC:-}
-if [[ -z "$qcc_command" ]]; then
-  qcc_command=$(command -v qcc 2>/dev/null || true)
-fi
-if [[ -z "$qcc_command" && -x /home/vatsal/CMP-codes/basilisk/src/qcc ]]; then
-  qcc_command=/home/vatsal/CMP-codes/basilisk/src/qcc
-fi
-if [[ -z "$qcc_command" || ! -x "$qcc_command" ]]; then
-  echo "No host-built qcc found; set CONTOUR_QCC to its absolute path" >&2
+qcc_command=${CONTOUR_QCC:-${project_root}/basilisk/src/qcc}
+if [[ ! -x "$qcc_command" ]]; then
+  echo "No executable qcc in the verified project-local Basilisk install" >&2
   exit 2
 fi
-basilisk_ref=$(awk -F= '$1 == "ref" {print $2; exit}' "${project_root}/basilisk/.comphy-lock")
+qcc_command=$(realpath -e -- "$qcc_command")
+verified_basilisk=$(realpath -e -- "${project_root}/basilisk")
+expected_qcc="${verified_basilisk}/src/qcc"
+if [[ $qcc_command != "$expected_qcc" ]]; then
+  echo "qcc is outside the verified project-local Basilisk install" >&2
+  exit 2
+fi
+source "${project_root}/src-local/basilisk_pin.sh"
+basilisk_ref=$(basilisk_read_pin "${project_root}/basilisk-legacy.ref")
+basilisk_require_lock "${project_root}/basilisk/.comphy-lock" "$basilisk_ref"
+# qcc embeds its header search path at build time. Its location and the lock
+# are insufficient when an installed Basilisk tree has been copied or moved.
+if ! strings -a -- "$qcc_command" | grep -Fx -- "${verified_basilisk}/src" > /dev/null; then
+  echo "qcc does not embed the verified project-local Basilisk source path; rebuild it in place" >&2
+  exit 2
+fi
 
 echo "Drop-injection contour workstation run"
 echo "host=$(hostname) iteration_dir=${iteration_dir} cases=${case_count}"
@@ -131,15 +140,15 @@ from pathlib import Path
 
 iteration_dir = Path(sys.argv[1])
 project_root = Path(sys.argv[2])
-commit = subprocess.run(
-    ["git", "rev-parse", "HEAD"], cwd=project_root, text=True,
-    capture_output=True, check=False,
-).stdout.strip()
+sys.path.insert(0, str(project_root / "src-local"))
+from source_provenance import source_commit
+commit = source_commit(project_root)
 metadata = {
     "backend": "local-openmp",
     "started_at": datetime.now(timezone.utc).isoformat(),
-    "source_commit": commit or "unavailable",
+    "source_commit": commit,
     "basilisk_ref": sys.argv[3],
+    "basilisk_pin_file": "basilisk-legacy.ref",
     "node": socket.gethostname(),
     "cases": int(sys.argv[4]),
     "workers": int(sys.argv[5]),
@@ -150,6 +159,8 @@ metadata = {
     "tmax_override": os.environ.get("CONTOUR_TMAX") or None,
     "drop_radius_min_override": sys.argv[9] or None,
     "qcc": sys.argv[10],
+    "qcc_lock_ref": sys.argv[3],
+    "qcc_expected_libdir": str((project_root / "basilisk" / "src").resolve()),
     "drill_amr": int(sys.argv[11]),
     "drill_start": int(sys.argv[12]),
     "drill_focus": int(sys.argv[13]),

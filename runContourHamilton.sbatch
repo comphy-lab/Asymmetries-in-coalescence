@@ -89,14 +89,14 @@ from pathlib import Path
 
 iteration_dir = Path(sys.argv[1])
 project_root = Path(sys.argv[2])
-commit = subprocess.run(
-    ["git", "rev-parse", "HEAD"], cwd=project_root, text=True,
-    capture_output=True, check=False
-).stdout.strip()
+sys.path.insert(0, str(project_root / "src-local"))
+from source_provenance import source_commit
+commit = source_commit(project_root)
 metadata = {
     "slurm_job_id": __import__("os").environ.get("SLURM_JOB_ID"),
-    "source_commit": commit or "unavailable",
+    "source_commit": commit,
     "basilisk_ref": sys.argv[3],
+    "basilisk_pin_file": "basilisk-legacy.ref",
     "node": __import__("socket").gethostname(),
     "cases": int(sys.argv[4]),
     "threads_per_case": int(__import__("os").environ["SLURM_CPUS_PER_TASK"]),

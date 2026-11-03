@@ -343,16 +343,42 @@ def install_basilisk() -> bool:
     Returns:
         True if installation succeeded; False otherwise.
     """
+    # Documentation tooling uses the component pin, independently of the
+    # explicitly pinned January contour/sweep simulation workflow.
+    try:
+        raw = (REPO_ROOT / "basilisk.ref").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        print(f"Cannot read component Basilisk pin: {error}")
+        return False
+    refs = [line.split("#", 1)[0].strip() for line in raw.splitlines()]
+    refs = [ref for ref in refs if ref]
+    if len(refs) != 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", refs[0]):
+        print("Invalid component Basilisk pin; docs installation refused.")
+        return False
+    existing = REPO_ROOT / "basilisk"
+    if existing.exists() or existing.is_symlink():
+        if existing.is_symlink() or not existing.is_dir():
+            print("Existing Basilisk installation is not a local directory; docs installation refused.")
+            return False
+        try:
+            lock = (existing / ".comphy-lock").read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            print(f"Cannot read existing Basilisk lock; docs installation refused: {error}")
+            return False
+        lock_refs = [line[4:] for line in lock.splitlines() if line.startswith("ref=")]
+        if lock_refs != refs:
+            print("Existing Basilisk installation has a different or ambiguous ref; docs installation refused.")
+            return False
     print("Basilisk not found. Installing from comphy-lab/basilisk-C...")
 
     cmds = [
-        "curl -sLO https://raw.githubusercontent.com/comphy-lab/basilisk-C/main/reset_install_basilisk.sh",
-        "chmod +x reset_install_basilisk.sh",
-        "./reset_install_basilisk.sh --mode=4 --ref=v2026-01-13 --hard"
+        ["curl", "-fsSLO", f"https://raw.githubusercontent.com/comphy-lab/basilisk-C/{refs[0]}/reset_install_basilisk.sh"],
+        ["chmod", "+x", "reset_install_basilisk.sh"],
+        ["./reset_install_basilisk.sh", "--mode=4", f"--ref={refs[0]}", "--hard"],
     ]
 
     for cmd in cmds:
-        result = subprocess.run(cmd, shell=True, cwd=REPO_ROOT)
+        result = subprocess.run(cmd, cwd=REPO_ROOT)
         if result.returncode != 0:
             print(f"Failed to install basilisk: {cmd}")
             return False
@@ -2316,7 +2342,7 @@ def main():
     Creates the documentation output directory, optionally cleans existing HTML files if force rebuild is enabled, copies all required assets, processes each supported source file into HTML with appropriate post-processing, generates index pages for directories and the main index from README.md, and creates robots.txt and sitemap.xml for search engines. Also copies additional JavaScript files required for Basilisk integration and cleans up temporary files.
     """
     if not validate_config():
-        return
+        raise SystemExit(1)
     
     try:
         # Create docs directory
@@ -2337,13 +2363,13 @@ def main():
         assets_dir = REPO_ROOT / '.github' / 'assets'
         if not copy_assets(assets_dir, DOCS_DIR):
             print("Failed to copy assets.")
-            return
+            raise SystemExit(1)
         
         # Find source files
         source_files = find_source_files(REPO_ROOT, SOURCE_DIRS)
         if not source_files:
             print("No source files found.")
-            return
+            raise SystemExit(1)
         
         # Dictionary for generated files
         generated_files = {}
@@ -2390,7 +2416,7 @@ def main():
         print("\nGenerating main index.html...")
         if not generate_index(README_PATH, INDEX_PATH, generated_files, DOCS_DIR, REPO_ROOT):
             print("Failed to generate index.html.")
-            return
+            raise SystemExit(1)
         
         # Generate robots.txt and sitemap
         print("\nGenerating robots.txt...")

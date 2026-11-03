@@ -129,9 +129,15 @@ fi
 # Run the documentation generation script
 log_message "Starting documentation generation..."
 if [ -n "$FORCE_REBUILD" ]; then
-  "$PYTHON_RUNNER" "$PYTHON_SCRIPT" --force-rebuild
+  if ! "$PYTHON_RUNNER" "$PYTHON_SCRIPT" --force-rebuild; then
+    log_message "Documentation generation failed."
+    exit 1
+  fi
 else
-  "$PYTHON_RUNNER" "$PYTHON_SCRIPT"
+  if ! "$PYTHON_RUNNER" "$PYTHON_SCRIPT"; then
+    log_message "Documentation generation failed."
+    exit 1
+  fi
 fi
 
 # Clean HTML files to remove empty anchor tags
@@ -139,11 +145,6 @@ fi
 log_message "Cleaning HTML files to remove empty anchor tags..."
 "$PYTHON_RUNNER" "$PROJECT_ROOT/.github/scripts/fix_empty_anchors.py" "$DOCS_DIR"
 
-
-if [ $? -ne 0 ]; then
-    log_message "Documentation generation failed."
-    exit 1
-fi
 
 log_message "Documentation generated successfully in $DOCS_DIR"
 

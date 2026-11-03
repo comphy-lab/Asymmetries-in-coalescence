@@ -1,0 +1,4 @@
+# The finite-radius and near-wall production launchers use this ref.
+# Legacy contour/sweep launchers use basilisk-legacy.ref and refuse to
+# replace a separately pinned installation.
+v2026-07-20

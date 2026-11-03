@@ -150,6 +150,8 @@ class LauncherHarness:
         (self.root / "simulationCases" / "DataFiles").mkdir(parents=True)
         (self.root / "src-local").mkdir()
         shutil.copy(SOLVER_ARGS, self.root / "src-local" / "solver_args.sh")
+        shutil.copy(ROOT / "src-local" / "basilisk_pin.sh", self.root / "src-local" / "basilisk_pin.sh")
+        shutil.copy(ROOT / "basilisk.ref", self.root / "basilisk.ref")
         # The Bond-probe launcher refuses to qcc without these headers.
         (self.root / "src-local" / "adapt_wavelet_limited.h").write_text("")
         (self.root / "src-local" / "jetFoot.h").write_text("")
